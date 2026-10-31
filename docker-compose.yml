@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  whitefox-blog:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whitefox-blog
+    restart: always
+    ports:
+      - "80:80"
+    environment:
+      - VITE_ADMIN_PASSWORD=whitefox2025
