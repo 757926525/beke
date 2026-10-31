@@ -1,348 +1,304 @@
 import React, { useState, useEffect } from 'react';
-import Navbar from './components/Navbar';
-import BlogView from './components/BlogView';
-import BookshelfView from './components/BookshelfView';
-import GalleryView from './components/GalleryView';
-import MediaPlayerView from './components/MediaPlayerView';
-import BrowserAndBookmarksView from './components/BrowserAndBookmarksView';
-import DownloaderView from './components/DownloaderView';
-import CloudSyncView from './components/CloudSyncView';
-import AdminSettingsView from './components/AdminSettingsView';
-import AuthModal from './components/AuthModal';
-import NewArticleModal from './components/NewArticleModal';
+import { Navbar } from './components/Navbar';
+import { BlogList } from './components/BlogList';
+import { BlogPostView } from './components/BlogPostView';
+import { NetDriveView } from './components/NetDriveView';
+import { BookshelfView } from './components/BookshelfView';
+import { GalleryView } from './components/GalleryView';
+import { BrowserAndBookmarksView } from './components/BrowserAndBookmarksView';
+import { MediaPlayerView } from './components/MediaPlayerView';
+import { DownloaderView } from './components/DownloaderView';
+import { DeploymentGuideView } from './components/DeploymentGuideView';
+import { AdminSettingsView } from './components/AdminSettingsView';
+import {
+  initialPosts,
+  initialBooks,
+  initialBookmarks,
+  initialCloudConfig,
+  initialCloudFiles,
+  initialUsers,
+  defaultAppearance,
+  defaultSystemSettings,
+  defaultSearchProxy,
+  loadFromStorage,
+  saveToStorage,
+  STORAGE_KEYS
+} from './services/storageService';
+import { getTranslation, themePresets } from './services/i18nAndTheme';
+import { Smartphone, Monitor } from 'lucide-react';
 
-import { StorageService } from './services/storageService';
+export function App() {
+  // Navigation & Role States
+  const [activeTab, setActiveTab] = useState('home');
+  const [activePostId, setActivePostId] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() =>
+    loadFromStorage(STORAGE_KEYS.AUTH, {
+      role: 'admin',
+      username: '白狐 (站长)'
+    })
+  );
 
-export default function App() {
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [activeTab, setActiveTab] = useState('blog');
+  // Internationalization & Theme
+  const [lang, setLang] = useState(() => loadFromStorage(STORAGE_KEYS.LANG, 'zh-CN'));
+  const [themeId, setThemeId] = useState(() => loadFromStorage(STORAGE_KEYS.THEME, 'emerald-white'));
+  const [appearance, setAppearance] = useState(() => loadFromStorage(STORAGE_KEYS.APPEARANCE, defaultAppearance));
+  const [systemSettings, setSystemSettings] = useState(() => loadFromStorage(STORAGE_KEYS.SYSTEM_SETTINGS, defaultSystemSettings));
+  const [searchProxy, setSearchProxy] = useState(() => loadFromStorage(STORAGE_KEYS.SEARCH_PROXY, defaultSearchProxy));
 
-  // Core Data States
-  const [articles, setArticles] = useState(StorageService.getArticles);
-  const [books, setBooks] = useState(StorageService.getBooks);
-  const [photos, setPhotos] = useState(StorageService.getPhotos);
-  const [playlist, setPlaylist] = useState(StorageService.getPlaylist);
-  const [bookmarks, setBookmarks] = useState(StorageService.getBookmarks);
-  const [zones, setZones] = useState(StorageService.getZones);
-  const [downloads, setDownloads] = useState(StorageService.getDownloads);
-  const [cloudConfig, setCloudConfig] = useState(StorageService.getCloudConfig);
-  const [systemSettings, setSystemSettings] = useState(StorageService.getSystemSettings);
-  const [users, setUsers] = useState(StorageService.getUsers);
-  const [currentUser, setCurrentUser] = useState(StorageService.getCurrentUser);
+  // Device view simulation (desktop vs mobile viewport)
+  const [deviceMode, setDeviceMode] = useState('desktop'); // 'desktop' | 'mobile'
 
-  // Modals & Async States
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [isNewArticleOpen, setIsNewArticleOpen] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [globalBanner, setGlobalBanner] = useState(null);
+  // Application Data States
+  const [posts, setPosts] = useState(() => loadFromStorage(STORAGE_KEYS.POSTS, initialPosts));
+  const [books, setBooks] = useState(() => loadFromStorage(STORAGE_KEYS.BOOKS, initialBooks));
+  const [bookmarks, setBookmarks] = useState(() => loadFromStorage(STORAGE_KEYS.BOOKMARKS, initialBookmarks));
+  const [cloudConfig, setCloudConfig] = useState(() => loadFromStorage(STORAGE_KEYS.CLOUD_CONFIG, initialCloudConfig));
+  const [cloudFiles, setCloudFiles] = useState(() => loadFromStorage(STORAGE_KEYS.CLOUD_FILES, initialCloudFiles));
+  const [users, setUsers] = useState(() => loadFromStorage(STORAGE_KEYS.USERS, initialUsers));
 
-  // Apply dark class to html document
+  // Persist States
+  useEffect(() => saveToStorage(STORAGE_KEYS.AUTH, currentUser), [currentUser]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.LANG, lang), [lang]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.THEME, themeId), [themeId]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.APPEARANCE, appearance), [appearance]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.SYSTEM_SETTINGS, systemSettings), [systemSettings]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.SEARCH_PROXY, searchProxy), [searchProxy]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.POSTS, posts), [posts]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.BOOKS, books), [books]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.BOOKMARKS, bookmarks), [bookmarks]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.CLOUD_CONFIG, cloudConfig), [cloudConfig]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.CLOUD_FILES, cloudFiles), [cloudFiles]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.USERS, users), [users]);
+
+  // Current active theme object
+  const currentTheme = themePresets.find((t) => t.id === themeId) || themePresets[0];
+
+  // Helper translation function
+  const t = (key) => getTranslation(lang, key);
+
+  // Cloudflare D1 Sync simulation
+  const handleSyncD1 = () => {
+    alert('正在与 Cloudflare D1 边缘节点执行全域双向同步...\n\n- 文章库: 同步成功\n- 藏书阁: 同步成功\n- 网址导航: 同步成功\n- 对象存储与网盘配置: 同步成功\n\n边缘数据库状态：已就绪 (Zero-latency Active)');
+  };
+
+  // If a non-admin attempts to view admin-only tab, redirect
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    if (currentUser.role !== 'admin' && (activeTab === 'admin' || activeTab === 'cloud')) {
+      setActiveTab('home');
     }
-  }, [isDarkMode]);
+  }, [currentUser, activeTab]);
 
-  // Sync with D1 Database
-  const handleSyncD1 = async () => {
-    setIsSyncing(true);
-    try {
-      const res = await StorageService.syncWithD1();
-      setGlobalBanner(`D1 数据库跨端同步已完成！已同步 ${res.recordsCount.articles} 篇文章、${res.recordsCount.bookmarks} 个书签及藏书`);
-      setTimeout(() => setGlobalBanner(null), 4000);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  // 1-Click Bookmark for Articles
-  const handleToggleArticleBookmark = (id) => {
-    const updated = articles.map((a) =>
-      a.id === id ? { ...a, isBookmarked: !a.isBookmarked } : a
-    );
-    setArticles(updated);
-    StorageService.saveArticles(updated);
-    const target = updated.find((a) => a.id === id);
-    if (target?.isBookmarked) {
-      StorageService.addHistory({ title: `收藏文章：${target.title}`, type: 'bookmark' });
-    }
-  };
-
-  // Save new article
-  const handleSaveArticle = (newArt) => {
-    const updated = [newArt, ...articles];
-    setArticles(updated);
-    StorageService.saveArticles(updated);
-    setGlobalBanner(`新文章《${newArt.title}》已成功发布并入库！`);
-    setTimeout(() => setGlobalBanner(null), 3500);
-  };
-
-  // Bookshelf handlers
-  const handleAddBook = (book) => {
-    const updated = [book, ...books];
-    setBooks(updated);
-    StorageService.saveBooks(updated);
-  };
-
-  const handleRemoveBook = (id) => {
-    const updated = books.filter((b) => b.id !== id);
-    setBooks(updated);
-    StorageService.saveBooks(updated);
-  };
-
-  // Gallery handlers
-  const handleAddPhoto = (photo) => {
-    const updated = [photo, ...photos];
-    setPhotos(updated);
-    StorageService.savePhotos(updated);
-  };
-
-  const handleRemovePhoto = (id) => {
-    const updated = photos.filter((p) => p.id !== id);
-    setPhotos(updated);
-    StorageService.savePhotos(updated);
-  };
-
-  // Media Player handlers
-  const handleAddMedia = (item) => {
-    const updated = [item, ...playlist];
-    setPlaylist(updated);
-    StorageService.savePlaylist(updated);
-  };
-
-  const handleRemoveMedia = (id) => {
-    const updated = playlist.filter((m) => m.id !== id);
-    setPlaylist(updated);
-    StorageService.savePlaylist(updated);
-  };
-
-  // Bookmarks handlers
-  const handleAddBookmark = (bm) => {
-    const updated = [bm, ...bookmarks];
-    setBookmarks(updated);
-    StorageService.saveBookmarks(updated);
-    StorageService.addHistory({ title: `加入网络收藏：${bm.title}`, type: 'bookmark' });
-  };
-
-  const handleBatchAddBookmarks = (newItems) => {
-    const updated = [...newItems, ...bookmarks];
-    setBookmarks(updated);
-    StorageService.saveBookmarks(updated);
-  };
-
-  const handleRemoveBookmark = (id) => {
-    const updated = bookmarks.filter((b) => b.id !== id);
-    setBookmarks(updated);
-    StorageService.saveBookmarks(updated);
-  };
-
-  // Downloads handlers
-  const handleAddDownload = (dl) => {
-    const updated = [dl, ...downloads];
-    setDownloads(updated);
-    StorageService.saveDownloads(updated);
-  };
-
-  const handleRemoveDownload = (id) => {
-    const updated = downloads.filter((d) => d.id !== id);
-    setDownloads(updated);
-    StorageService.saveDownloads(updated);
-  };
-
-  // NetDrive Unified Save
-  const handleSaveToNetDrive = async (item) => {
-    return await StorageService.saveToNetDrive(item, cloudConfig.netDrive.targetFolder);
-  };
-
-  // Cloud Config Save
-  const handleSaveCloudConfig = (cfg) => {
-    setCloudConfig(cfg);
-    StorageService.saveCloudConfig(cfg);
-  };
-
-  // System Settings Save
-  const handleSaveSystemSettings = (stg) => {
-    setSystemSettings(stg);
-    StorageService.saveSystemSettings(stg);
-  };
-
-  // Auth
-  const handleLoginSuccess = (user) => {
-    setCurrentUser(user);
-    StorageService.setCurrentUser(user);
-    setGlobalBanner(`欢迎回来，${user.username}！`);
-    setTimeout(() => setGlobalBanner(null), 3000);
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    StorageService.setCurrentUser(null);
-  };
-
-  const handleRegisterUser = (newUser) => {
-    const updated = [...users, newUser];
-    setUsers(updated);
-    StorageService.saveUsers(updated);
-  };
+  const activePost = posts.find((p) => p.id === activePostId);
 
   return (
-    <div className="min-h-screen flex flex-col transition-colors duration-300">
-      {/* Top Navbar */}
-      <Navbar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        isDarkMode={isDarkMode}
-        setIsDarkMode={setIsDarkMode}
-        currentUser={currentUser}
-        onOpenAuth={() => setIsAuthOpen(true)}
-        onLogout={handleLogout}
-        onSyncD1={handleSyncD1}
-        isSyncing={isSyncing}
-      />
+    <div
+      className="min-h-screen font-sans transition-colors duration-300 relative text-slate-800"
+      style={{
+        backgroundColor: appearance.bgColor || '#f8fafc',
+        backgroundImage: appearance.bgImage ? `url(${appearance.bgImage})` : undefined,
+        backgroundSize: 'cover',
+        backgroundAttachment: 'fixed',
+        backgroundPosition: 'center'
+      }}
+    >
+      {/* Device Mode Switch Overlay (Bottom Floating) */}
+      <div className="fixed bottom-4 right-4 z-50 flex items-center bg-white/90 backdrop-blur-md rounded-full border border-slate-200/80 p-1 shadow-lg">
+        <button
+          onClick={() => setDeviceMode('desktop')}
+          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+            deviceMode === 'desktop'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+          title="切换至电脑桌面模式"
+        >
+          <Monitor className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">电脑宽屏</span>
+        </button>
+        <button
+          onClick={() => setDeviceMode('mobile')}
+          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+            deviceMode === 'mobile'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+          title="切换至手机界面模拟视口"
+        >
+          <Smartphone className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">手机视图</span>
+        </button>
+      </div>
 
-      {/* Global Sync Notification Banner */}
-      {globalBanner && (
-        <div className="bg-linear-to-r from-rose-500 to-indigo-600 text-white text-xs sm:text-sm py-2 px-4 text-center font-medium shadow-sm transition-all flex items-center justify-center gap-2">
-          <span>✨</span>
-          <span>{globalBanner}</span>
-        </div>
-      )}
+      {/* Main Container Wrapper - If mobile view simulated, constrain width like a modern phone */}
+      <div
+        className={`mx-auto transition-all duration-300 ${
+          deviceMode === 'mobile'
+            ? 'max-w-[420px] my-6 border-[8px] border-slate-800 rounded-[44px] shadow-2xl overflow-hidden bg-white/95 min-h-[840px]'
+            : 'w-full'
+        }`}
+      >
+        {/* Navigation Bar */}
+        <Navbar
+          activeTab={activeTab}
+          setActiveTab={(tab) => {
+            setActiveTab(tab);
+            setActivePostId(null);
+          }}
+          currentUser={currentUser}
+          setCurrentUser={setCurrentUser}
+          lang={lang}
+          setLang={setLang}
+          currentTheme={currentTheme}
+          setCurrentTheme={(th) => {
+            setThemeId(th.id);
+            setAppearance((prev) => ({ ...prev, themeId: th.id }));
+          }}
+          deviceMode={deviceMode}
+          setDeviceMode={setDeviceMode}
+          onSyncD1={handleSyncD1}
+          t={t}
+        />
 
-      {/* Main View Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'blog' && (
-          <BlogView
-            articles={articles}
-            onToggleBookmark={handleToggleArticleBookmark}
-            onSaveToNetDrive={handleSaveToNetDrive}
-            onNewArticle={() => setIsNewArticleOpen(true)}
-          />
-        )}
+        {/* Hero Section if on Home */}
+        {activeTab === 'home' && !activePostId && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-2">
+            <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-emerald-800 to-teal-900 text-white p-6 sm:p-10 shadow-lg">
+              <div className="relative z-10 max-w-2xl">
+                <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-xs text-xs font-medium mb-3">
+                  <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
+                  <span>白狐技术空间 · 翡翠绿与纯白质感</span>
+                </div>
+                <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
+                  极简、敏捷与无限可能的云端博客
+                </h1>
+                <p className="text-sm sm:text-base text-emerald-100 mt-2 leading-relaxed">
+                  原生适配多云边缘 Pages（Cloudflare / 腾讯云 / 阿里云），一键拉取与构建，集成 D1 边缘数据库与全功能媒体中枢。
+                </p>
+                <div className="flex flex-wrap items-center gap-3 mt-4">
+                  <button
+                    onClick={() => setActiveTab('guide')}
+                    className="px-4 py-2 rounded-xl bg-white text-emerald-900 font-bold text-xs hover:bg-emerald-50 transition-all shadow-md"
+                  >
+                    查看多云部署与构建指南 →
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('bookmarks')}
+                    className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-all border border-white/20"
+                  >
+                    网址导航与站内浏览器
+                  </button>
+                </div>
+              </div>
 
-        {activeTab === 'bookshelf' && (
-          <BookshelfView
-            books={books}
-            onAddBook={handleAddBook}
-            onRemoveBook={handleRemoveBook}
-            onSaveToNetDrive={handleSaveToNetDrive}
-          />
-        )}
-
-        {activeTab === 'gallery' && (
-          <GalleryView
-            photos={photos}
-            onAddPhoto={handleAddPhoto}
-            onRemovePhoto={handleRemovePhoto}
-            onSaveToNetDrive={handleSaveToNetDrive}
-          />
-        )}
-
-        {activeTab === 'media' && (
-          <MediaPlayerView
-            playlist={playlist}
-            onAddMedia={handleAddMedia}
-            onRemoveMedia={handleRemoveMedia}
-            onSaveToNetDrive={handleSaveToNetDrive}
-          />
-        )}
-
-        {activeTab === 'browser' && (
-          <BrowserAndBookmarksView
-            bookmarks={bookmarks}
-            zones={zones}
-            onAddBookmark={handleAddBookmark}
-            onRemoveBookmark={handleRemoveBookmark}
-            onBatchAddBookmarks={handleBatchAddBookmarks}
-          />
-        )}
-
-        {activeTab === 'downloader' && (
-          <DownloaderView
-            downloads={downloads}
-            onAddDownload={handleAddDownload}
-            onRemoveDownload={handleRemoveDownload}
-            onSaveToNetDrive={handleSaveToNetDrive}
-          />
-        )}
-
-        {activeTab === 'cloud' && (
-          <CloudSyncView
-            cloudConfig={cloudConfig}
-            onSaveCloudConfig={handleSaveCloudConfig}
-            onSyncD1={handleSyncD1}
-            isSyncing={isSyncing}
-          />
-        )}
-
-        {activeTab === 'admin' && (
-          <AdminSettingsView
-            systemSettings={systemSettings}
-            onSaveSystemSettings={handleSaveSystemSettings}
-            users={users}
-          />
-        )}
-      </main>
-
-      {/* Aesthetic Footer */}
-      <footer className="mt-16 border-t border-slate-200 dark:border-slate-800/80 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md py-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-slate-500 dark:text-slate-400">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg fox-gradient flex items-center justify-center text-white font-serif-sc font-bold">
-              狐
-            </div>
-            <div>
-              <p className="font-semibold text-slate-800 dark:text-slate-200">
-                白狐博客 (WhiteFox Blog)
-              </p>
-              <p>灵动美学 · 云边协同 · 优雅全能数字空间</p>
+              {/* Decorative Hero Image */}
+              <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-20 pointer-events-none hidden md:block">
+                <img
+                  src={appearance.heroImage || 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=600&q=80'}
+                  alt="Hero Decoration"
+                  className="w-full h-full object-cover"
+                />
+              </div>
             </div>
           </div>
+        )}
 
-          <div className="flex flex-wrap items-center gap-6">
-            <button onClick={() => setActiveTab('blog')} className="hover:text-rose-500">
-              博客文章
-            </button>
-            <button onClick={() => setActiveTab('bookshelf')} className="hover:text-rose-500">
-              藏书阁
-            </button>
-            <button onClick={() => setActiveTab('gallery')} className="hover:text-rose-500">
-              光影相册
-            </button>
-            <button onClick={() => setActiveTab('browser')} className="hover:text-rose-500">
-              探索与收藏
-            </button>
-            <button onClick={() => setActiveTab('cloud')} className="hover:text-rose-500">
-              多云中枢
-            </button>
-          </div>
+        {/* Main Content Area */}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {activeTab === 'home' && !activePostId && (
+            <BlogList
+              posts={posts}
+              setPosts={setPosts}
+              onSelectPost={(id) => setActivePostId(id)}
+              isAdmin={currentUser.role === 'admin'}
+              t={t}
+            />
+          )}
 
-          <div className="text-right">
-            <p>Cloudflare Pages · 腾讯云 · 阿里云多端快速就绪</p>
-            <p className="font-mono text-[11px] text-slate-400">
-              Zero Egress Fees · Serverless Ready
+          {activeTab === 'home' && activePostId && activePost && (
+            <BlogPostView
+              post={activePost}
+              onBack={() => setActivePostId(null)}
+              currentUser={currentUser}
+              onAddComment={(comment) => {
+                const updated = posts.map((p) =>
+                  p.id === activePost.id
+                    ? { ...p, comments: [...(p.comments || []), comment] }
+                    : p
+                );
+                setPosts(updated);
+              }}
+              t={t}
+            />
+          )}
+
+          {activeTab === 'guide' && <DeploymentGuideView t={t} />}
+
+          {activeTab === 'books' && <BookshelfView books={books} setBooks={setBooks} t={t} />}
+
+          {activeTab === 'gallery' && <GalleryView t={t} />}
+
+          {activeTab === 'bookmarks' && (
+            <BrowserAndBookmarksView
+              bookmarks={bookmarks}
+              setBookmarks={setBookmarks}
+              searchProxy={searchProxy}
+              setSearchProxy={setSearchProxy}
+              t={t}
+            />
+          )}
+
+          {activeTab === 'media' && <MediaPlayerView t={t} />}
+
+          {activeTab === 'download' && <DownloaderView t={t} />}
+
+          {/* Admin Only Tabs */}
+          {activeTab === 'cloud' && currentUser.role === 'admin' && (
+            <NetDriveView
+              cloudConfig={cloudConfig}
+              setCloudConfig={setCloudConfig}
+              cloudFiles={cloudFiles}
+              setCloudFiles={setCloudFiles}
+              t={t}
+            />
+          )}
+
+          {activeTab === 'admin' && currentUser.role === 'admin' && (
+            <AdminSettingsView
+              appearance={appearance}
+              setAppearance={setAppearance}
+              systemSettings={systemSettings}
+              setSystemSettings={setSystemSettings}
+              cloudFiles={cloudFiles}
+              setCloudFiles={setCloudFiles}
+              users={users}
+              setUsers={setUsers}
+              cloudConfig={cloudConfig}
+              setCloudConfig={setCloudConfig}
+              onSyncD1={handleSyncD1}
+              currentTheme={currentTheme}
+              setCurrentTheme={(th) => {
+                setThemeId(th.id);
+                setAppearance((prev) => ({ ...prev, themeId: th.id }));
+              }}
+              t={t}
+            />
+          )}
+        </main>
+
+        {/* Footer */}
+        <footer className="mt-16 border-t border-slate-200/80 bg-white/60 backdrop-blur-md py-8">
+          <div className="max-w-7xl mx-auto px-4 text-center space-y-2">
+            <p className="text-xs text-slate-500 font-medium">
+              白狐博客系统 · 翡翠绿与纯白新纪元 | 多云边缘部署 Cloudflare Pages & 腾讯云 & 阿里云
+            </p>
+            <p className="text-[11px] text-slate-400">
+              © {new Date().getFullYear()} WhiteFox Blog. Powered by Cloudflare D1, R2, COS & OSS.
             </p>
           </div>
-        </div>
-      </footer>
-
-      {/* Modals */}
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        systemSettings={systemSettings}
-        onLoginSuccess={handleLoginSuccess}
-        onRegisterUser={handleRegisterUser}
-      />
-
-      <NewArticleModal
-        isOpen={isNewArticleOpen}
-        onClose={() => setIsNewArticleOpen(false)}
-        onSave={handleSaveArticle}
-      />
+        </footer>
+      </div>
     </div>
   );
 }
+
+export default App;

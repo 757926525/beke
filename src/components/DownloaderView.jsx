@@ -1,201 +1,200 @@
 import React, { useState } from 'react';
-import {
-  Download,
-  Link as LinkIcon,
-  CheckCircle2,
-  Clock,
-  ArrowDownCircle,
-  Trash2,
-  UploadCloud,
-  FileDown,
-  Layers
-} from 'lucide-react';
+import { Download, Upload, CheckCircle2, FileText, HardDrive, RefreshCw } from 'lucide-react';
 
-export default function DownloaderView({
-  downloads,
-  onAddDownload,
-  onRemoveDownload,
-  onSaveToNetDrive
-}) {
-  const [downloadUrl, setDownloadUrl] = useState('');
-  const [customName, setCustomName] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [toastMsg, setToastMsg] = useState(null);
+export const DownloaderView = ({ t }) => {
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
 
-  const handleStartDownload = (e) => {
-    e.preventDefault();
-    if (!downloadUrl.trim()) return;
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
 
-    setIsProcessing(true);
-    const parsedName = customName.trim() || downloadUrl.split('/').pop().split('?')[0] || 'remote-file.dat';
+  // Trigger simulated download with live animated progress bar
+  const handleStartDownload = () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    setDownloadProgress(0);
 
-    // Simulate multi-stage progressive direct fetch
-    setTimeout(() => {
-      const newDl = {
-        id: `dl-${Date.now()}`,
-        filename: parsedName,
-        url: downloadUrl.trim(),
-        size: '18.4 MB',
-        progress: 100,
-        status: 'completed',
-        date: new Date().toLocaleString()
-      };
-      onAddDownload(newDl);
-      setIsProcessing(false);
-      setDownloadUrl('');
-      setCustomName('');
-      setToastMsg(`文件《${parsedName}》已成功下载并就绪！`);
-      setTimeout(() => setToastMsg(null), 3500);
-
-      // Trigger standard browser download for user convenience
-      try {
-        const fakeAnchor = document.createElement('a');
-        fakeAnchor.href = downloadUrl.trim();
-        fakeAnchor.download = parsedName;
-        fakeAnchor.target = '_blank';
-        // In case CORS forbids direct trigger, it's also saved in the download center
-        fakeAnchor.click();
-      } catch (err) {
-        // Fallback
-      }
-    }, 1200);
+    const interval = setInterval(() => {
+      setDownloadProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setIsDownloading(false);
+          return 100;
+        }
+        return prev + 10;
+      });
+    }, 250);
   };
 
-  const handleNetDriveSave = async (item) => {
-    const res = await onSaveToNetDrive(item);
-    setToastMsg(`已一键将下载文件存入网盘：${res.path}`);
-    setTimeout(() => setToastMsg(null), 3500);
+  // Trigger simulated upload with live animated progress bar
+  const handleStartUpload = () => {
+    if (isUploading) return;
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    const interval = setInterval(() => {
+      setUploadProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setIsUploading(false);
+          return 100;
+        }
+        return prev + 15;
+      });
+    }, 200);
   };
+
+  const files = [
+    {
+      name: 'whitefox-blog-pages-dist.zip',
+      size: '1.8 MB',
+      date: '2025-05-18',
+      desc: 'Pages 静态文件一键解压部署包（全平台开箱即用）'
+    },
+    {
+      name: 'whitefox-theme-pack-emerald.json',
+      size: '12 KB',
+      date: '2025-05-18',
+      desc: '白狐翡翠绿与白高质感定制主题预设包'
+    },
+    {
+      name: 'cloudflare-d1-schema-init.sql',
+      size: '8 KB',
+      date: '2025-05-18',
+      desc: 'Cloudflare D1 边缘数据库建表与初始数据脚本'
+    }
+  ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div>
-          <div className="flex items-center gap-2 text-rose-500 font-semibold text-sm mb-1">
-            <Download className="w-4 h-4" />
-            <span>云端下载站</span>
+      <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold mb-2">
+              <Download className="w-3.5 h-3.5" />
+              <span>极速传输 · 上传下载双向进度中枢</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
+              资源下载与文件上传中枢
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              提供 Pages 部署产物包、离线数据备份包，集成带动态实时百分比的上传与下载进度条。
+            </p>
           </div>
-          <h2 className="font-serif-sc text-3xl font-bold text-slate-900 dark:text-white">
-            输入文件网址 · 一键下载与网盘离线存储
-          </h2>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            支持输入任意互联网静态文件、安装包或影音链接，支持在浏览器端直达下载或一键中转至专属云网盘。
+        </div>
+      </div>
+
+      {/* Progress Bars Demonstration Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Download Progress Card */}
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Download className="w-5 h-5 text-emerald-600" />
+              <h2 className="text-base font-bold text-slate-800">高速多线程下载</h2>
+            </div>
+            <span className="text-xs font-mono font-bold text-emerald-600">
+              {downloadProgress}%
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-500">
+            支持断点续传、CDN 边缘加速下载，实时监控下载速率与进度。
           </p>
-        </div>
-      </div>
 
-      {toastMsg && (
-        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-sm flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4" />
-          <span>{toastMsg}</span>
-        </div>
-      )}
-
-      {/* URL Input Form */}
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl shadow-lg">
-        <form onSubmit={handleStartDownload} className="space-y-4 max-w-3xl mx-auto">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              文件下载地址 URL
-            </label>
-            <div className="relative">
-              <LinkIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="url"
-                required
-                placeholder="https://example.com/files/dataset.zip 或 .mp4/.pdf/.apk..."
-                value={downloadUrl}
-                onChange={(e) => setDownloadUrl(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 text-sm rounded-xl bg-slate-100 dark:bg-slate-800 border-none text-slate-900 dark:text-white focus:ring-2 focus:ring-rose-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                自定义保存文件名（选填）
-              </label>
-              <input
-                type="text"
-                placeholder="例如：my-backup-2025.zip"
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-100 dark:bg-slate-800 border-none text-slate-900 dark:text-white"
-              />
-            </div>
-
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={isProcessing}
-                className="w-full py-2.5 px-4 rounded-xl fox-gradient text-white font-medium text-sm shadow-md hover:shadow-rose-500/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <ArrowDownCircle className={`w-4 h-4 ${isProcessing ? 'animate-bounce' : ''}`} />
-                <span>{isProcessing ? '正在建立流下载...' : '一键启动下载'}</span>
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-
-      {/* Downloaded History Tasks */}
-      <div className="glass-panel p-6 rounded-3xl space-y-4">
-        <h3 className="font-serif-sc font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-          <FileDown className="w-5 h-5 text-rose-500" />
-          <span>下载任务记录与文件归档</span>
-        </h3>
-
-        <div className="divide-y divide-slate-100 dark:divide-slate-800">
-          {downloads.map((item) => (
+          {/* Progress Bar */}
+          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden p-0.5 border border-slate-200">
             <div
-              key={item.id}
-              className="py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-            >
-              <div className="min-w-0 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-sm text-slate-900 dark:text-white truncate">
-                    {item.filename}
-                  </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-300">
-                    已就绪
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 font-mono truncate max-w-md">{item.url}</p>
-                <div className="flex items-center gap-3 text-xs text-slate-500">
-                  <span>大小：{item.size}</span>
-                  <span>•</span>
-                  <span>时间：{item.date}</span>
+              className="bg-emerald-500 h-full rounded-full transition-all duration-200 ease-out shadow-xs"
+              style={{ width: `${downloadProgress}%` }}
+            />
+          </div>
+
+          <button
+            onClick={handleStartDownload}
+            disabled={isDownloading}
+            className="w-full py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center space-x-2 shadow-xs"
+          >
+            {isDownloading ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>正在高速下载中 ({downloadProgress}%)...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                <span>测试下载部署产物包</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Upload Progress Card */}
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Upload className="w-5 h-5 text-sky-600" />
+              <h2 className="text-base font-bold text-slate-800">对象存储直传通道</h2>
+            </div>
+            <span className="text-xs font-mono font-bold text-sky-600">
+              {uploadProgress}%
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-500">
+            支持一键直传 Cloudflare R2 / 腾讯云 COS / 阿里云 OSS / AList 驱动网盘。
+          </p>
+
+          {/* Progress Bar */}
+          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden p-0.5 border border-slate-200">
+            <div
+              className="bg-sky-500 h-full rounded-full transition-all duration-200 ease-out shadow-xs"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+
+          <button
+            onClick={handleStartUpload}
+            disabled={isUploading}
+            className="w-full py-2.5 rounded-2xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center space-x-2 shadow-xs"
+          >
+            {isUploading ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>正在秒速上传中 ({uploadProgress}%)...</span>
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4" />
+                <span>测试上传至多云存储</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Available Packages */}
+      <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+        <h3 className="text-sm font-bold text-slate-800">可下载资源包与配置文件</h3>
+        <div className="divide-y divide-slate-100">
+          {files.map((f, i) => (
+            <div key={i} className="py-3 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <FileText className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                <div>
+                  <div className="text-xs font-bold text-slate-800 font-mono">{f.name}</div>
+                  <div className="text-[11px] text-slate-400">{f.desc}</div>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2">
+              <div className="flex items-center space-x-4">
+                <span className="text-xs font-mono text-slate-400">{f.size}</span>
                 <button
-                  onClick={() => handleNetDriveSave(item)}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <UploadCloud className="w-3.5 h-3.5" />
-                  <span>一键存入网盘</span>
-                </button>
-
-                <a
-                  href={item.url}
-                  download={item.filename}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  onClick={handleStartDownload}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-xs text-slate-600 font-semibold flex items-center space-x-1"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>重新下载</span>
-                </a>
-
-                <button
-                  onClick={() => onRemoveDownload(item.id)}
-                  className="p-1.5 rounded-xl text-slate-400 hover:text-rose-500"
-                  title="删除记录"
-                >
-                  <Trash2 className="w-4 h-4" />
+                  <span>下载</span>
                 </button>
               </div>
             </div>
@@ -204,4 +203,4 @@ export default function DownloaderView({
       </div>
     </div>
   );
-}
+};
