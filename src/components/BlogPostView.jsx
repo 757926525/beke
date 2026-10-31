@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
   ArrowLeft, Calendar, Eye, User, Bookmark,
-  Share2, MessageSquare, Send, CheckCircle2, HardDrive
+  Share2, MessageSquare, Send, CheckCircle2, HardDrive,
+  Copy, Trash2, Edit3
 } from 'lucide-react';
 
-export const BlogPostView = ({ post, onBack, currentUser, onAddComment, t }) => {
+export const BlogPostView = ({ post, onBack, currentUser, onAddComment, onDeletePost, fontSize = 'standard', t }) => {
   const [commentText, setCommentText] = useState('');
   const [toast, setToast] = useState('');
 
@@ -20,6 +21,14 @@ export const BlogPostView = ({ post, onBack, currentUser, onAddComment, t }) => 
     }
   };
 
+  const handleCopyContent = () => {
+    const md = `# ${post.title}\n\n${post.content}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(md);
+      showToast('文章全文 Markdown 已成功复制！');
+    }
+  };
+
   const handleSaveToCloud = () => {
     showToast(`文章已成功保存快照到多云网盘 (Cloud Snapshot)`);
   };
@@ -29,7 +38,7 @@ export const BlogPostView = ({ post, onBack, currentUser, onAddComment, t }) => 
     if (!commentText.trim()) return;
     const newC = {
       id: 'c-' + Date.now(),
-      author: currentUser.username,
+      author: currentUser?.username || '访客',
       date: new Date().toISOString().split('T')[0],
       content: commentText.trim()
     };
@@ -37,6 +46,14 @@ export const BlogPostView = ({ post, onBack, currentUser, onAddComment, t }) => 
     setCommentText('');
     showToast('评论发布成功！');
   };
+
+  // Font size class mapping
+  const contentFontSizeClass = {
+    compact: 'text-xs sm:text-sm',
+    standard: 'text-sm sm:text-base',
+    large: 'text-base sm:text-lg',
+    extra: 'text-lg sm:text-xl'
+  }[fontSize] || 'text-sm sm:text-base';
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -60,11 +77,19 @@ export const BlogPostView = ({ post, onBack, currentUser, onAddComment, t }) => 
 
         <div className="flex items-center space-x-2">
           <button
+            onClick={handleCopyContent}
+            className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold"
+            title="一键复制文章 Markdown 全文"
+          >
+            <Copy className="w-3.5 h-3.5 text-emerald-600" />
+            <span>一键复制全文</span>
+          </button>
+          <button
             onClick={handleSaveToCloud}
             className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold"
           >
             <HardDrive className="w-3.5 h-3.5" />
-            <span>保存至网盘</span>
+            <span>存至多云</span>
           </button>
           <button
             onClick={handleShare}
@@ -109,7 +134,7 @@ export const BlogPostView = ({ post, onBack, currentUser, onAddComment, t }) => 
         )}
 
         {/* Body */}
-        <div className="prose prose-slate max-w-none text-slate-700 leading-relaxed text-sm sm:text-base whitespace-pre-line py-2">
+        <div className={`prose prose-slate max-w-none text-slate-700 leading-relaxed whitespace-pre-line py-2 ${contentFontSizeClass}`}>
           {post.content}
         </div>
 
@@ -140,7 +165,7 @@ export const BlogPostView = ({ post, onBack, currentUser, onAddComment, t }) => 
             rows={3}
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
-            placeholder={`以 ${currentUser.username} 的身份发表您的见解...`}
+            placeholder={`以 ${currentUser?.username || '访客'} 的身份发表见解...`}
             className="w-full p-3 rounded-2xl border border-slate-200 text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-emerald-400"
           />
           <div className="flex justify-end">

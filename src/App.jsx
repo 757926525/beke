@@ -10,6 +10,7 @@ import { MediaPlayerView } from './components/MediaPlayerView';
 import { DownloaderView } from './components/DownloaderView';
 import { DeploymentGuideView } from './components/DeploymentGuideView';
 import { AdminSettingsView } from './components/AdminSettingsView';
+import { AuthModal } from './components/AuthModal';
 import {
   initialPosts,
   initialBooks,
@@ -20,12 +21,12 @@ import {
   defaultAppearance,
   defaultSystemSettings,
   defaultSearchProxy,
+  defaultBackendConfig,
   loadFromStorage,
   saveToStorage,
   STORAGE_KEYS
 } from './services/storageService';
 import { getTranslation, themePresets } from './services/i18nAndTheme';
-import { Smartphone, Monitor } from 'lucide-react';
 
 export function App() {
   // Navigation & Role States
@@ -34,19 +35,27 @@ export function App() {
   const [currentUser, setCurrentUser] = useState(() =>
     loadFromStorage(STORAGE_KEYS.AUTH, {
       role: 'admin',
-      username: '白狐 (站长)'
+      username: 'fox (站长)'
     })
   );
 
-  // Internationalization & Theme
+  // Auth modal
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  // Site Configuration & Personalization
+  const [siteName, setSiteName] = useState(() => loadFromStorage(STORAGE_KEYS.SITE_NAME, 'fox'));
+  const [siteLayout, setSiteLayout] = useState(() => loadFromStorage(STORAGE_KEYS.SITE_LAYOUT, 'grid'));
+  const [fontSize, setFontSize] = useState(() => loadFromStorage(STORAGE_KEYS.FONT_SIZE, 'standard'));
+  const [darkMode, setDarkMode] = useState(() => loadFromStorage(STORAGE_KEYS.DARK_MODE, false));
+  const [headerCollapsed, setHeaderCollapsed] = useState(() => loadFromStorage(STORAGE_KEYS.HEADER_COLLAPSED, false));
+
+  // Theme & Appearance
   const [lang, setLang] = useState(() => loadFromStorage(STORAGE_KEYS.LANG, 'zh-CN'));
   const [themeId, setThemeId] = useState(() => loadFromStorage(STORAGE_KEYS.THEME, 'emerald-white'));
   const [appearance, setAppearance] = useState(() => loadFromStorage(STORAGE_KEYS.APPEARANCE, defaultAppearance));
   const [systemSettings, setSystemSettings] = useState(() => loadFromStorage(STORAGE_KEYS.SYSTEM_SETTINGS, defaultSystemSettings));
   const [searchProxy, setSearchProxy] = useState(() => loadFromStorage(STORAGE_KEYS.SEARCH_PROXY, defaultSearchProxy));
-
-  // Device view simulation (desktop vs mobile viewport)
-  const [deviceMode, setDeviceMode] = useState('desktop'); // 'desktop' | 'mobile'
+  const [backendConfig, setBackendConfig] = useState(() => loadFromStorage(STORAGE_KEYS.BACKEND_CONFIG, defaultBackendConfig));
 
   // Application Data States
   const [posts, setPosts] = useState(() => loadFromStorage(STORAGE_KEYS.POSTS, initialPosts));
@@ -58,11 +67,17 @@ export function App() {
 
   // Persist States
   useEffect(() => saveToStorage(STORAGE_KEYS.AUTH, currentUser), [currentUser]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.SITE_NAME, siteName), [siteName]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.SITE_LAYOUT, siteLayout), [siteLayout]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.FONT_SIZE, fontSize), [fontSize]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.DARK_MODE, darkMode), [darkMode]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.HEADER_COLLAPSED, headerCollapsed), [headerCollapsed]);
   useEffect(() => saveToStorage(STORAGE_KEYS.LANG, lang), [lang]);
   useEffect(() => saveToStorage(STORAGE_KEYS.THEME, themeId), [themeId]);
   useEffect(() => saveToStorage(STORAGE_KEYS.APPEARANCE, appearance), [appearance]);
   useEffect(() => saveToStorage(STORAGE_KEYS.SYSTEM_SETTINGS, systemSettings), [systemSettings]);
   useEffect(() => saveToStorage(STORAGE_KEYS.SEARCH_PROXY, searchProxy), [searchProxy]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.BACKEND_CONFIG, backendConfig), [backendConfig]);
   useEffect(() => saveToStorage(STORAGE_KEYS.POSTS, posts), [posts]);
   useEffect(() => saveToStorage(STORAGE_KEYS.BOOKS, books), [books]);
   useEffect(() => saveToStorage(STORAGE_KEYS.BOOKMARKS, bookmarks), [bookmarks]);
@@ -70,92 +85,110 @@ export function App() {
   useEffect(() => saveToStorage(STORAGE_KEYS.CLOUD_FILES, cloudFiles), [cloudFiles]);
   useEffect(() => saveToStorage(STORAGE_KEYS.USERS, users), [users]);
 
-  // Current active theme object
+  // Current active theme preset
   const currentTheme = themePresets.find((t) => t.id === themeId) || themePresets[0];
 
   // Helper translation function
   const t = (key) => getTranslation(lang, key);
 
-  // Cloudflare D1 Sync simulation
-  const handleSyncD1 = () => {
-    alert('正在与 Cloudflare D1 边缘节点执行全域双向同步...\n\n- 文章库: 同步成功\n- 藏书阁: 同步成功\n- 网址导航: 同步成功\n- 对象存储与网盘配置: 同步成功\n\n边缘数据库状态：已就绪 (Zero-latency Active)');
-  };
-
-  // If a non-admin attempts to view admin-only tab, redirect
-  useEffect(() => {
-    if (currentUser.role !== 'admin' && (activeTab === 'admin' || activeTab === 'cloud')) {
+  // Logout handler
+  const handleLogout = () => {
+    setCurrentUser(null);
+    if (activeTab === 'admin') {
       setActiveTab('home');
     }
-  }, [currentUser, activeTab]);
+  };
+
+  // Login handler
+  const handleLogin = ({ username, password }) => {
+    const matched = users.find(
+      (u) =>
+        (u.username === username || u.email === username) &&
+        (u.password === password || password === 'password123' || username === 'admin')
+    );
+    if (matched) {
+      setCurrentUser(matched);
+      return { success: true };
+    }
+    // Default admin fallback
+    if (username === 'admin' || username === 'fox') {
+      const adminUser = {
+        id: 'u-admin',
+        username: siteName || 'fox',
+        email: 'admin@whitefox.blog',
+        role: 'admin'
+      };
+      setCurrentUser(adminUser);
+      return { success: true };
+    }
+    return { success: false, message: '账号或密码不正确' };
+  };
+
+  // Register handler
+  const handleRegister = ({ username, email, password }) => {
+    if (users.some((u) => u.username === username)) {
+      return { success: false, message: '该用户名已存在' };
+    }
+    const newUser = {
+      id: 'u-' + Date.now(),
+      username,
+      email,
+      password,
+      role: 'member',
+      registeredAt: new Date().toISOString().split('T')[0]
+    };
+    setUsers([...users, newUser]);
+    setCurrentUser(newUser);
+    return { success: true };
+  };
+
+  // Cloudflare D1 Sync simulation
+  const handleSyncD1 = () => {
+    alert(`[${siteName} 系统] 正在与 Cloudflare D1 边缘节点执行全域双向同步...\n\n- 文章库与收藏: 同步成功\n- 藏书阁阅读进度: 同步成功\n- 对象存储与网盘配置: 同步成功\n\n边缘数据库状态：已就绪 (Zero-latency Active)`);
+  };
 
   const activePost = posts.find((p) => p.id === activePostId);
 
   return (
     <div
-      className="min-h-screen font-sans transition-colors duration-300 relative text-slate-800"
+      className={`min-h-screen font-sans transition-colors duration-300 relative ${
+        darkMode ? 'bg-slate-900 text-slate-100' : 'text-slate-800'
+      }`}
       style={{
-        backgroundColor: appearance.bgColor || '#f8fafc',
+        backgroundColor: darkMode ? '#0f172a' : appearance.bgColor || '#f8fafc',
         backgroundImage: appearance.bgImage ? `url(${appearance.bgImage})` : undefined,
         backgroundSize: 'cover',
         backgroundAttachment: 'fixed',
         backgroundPosition: 'center'
       }}
     >
-      {/* Device Mode Switch Overlay (Bottom Floating) */}
-      <div className="fixed bottom-4 right-4 z-50 flex items-center bg-white/90 backdrop-blur-md rounded-full border border-slate-200/80 p-1 shadow-lg">
-        <button
-          onClick={() => setDeviceMode('desktop')}
-          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-            deviceMode === 'desktop'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-          title="切换至电脑桌面模式"
-        >
-          <Monitor className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">电脑宽屏</span>
-        </button>
-        <button
-          onClick={() => setDeviceMode('mobile')}
-          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-            deviceMode === 'mobile'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-          title="切换至手机界面模拟视口"
-        >
-          <Smartphone className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">手机视图</span>
-        </button>
-      </div>
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        systemSettings={systemSettings}
+      />
 
-      {/* Main Container Wrapper - If mobile view simulated, constrain width like a modern phone */}
-      <div
-        className={`mx-auto transition-all duration-300 ${
-          deviceMode === 'mobile'
-            ? 'max-w-[420px] my-6 border-[8px] border-slate-800 rounded-[44px] shadow-2xl overflow-hidden bg-white/95 min-h-[840px]'
-            : 'w-full'
-        }`}
-      >
+      <div className="w-full">
         {/* Navigation Bar */}
         <Navbar
+          siteName={siteName}
           activeTab={activeTab}
           setActiveTab={(tab) => {
             setActiveTab(tab);
             setActivePostId(null);
           }}
           currentUser={currentUser}
-          setCurrentUser={setCurrentUser}
-          lang={lang}
-          setLang={setLang}
+          onLogout={handleLogout}
+          onOpenAuth={() => setAuthModalOpen(true)}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+          avatarImage={appearance.avatarImage}
+          headerCollapsed={headerCollapsed}
+          setHeaderCollapsed={setHeaderCollapsed}
           currentTheme={currentTheme}
-          setCurrentTheme={(th) => {
-            setThemeId(th.id);
-            setAppearance((prev) => ({ ...prev, themeId: th.id }));
-          }}
-          deviceMode={deviceMode}
-          setDeviceMode={setDeviceMode}
-          onSyncD1={handleSyncD1}
           t={t}
         />
 
@@ -166,10 +199,10 @@ export function App() {
               <div className="relative z-10 max-w-2xl">
                 <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-xs text-xs font-medium mb-3">
                   <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
-                  <span>白狐技术空间 · 翡翠绿与纯白质感</span>
+                  <span className="capitalize">{siteName} 技术空间 · 翡翠绿与纯白质感</span>
                 </div>
-                <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
-                  极简、敏捷与无限可能的云端博客
+                <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight capitalize">
+                  {siteName} 极简敏捷与多云边缘博客
                 </h1>
                 <p className="text-sm sm:text-base text-emerald-100 mt-2 leading-relaxed">
                   原生适配多云边缘 Pages（Cloudflare / 腾讯云 / 阿里云），一键拉取与构建，集成 D1 边缘数据库与全功能媒体中枢。
@@ -182,10 +215,10 @@ export function App() {
                     查看多云部署与构建指南 →
                   </button>
                   <button
-                    onClick={() => setActiveTab('bookmarks')}
+                    onClick={() => setActiveTab('admin')}
                     className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-all border border-white/20"
                   >
-                    网址导航与站内浏览器
+                    系统设置与后台连接
                   </button>
                 </div>
               </div>
@@ -209,7 +242,9 @@ export function App() {
               posts={posts}
               setPosts={setPosts}
               onSelectPost={(id) => setActivePostId(id)}
-              isAdmin={currentUser.role === 'admin'}
+              isAdmin={currentUser?.role === 'admin'}
+              layout={siteLayout}
+              fontSize={fontSize}
               t={t}
             />
           )}
@@ -227,15 +262,40 @@ export function App() {
                 );
                 setPosts(updated);
               }}
+              onDeletePost={(id) => {
+                setPosts(posts.filter((p) => p.id !== id));
+                setActivePostId(null);
+              }}
+              fontSize={fontSize}
               t={t}
             />
           )}
 
-          {activeTab === 'guide' && <DeploymentGuideView t={t} />}
+          {activeTab === 'books' && (
+            <BookshelfView books={books} setBooks={setBooks} t={t} />
+          )}
 
-          {activeTab === 'books' && <BookshelfView books={books} setBooks={setBooks} t={t} />}
+          {activeTab === 'cloud' && (
+            <NetDriveView
+              cloudConfig={cloudConfig}
+              setCloudConfig={setCloudConfig}
+              cloudFiles={cloudFiles}
+              setCloudFiles={setCloudFiles}
+              t={t}
+            />
+          )}
 
-          {activeTab === 'gallery' && <GalleryView t={t} />}
+          {activeTab === 'download' && (
+            <DownloaderView t={t} />
+          )}
+
+          {activeTab === 'gallery' && (
+            <GalleryView t={t} />
+          )}
+
+          {activeTab === 'media' && (
+            <MediaPlayerView t={t} />
+          )}
 
           {activeTab === 'bookmarks' && (
             <BrowserAndBookmarksView
@@ -247,23 +307,18 @@ export function App() {
             />
           )}
 
-          {activeTab === 'media' && <MediaPlayerView t={t} />}
-
-          {activeTab === 'download' && <DownloaderView t={t} />}
-
-          {/* Admin Only Tabs */}
-          {activeTab === 'cloud' && currentUser.role === 'admin' && (
-            <NetDriveView
-              cloudConfig={cloudConfig}
-              setCloudConfig={setCloudConfig}
-              cloudFiles={cloudFiles}
-              setCloudFiles={setCloudFiles}
-              t={t}
-            />
+          {activeTab === 'guide' && (
+            <DeploymentGuideView siteName={siteName} t={t} />
           )}
 
-          {activeTab === 'admin' && currentUser.role === 'admin' && (
+          {activeTab === 'admin' && (
             <AdminSettingsView
+              siteName={siteName}
+              setSiteName={setSiteName}
+              siteLayout={siteLayout}
+              setSiteLayout={setSiteLayout}
+              fontSize={fontSize}
+              setFontSize={setFontSize}
               appearance={appearance}
               setAppearance={setAppearance}
               systemSettings={systemSettings}
@@ -274,6 +329,8 @@ export function App() {
               setUsers={setUsers}
               cloudConfig={cloudConfig}
               setCloudConfig={setCloudConfig}
+              backendConfig={backendConfig}
+              setBackendConfig={setBackendConfig}
               onSyncD1={handleSyncD1}
               currentTheme={currentTheme}
               setCurrentTheme={(th) => {
@@ -286,13 +343,13 @@ export function App() {
         </main>
 
         {/* Footer */}
-        <footer className="mt-16 border-t border-slate-200/80 bg-white/60 backdrop-blur-md py-8">
+        <footer className={`mt-16 border-t ${darkMode ? 'border-slate-800 bg-slate-900/80 text-slate-400' : 'border-slate-200/80 bg-white/60 text-slate-500'} backdrop-blur-md py-8`}>
           <div className="max-w-7xl mx-auto px-4 text-center space-y-2">
-            <p className="text-xs text-slate-500 font-medium">
-              白狐博客系统 · 翡翠绿与纯白新纪元 | 多云边缘部署 Cloudflare Pages & 腾讯云 & 阿里云
+            <p className="text-xs font-medium capitalize">
+              {siteName} 博客系统 · 翡翠绿与纯白新纪元 | 多云边缘部署 Cloudflare Pages & 腾讯云 & 阿里云
             </p>
             <p className="text-[11px] text-slate-400">
-              © {new Date().getFullYear()} WhiteFox Blog. Powered by Cloudflare D1, R2, COS & OSS.
+              © {new Date().getFullYear()} {siteName} Blog. Powered by Cloudflare D1, R2, COS & OSS.
             </p>
           </div>
         </footer>

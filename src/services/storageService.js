@@ -30,6 +30,11 @@ export const saveToStorage = (key, value) => {
 
 export const STORAGE_KEYS = {
   AUTH: 'wf_auth_user',
+  SITE_NAME: 'wf_site_name',
+  SITE_LAYOUT: 'wf_site_layout',
+  FONT_SIZE: 'wf_font_size',
+  DARK_MODE: 'wf_dark_mode',
+  HEADER_COLLAPSED: 'wf_header_collapsed',
   LANG: 'wf_lang',
   THEME: 'wf_theme',
   APPEARANCE: 'wf_appearance',
@@ -40,6 +45,7 @@ export const STORAGE_KEYS = {
   BOOKMARKS: 'wf_bookmarks',
   CLOUD_CONFIG: 'wf_cloud_config',
   CLOUD_FILES: 'wf_cloud_files',
+  BACKEND_CONFIG: 'wf_backend_config',
   USERS: 'wf_users'
 };
 
@@ -93,6 +99,22 @@ export const initialBookmarks = [
 
 export const initialCloudConfig = defaultCloudConfig;
 
+export const defaultBackendConfig = {
+  dbType: 'cloudflare-d1', // 'cloudflare-d1' | 'mysql' | 'supabase'
+  dbHost: 'd1.cloudflare.com',
+  dbPort: '3306',
+  dbName: 'whitefox_blog_db',
+  dbUser: 'fox_admin',
+  dbPassword: '••••••••••••',
+  storageType: 'cloudflare-r2', // 'cloudflare-r2' | 'tencent-cos' | 'aliyun-oss'
+  storageEndpoint: 'https://r2.cloudflarestorage.com',
+  storageBucket: 'whitefox-assets',
+  storageAccessKeyId: 'cf_r2_key_demo_9823',
+  storageSecretAccessKey: 'cf_r2_secret_demo_7712',
+  status: 'connected',
+  lastConnectedAt: '2025-05-18 10:25:00'
+};
+
 export const initialCloudFiles = [
   {
     id: 'cf-1',
@@ -137,6 +159,7 @@ export const initialUsers = [
     id: 'u-1',
     username: '白狐 (站长)',
     email: 'admin@whitefox.blog',
+    password: 'password123',
     role: 'admin',
     registeredAt: '2025-05-01'
   },
@@ -144,6 +167,7 @@ export const initialUsers = [
     id: 'u-2',
     username: '青丘客',
     email: 'visitor@example.com',
+    password: 'password123',
     role: 'member',
     registeredAt: '2025-05-10'
   },
@@ -151,6 +175,7 @@ export const initialUsers = [
     id: 'u-3',
     username: '云端极客',
     email: 'cloudgeek@example.com',
+    password: 'password123',
     role: 'member',
     registeredAt: '2025-05-12'
   }
@@ -171,6 +196,20 @@ export const defaultSearchProxy = {
   endpoint: 'https://proxy-search.whitefox.blog/api',
   notice: '站内免代理直连已启用'
 };
+
+export const layoutOptions = [
+  { id: 'grid', name: '经典卡片网格 (Classic Grid)', desc: '标准自适应网格，突出封面与标签' },
+  { id: 'magazine', name: '沉浸杂志流瀑 (Magazine Waterfall)', desc: '大图横向排版，优雅长文阅读体验' },
+  { id: 'minimal', name: '极简流式信息条 (Minimal Stream)', desc: '去芜存菁，突出文章标题与时间' },
+  { id: 'compact', name: '高密度紧凑列表 (Compact List)', desc: '最高信息容积，极客与速览首选' }
+];
+
+export const fontSizes = [
+  { id: 'compact', name: '紧凑 (14px)', class: 'text-sm' },
+  { id: 'standard', name: '标准 (16px)', class: 'text-base' },
+  { id: 'large', name: '舒适大字 (18px)', class: 'text-lg' },
+  { id: 'extra', name: '特大号清晰 (20px)', class: 'text-xl' }
+];
 
 export const StorageService = {
   getArticles: () => loadFromStorage(STORAGE_KEYS.POSTS, initialArticles),

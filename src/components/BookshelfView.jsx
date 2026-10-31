@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import {
   BookOpen, ChevronRight, ChevronLeft, Bookmark,
-  Maximize2, Minimize2, ArrowLeft, Eye, Sparkles, Smartphone
+  Maximize2, Minimize2, ArrowLeft, Eye, Sparkles, Smartphone,
+  BookMarked, Clock, Check
 } from 'lucide-react';
 
 export const BookshelfView = ({ books, setBooks, t }) => {
   const [selectedBook, setSelectedBook] = useState(null);
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
   const [mobileFullscreen, setMobileFullscreen] = useState(false);
-  const [fontSize, setFontSize] = useState('text-base');
+  const [readerFontSize, setReaderFontSize] = useState('text-base');
 
   const openBook = (book) => {
     setSelectedBook(book);
@@ -31,7 +32,7 @@ export const BookshelfView = ({ books, setBooks, t }) => {
 
   // If reading mode is active
   if (selectedBook) {
-    const chapter = selectedBook.chapters[currentChapterIndex] || {
+    const chapter = selectedBook.chapters?.[currentChapterIndex] || {
       title: '章节缺失',
       content: '该章节暂无内容。'
     };
@@ -40,21 +41,21 @@ export const BookshelfView = ({ books, setBooks, t }) => {
       <div
         className={`${
           mobileFullscreen
-            ? 'fixed inset-0 z-50 bg-[#faf8f5] overflow-y-auto pt-[env(safe-area-inset-top,20px)] pb-[env(safe-area-inset-bottom,20px)] px-4 sm:px-8'
+            ? 'fixed inset-0 z-50 bg-[#faf8f5] overflow-y-auto pt-[env(safe-area-inset-top,24px)] pb-[env(safe-area-inset-bottom,24px)] px-4 sm:px-8'
             : 'space-y-6'
         }`}
       >
         {/* Reader Top Bar (Preserves Mobile Notch & avoids overlap) */}
-        <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between sticky top-2 z-10">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between sticky top-2 z-10">
           <button
             onClick={() => {
               setSelectedBook(null);
               setMobileFullscreen(false);
             }}
-            className="flex items-center space-x-1.5 text-xs font-semibold text-slate-600 hover:text-emerald-600"
+            className="flex items-center space-x-1.5 text-xs font-semibold text-slate-600 hover:text-emerald-600 px-2 py-1 rounded-lg hover:bg-slate-100"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>返回书架</span>
+            <span>返回书架选区</span>
           </button>
 
           <div className="text-center truncate px-2">
@@ -65,18 +66,28 @@ export const BookshelfView = ({ books, setBooks, t }) => {
           <div className="flex items-center space-x-2">
             {/* Font size toggler */}
             <button
-              onClick={() => setFontSize(fontSize === 'text-base' ? 'text-lg' : fontSize === 'text-lg' ? 'text-sm' : 'text-base')}
-              className="px-2 py-1 rounded-lg bg-slate-100 text-[11px] font-bold text-slate-700"
-              title="切换字体大小"
+              onClick={() =>
+                setReaderFontSize(
+                  readerFontSize === 'text-sm'
+                    ? 'text-base'
+                    : readerFontSize === 'text-base'
+                    ? 'text-lg'
+                    : readerFontSize === 'text-lg'
+                    ? 'text-xl'
+                    : 'text-sm'
+                )
+              }
+              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 transition-colors"
+              title="切换阅读字号"
             >
-              Aa
+              字号 Aa
             </button>
 
             {/* Mobile fullscreen notch-safe toggle */}
             <button
               onClick={() => setMobileFullscreen(!mobileFullscreen)}
-              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center space-x-1 text-xs"
-              title="手机沉浸全屏阅读模式（自适应安全区与刘海）"
+              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center space-x-1 text-xs transition-colors"
+              title="手机沉浸全屏阅读（自适应刘海与安全区）"
             >
               {mobileFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
@@ -87,12 +98,12 @@ export const BookshelfView = ({ books, setBooks, t }) => {
         <div className="max-w-3xl mx-auto bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-12 border border-slate-200/80 shadow-sm mt-4 min-h-[60vh]">
           <div className="border-b border-slate-100 pb-4 mb-6">
             <div className="flex items-center space-x-2 text-xs font-mono text-emerald-600 font-bold mb-1">
-              <span>第 {currentChapterIndex + 1} 章 / 共 {selectedBook.chapters.length} 章</span>
+              <span>第 {currentChapterIndex + 1} 章 / 共 {selectedBook.chapters?.length || 1} 章</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-800">{chapter.title}</h1>
           </div>
 
-          <div className={`prose prose-slate max-w-none leading-relaxed text-slate-700 whitespace-pre-line ${fontSize}`}>
+          <div className={`prose prose-slate max-w-none leading-relaxed text-slate-700 whitespace-pre-line ${readerFontSize}`}>
             {chapter.content}
           </div>
 
@@ -108,12 +119,12 @@ export const BookshelfView = ({ books, setBooks, t }) => {
             </button>
 
             <span className="text-xs text-slate-400">
-              {currentChapterIndex + 1} / {selectedBook.chapters.length}
+              {currentChapterIndex + 1} / {selectedBook.chapters?.length || 1}
             </span>
 
             <button
               onClick={handleNextChapter}
-              disabled={currentChapterIndex >= selectedBook.chapters.length - 1}
+              disabled={currentChapterIndex >= (selectedBook.chapters?.length || 1) - 1}
               className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30 text-xs font-semibold text-white flex items-center space-x-1 shadow-xs"
             >
               <span>下一章</span>
@@ -133,13 +144,13 @@ export const BookshelfView = ({ books, setBooks, t }) => {
           <div>
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold mb-2">
               <BookOpen className="w-3.5 h-3.5" />
-              <span>墨香书阁 · 沉浸式阅读器</span>
+              <span>墨香书阁 · 沉浸式藏书与阅读器</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
-              白狐电子书阁与读书会
+              书架精选专区
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              精选技术专著、云架构白皮书与原创长文，支持手机端安全区无遮挡沉浸全屏阅读。
+              汇聚技术专著、云原生架构白皮书与原创长文，支持手机端安全区无遮挡沉浸全屏阅读。
             </p>
           </div>
         </div>
@@ -150,7 +161,7 @@ export const BookshelfView = ({ books, setBooks, t }) => {
         {books.map((book) => (
           <div
             key={book.id}
-            className="bg-white/80 backdrop-blur-md rounded-3xl p-5 border border-slate-200/80 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between group"
+            className="bg-white/80 backdrop-blur-md rounded-3xl p-5 border border-slate-200/80 shadow-xs hover:shadow-xl transition-all flex flex-col justify-between group"
           >
             <div>
               <div className="relative aspect-[3/4] rounded-2xl overflow-hidden mb-4 bg-slate-100 shadow-inner">
@@ -160,7 +171,7 @@ export const BookshelfView = ({ books, setBooks, t }) => {
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
                 <div className="absolute top-3 right-3 px-2 py-1 rounded-full bg-black/60 backdrop-blur-xs text-[10px] text-white font-mono">
-                  {book.chapters.length} 章节
+                  {book.chapters?.length || 0} 章节
                 </div>
               </div>
 
@@ -174,7 +185,7 @@ export const BookshelfView = ({ books, setBooks, t }) => {
             <div className="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between">
               <button
                 onClick={() => openBook(book)}
-                className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs"
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs transition-colors"
               >
                 <BookOpen className="w-3.5 h-3.5" />
                 <span>进入沉浸阅读</span>
