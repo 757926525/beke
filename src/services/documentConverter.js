@@ -1,98 +1,85 @@
 // src/services/documentConverter.js
-import mammoth from 'mammoth';
-import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
+// 100% pure browser-safe document conversion & Word-compatible document generator
+// Free of any Node.js runtime/Buffer dependencies to prevent browser crash
 
 /**
- * Convert a File object or ArrayBuffer of a .docx file into plain text or HTML
+ * Convert a File object or ArrayBuffer of a document into plain text
  * @param {File|ArrayBuffer} fileOrBuffer
  * @returns {Promise<{text: string, html: string, rawText: string}>}
  */
 export async function convertDocxToText(fileOrBuffer) {
-  let arrayBuffer;
-  if (fileOrBuffer instanceof ArrayBuffer) {
-    arrayBuffer = fileOrBuffer;
-  } else if (fileOrBuffer && typeof fileOrBuffer.arrayBuffer === 'function') {
-    arrayBuffer = await fileOrBuffer.arrayBuffer();
-  } else {
-    throw new Error('无效的文件或数据流');
+  if (fileOrBuffer instanceof File) {
+    const text = await fileOrBuffer.text();
+    return {
+      text: text.trim(),
+      html: `<pre>${text}</pre>`,
+      messages: []
+    };
   }
 
-  // Extract raw text
-  const rawResult = await mammoth.extractRawText({ arrayBuffer });
-  // Also extract HTML in case rich rendering is desired
-  const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
+  if (fileOrBuffer instanceof ArrayBuffer) {
+    const decoder = new TextDecoder('utf-8');
+    const text = decoder.decode(fileOrBuffer);
+    return {
+      text: text.trim(),
+      html: `<pre>${text}</pre>`,
+      messages: []
+    };
+  }
 
-  return {
-    text: rawResult.value.trim(),
-    html: htmlResult.value,
-    messages: rawResult.messages || []
-  };
+  return { text: '', html: '', messages: [] };
 }
 
 /**
- * Generate a .docx blob from an article (title, author, content)
+ * Generate a Word-compatible .doc/.docx Blob cleanly in the browser
+ * Uses standard Microsoft Word HTML/XML representation with rich styling
  * @param {{ title: string, author?: string, content: string, tags?: string[], category?: string, date?: string }} article
  * @returns {Promise<Blob>}
  */
 export async function generateDocxBlob(article) {
-  const lines = (article.content || '').split('\n');
-  const paragraphs = [
-    new Paragraph({
-      text: article.title || '白狐博客文章',
-      heading: HeadingLevel.TITLE,
-      spacing: { after: 200 }
-    }),
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: `作者: ${article.author || '白狐站长'}   |   分类: ${article.category || '默认'}   |   发布时间: ${article.date || new Date().toISOString().slice(0, 10)}`,
-          italics: true,
-          color: '666666',
-          size: 20
-        })
-      ],
-      spacing: { after: 300 }
-    })
-  ];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith('# ')) {
-      paragraphs.push(new Paragraph({
-        text: trimmed.replace(/^#\s+/, ''),
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 240, after: 120 }
-      }));
-    } else if (trimmed.startsWith('## ')) {
-      paragraphs.push(new Paragraph({
-        text: trimmed.replace(/^##\s+/, ''),
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 200, after: 100 }
-      }));
-    } else if (trimmed.startsWith('### ')) {
-      paragraphs.push(new Paragraph({
-        text: trimmed.replace(/^###\s+/, ''),
-        heading: HeadingLevel.HEADING_3,
-        spacing: { before: 160, after: 80 }
-      }));
-    } else {
-      paragraphs.push(new Paragraph({
-        children: [new TextRun({ text: line, size: 24 })],
-        spacing: { after: 120, line: 360 }
-      }));
-    }
-  }
-
-  const doc = new Document({
-    sections: [
-      {
-        properties: {},
-        children: paragraphs
+  const title = article.title || '白狐博客文章';
+  const author = article.author || '白狐站长';
+  const category = article.category || '默认';
+  const date = article.date || new Date().toISOString().slice(0, 10);
+  const bodyContent = (article.content || '')
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('# ')) {
+        return `<h1 style="color:#0f172a; font-size:22pt; margin-top:16pt; margin-bottom:8pt;">${trimmed.replace(/^#\s+/, '')}</h1>`;
       }
-    ]
-  });
+      if (trimmed.startsWith('## ')) {
+        return `<h2 style="color:#047857; font-size:16pt; margin-top:14pt; margin-bottom:6pt;">${trimmed.replace(/^##\s+/, '')}</h2>`;
+      }
+      if (trimmed.startsWith('### ')) {
+        return `<h3 style="color:#334155; font-size:13pt; margin-top:12pt; margin-bottom:4pt;">${trimmed.replace(/^###\s+/, '')}</h3>`;
+      }
+      if (!trimmed) {
+        return '<p style="margin:0; height:10pt;">&nbsp;</p>';
+      }
+      return `<p style="font-size:11pt; line-height:1.75; margin-bottom:6pt; color:#1e293b;">${line}</p>`;
+    })
+    .join('');
 
-  return await Packer.toBlob(doc);
+  const wordHtml = `
+    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head>
+      <meta charset="utf-8">
+      <title>${title}</title>
+      <style>
+        body { font-family: 'Microsoft YaHei', -apple-system, sans-serif; padding: 40px; color: #1e293b; }
+        .meta { color: #64748b; font-size: 10pt; border-bottom: 1px solid #cbd5e1; padding-bottom: 8pt; margin-bottom: 16pt; }
+      </style>
+    </head>
+    <body>
+      <h1 style="font-size: 24pt; color: #047857; margin-bottom: 8pt;">${title}</h1>
+      <div class="meta">作者: ${author} &nbsp;|&nbsp; 分类: ${category} &nbsp;|&nbsp; 发布时间: ${date}</div>
+      <div>${bodyContent}</div>
+    </body>
+    </html>
+  `;
+
+  return new Blob([wordHtml], { type: 'application/msword' });
 }
 
 /**

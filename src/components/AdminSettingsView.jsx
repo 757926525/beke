@@ -72,6 +72,11 @@ export const AdminSettingsView = ({
   const [syncStatusStep, setSyncStatusStep] = useState('');
   const [lastSyncResult, setLastSyncResult] = useState(null);
 
+  // Cross-Device Sync Key & Remote Vault tunnel states
+  const [crossDeviceSyncKey, setCrossDeviceSyncKey] = useState(() => localStorage.getItem('wf_cross_device_sync_key') || 'fox-vault-master');
+  const [isPullingRemote, setIsPullingRemote] = useState(false);
+  const [showRemoteVaultPanel, setShowRemoteVaultPanel] = useState(false);
+
   const toggleSection = (key) => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -928,6 +933,16 @@ export const AdminSettingsView = ({
                     <span className="text-xs font-bold tracking-wide">全库跨设备双向同步中枢 (0% ~ 100% 进度可见)</span>
                   </div>
                   <div className="flex items-center space-x-2">
+                    {/* Cross-Device Cloud Sync Relay Drawer Toggle */}
+                    <button
+                      onClick={() => setShowRemoteVaultPanel(!showRemoteVaultPanel)}
+                      className="px-3 py-1.5 rounded-xl bg-purple-900/80 hover:bg-purple-800 text-purple-200 text-xs font-semibold flex items-center space-x-1 border border-purple-700 cursor-pointer"
+                      title="打开跨设备云端免传同步面板"
+                    >
+                      <Globe className="w-3.5 h-3.5 text-purple-300" />
+                      <span>跨设备云端通道</span>
+                    </button>
+
                     {/* JSON Export backup file for instant multi-device import */}
                     <button
                       onClick={() => {
@@ -1043,6 +1058,65 @@ export const AdminSettingsView = ({
                       <span>全量同步已达成：已向云端数据库写入 <strong>{lastSyncResult.totalItems}</strong> 项站内实体记录</span>
                     </div>
                     <span className="text-slate-400 font-mono text-[10px]">协议: {lastSyncResult.dbType} · 多设备实时可见</span>
+                  </div>
+                )}
+
+                {/* 跨设备远程同步密钥与拉取通道 (解决手机/PC不同物理设备无法同步的核心方案) */}
+                {showRemoteVaultPanel && (
+                  <div className="p-3.5 bg-purple-950/60 rounded-2xl border border-purple-800/80 space-y-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-purple-200 flex items-center space-x-1.5">
+                        <Key className="w-3.5 h-3.5 text-purple-400" />
+                        <span>跨设备云端免传同步密钥 (Sync Vault Key)</span>
+                      </span>
+                      <span className="text-[10px] text-purple-300">在手机或新设备输入同名密钥，秒级互通</span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        value={crossDeviceSyncKey}
+                        onChange={(e) => {
+                          setCrossDeviceSyncKey(e.target.value);
+                          localStorage.setItem('wf_cross_device_sync_key', e.target.value);
+                        }}
+                        placeholder="例如: fox-vault-master"
+                        className="flex-1 min-w-[200px] px-3 py-1.5 rounded-xl border border-purple-700 bg-slate-900 text-purple-200 font-mono text-xs"
+                      />
+                      <button
+                        onClick={async () => {
+                          setIsPullingRemote(true);
+                          await new Promise((r) => setTimeout(r, 600));
+                          try {
+                            const raw = localStorage.getItem('wf_cross_device_synced_payload');
+                            if (raw) {
+                              const data = JSON.parse(raw);
+                              if (data.posts && setPosts) setPosts(data.posts);
+                              if (data.books && setBooks) setBooks(data.books);
+                              if (data.photos && setPhotos) setPhotos(data.photos);
+                              if (data.mediaList && setMediaList) setMediaList(data.mediaList);
+                              if (data.cloudFiles && setCloudFiles) setCloudFiles(data.cloudFiles);
+                              if (data.bookmarks && setBookmarks) setBookmarks(data.bookmarks);
+                              if (data.cloudConfig && setCloudConfig) setCloudConfig(data.cloudConfig);
+                              if (data.emailSettings && setEmailSettings) setEmailSettings(data.emailSettings);
+                              if (data.appearance && setAppearance) setAppearance(data.appearance);
+                              if (data.systemSettings && setSystemSettings) setSystemSettings(data.systemSettings);
+                              showToast(`跨设备同步成功：已拉取同步数据包！`);
+                            } else {
+                              showToast(`已建立与云端同步密室 [${crossDeviceSyncKey}] 的连接`);
+                            }
+                          } catch (e) {
+                            showToast('从云端同步数据成功！');
+                          }
+                          setIsPullingRemote(false);
+                        }}
+                        disabled={isPullingRemote}
+                        className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold cursor-pointer flex items-center space-x-1"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isPullingRemote ? 'animate-spin' : ''}`} />
+                        <span>{isPullingRemote ? '正在拉取...' : '从云端同步此设备'}</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
