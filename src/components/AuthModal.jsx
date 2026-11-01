@@ -2,12 +2,24 @@ import React, { useState } from 'react';
 import { X, LogIn, UserPlus, Shield, User, Lock, Mail, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings }) => {
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const [mode, setMode] = useState('login'); // 'login' | 'admin' | 'register'
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Deployment credentials
+  const defaultAdminUsername =
+    (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_ADMIN_USERNAME || import.meta.env?.VITE_INITIAL_ADMIN_USERNAME)) || 'fox';
+  const defaultAdminPassword =
+    (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_ADMIN_PASSWORD || import.meta.env?.VITE_INITIAL_ADMIN_PASSWORD)) || 'whitefox2025';
+
+  const fillAdminCredentials = () => {
+    setUsername(defaultAdminUsername);
+    setPassword(defaultAdminPassword);
+    setError('');
+  };
 
   if (!isOpen) return null;
 
@@ -65,27 +77,42 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
           <X className="w-4 h-4" />
         </button>
 
-        {/* Tab switch */}
+        {/* Tab switch: 普通登录 | 管理员登录 | 注册账号 */}
         <div className="flex border-b border-slate-100 pb-3 mb-4">
           <button
             onClick={() => {
               setMode('login');
               setError('');
             }}
-            className={`flex-1 py-1.5 text-xs font-bold transition-all border-b-2 ${
+            className={`flex-1 py-1.5 text-xs font-bold transition-all border-b-2 cursor-pointer ${
               mode === 'login'
                 ? 'border-emerald-500 text-emerald-700'
                 : 'border-transparent text-slate-400 hover:text-slate-600'
             }`}
           >
-            用户登录
+            普通登录
+          </button>
+          <button
+            onClick={() => {
+              setMode('admin');
+              setError('');
+              fillAdminCredentials();
+            }}
+            className={`flex-1 py-1.5 text-xs font-bold transition-all border-b-2 flex items-center justify-center space-x-1 cursor-pointer ${
+              mode === 'admin'
+                ? 'border-purple-600 text-purple-700 font-extrabold'
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5 text-purple-600" />
+            <span>管理员登录</span>
           </button>
           <button
             onClick={() => {
               setMode('register');
               setError('');
             }}
-            className={`flex-1 py-1.5 text-xs font-bold transition-all border-b-2 ${
+            className={`flex-1 py-1.5 text-xs font-bold transition-all border-b-2 cursor-pointer ${
               mode === 'register'
                 ? 'border-emerald-500 text-emerald-700'
                 : 'border-transparent text-slate-400 hover:text-slate-600'
@@ -94,6 +121,19 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
             注册账号
           </button>
         </div>
+
+        {/* Admin login hint banner */}
+        {mode === 'admin' && (
+          <div className="mb-3 p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-800 text-[11px] space-y-1">
+            <div className="flex items-center space-x-1.5 font-bold">
+              <Shield className="w-3.5 h-3.5 text-purple-600" />
+              <span>唯一系统站长专享登录通道</span>
+            </div>
+            <p className="text-purple-700 leading-relaxed">
+              部署环境变量：<code className="font-mono bg-purple-100 px-1 py-0.5 rounded text-[10px]">VITE_ADMIN_USERNAME</code> / <code className="font-mono bg-purple-100 px-1 py-0.5 rounded text-[10px]">VITE_ADMIN_PASSWORD</code>。可在 Cloudflare Pages 项目后台随时修改！
+            </p>
+          </div>
+        )}
 
         {error && (
           <div className="mb-3 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-1.5">
@@ -111,7 +151,9 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
 
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
           <div>
-            <label className="block text-slate-600 font-semibold mb-1">用户名 / 账号</label>
+            <label className="block text-slate-600 font-semibold mb-1">
+              {mode === 'admin' ? '管理员用户名' : '用户名 / 账号'}
+            </label>
             <div className="relative">
               <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
               <input
@@ -119,7 +161,7 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="例如: fox 或 admin"
+                placeholder={mode === 'admin' ? defaultAdminUsername : '例如: fox 或 用户名'}
                 className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-emerald-400"
               />
             </div>
@@ -158,15 +200,42 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
 
           <button
             type="submit"
-            className="w-full py-2.5 mt-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-1"
+            className={`w-full py-2.5 mt-2 rounded-xl text-white font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-1 cursor-pointer ${
+              mode === 'admin'
+                ? 'bg-purple-600 hover:bg-purple-700'
+                : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
           >
-            {mode === 'login' ? <LogIn className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
-            <span>{mode === 'login' ? '立即登录' : '立即注册'}</span>
+            {mode === 'admin' ? (
+              <>
+                <Shield className="w-3.5 h-3.5" />
+                <span>站长专属登录</span>
+              </>
+            ) : mode === 'login' ? (
+              <>
+                <LogIn className="w-3.5 h-3.5" />
+                <span>立即登录</span>
+              </>
+            ) : (
+              <>
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>立即注册</span>
+              </>
+            )}
           </button>
         </form>
 
-        <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400 text-center">
-          提示：站长管理员默认账号密码：<code className="text-slate-600 font-mono">admin</code> / <code className="text-slate-600 font-mono">password123</code>
+        <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400 text-center flex items-center justify-between">
+          <span>部署管理员: <code className="text-purple-700 font-mono font-bold">{defaultAdminUsername}</code></span>
+          {mode === 'admin' && (
+            <button
+              type="button"
+              onClick={fillAdminCredentials}
+              className="text-purple-600 hover:underline cursor-pointer font-semibold"
+            >
+              填充部署凭证
+            </button>
+          )}
         </div>
       </div>
     </div>

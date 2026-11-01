@@ -207,9 +207,12 @@ export function App() {
 
   // Login handler with support for deployment environment variables and cross-device DB synced admin account
   const handleLogin = ({ username, password }) => {
+    const cleanUser = (username || '').trim().toLowerCase();
+    const adminConfigName = (deploymentAdmin.username || 'fox').trim().toLowerCase();
+
     // 1. Direct match with deployment credentials configured via VITE_ADMIN_USERNAME / VITE_ADMIN_PASSWORD
     if (
-      (username === deploymentAdmin.username || username === 'admin' || username === 'fox' || username === 'admin@whitefox.blog') &&
+      (cleanUser === adminConfigName || cleanUser === 'admin' || cleanUser === 'fox' || cleanUser === 'admin@whitefox.blog') &&
       (password === deploymentAdmin.password || password === 'whitefox2025' || password === 'password123')
     ) {
       const adminUser = {
@@ -219,6 +222,8 @@ export function App() {
         role: 'admin'
       };
       setCurrentUser(adminUser);
+      // Persist across devices
+      saveToStorage(STORAGE_KEYS.AUTH, adminUser);
       return { success: true };
     }
 
