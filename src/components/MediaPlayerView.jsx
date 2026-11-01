@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 
 export const MediaPlayerView = ({
+  currentUser,
   isAdmin,
   mediaList,
   setMediaList,
@@ -99,6 +100,8 @@ export const MediaPlayerView = ({
         duration: '本地流',
         size: sizeStr,
         date: new Date().toISOString().split('T')[0],
+        uploadedBy: currentUser?.username || '用户',
+        userId: currentUser?.id || 'guest',
         isLocalUpload: true
       };
 
@@ -134,9 +137,22 @@ export const MediaPlayerView = ({
     e.target.value = '';
   };
 
+  // Permission helper: admin can manage all, user can manage own uploaded media
+  const canManageMedia = (m) => {
+    if (isAdmin) return true;
+    if (currentUser && m.userId && m.userId === currentUser.id) return true;
+    if (currentUser && m.uploadedBy && m.uploadedBy === currentUser.username) return true;
+    return false;
+  };
+
   // Delete media item
   const handleDeleteMedia = (id, title, e) => {
     if (e) e.stopPropagation();
+    const target = mediaList.find((m) => m.id === id);
+    if (!canManageMedia(target)) {
+      showToast('权限不足：仅管理员或上传者可删除该媒体！');
+      return;
+    }
     if (window.confirm(`确认删除媒体项目「${title}」吗？`)) {
       const remaining = mediaList.filter((m) => m.id !== id);
       setMediaList(remaining);
@@ -187,16 +203,18 @@ export const MediaPlayerView = ({
           </div>
 
           <div className="flex items-center space-x-3">
-            <label className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-2 shadow-xs cursor-pointer transition-colors">
-              <Upload className="w-3.5 h-3.5" />
-              <span>上传本地音视频 (持久保存)</span>
-              <input
-                type="file"
-                accept="video/*,audio/*"
-                onChange={handleLocalMediaUpload}
-                className="hidden"
-              />
-            </label>
+            {currentUser && (
+              <label className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-2 shadow-xs cursor-pointer transition-colors">
+                <Upload className="w-3.5 h-3.5" />
+                <span>上传本地音视频 (持久保存)</span>
+                <input
+                  type="file"
+                  accept="video/*,audio/*"
+                  onChange={handleLocalMediaUpload}
+                  className="hidden"
+                />
+              </label>
+            )}
           </div>
         </div>
       </div>
@@ -388,13 +406,15 @@ export const MediaPlayerView = ({
                     >
                       <Download className="w-3.5 h-3.5" />
                     </button>
-                    <button
-                      onClick={(e) => handleDeleteMedia(m.id, m.title, e)}
-                      className="p-1 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 cursor-pointer"
-                      title="删除此媒体"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {canManageMedia(m) && (
+                      <button
+                        onClick={(e) => handleDeleteMedia(m.id, m.title, e)}
+                        className="p-1 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 cursor-pointer"
+                        title="删除此媒体"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

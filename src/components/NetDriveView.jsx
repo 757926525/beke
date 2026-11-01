@@ -1,19 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   HardDrive, Cloud, Server, Database,
   FolderPlus, Upload, Trash2, ExternalLink,
   ShieldAlert, RefreshCw, Key, Globe, Eye,
   CheckCircle2, Folder, Copy, BookOpen, ChevronDown, ChevronUp,
   Terminal, Info, Check, ShieldCheck, Download, Plus, FileText,
-  FileCode, Play, Music, Image as ImageIcon
+  FileCode, Play, Music, Image as ImageIcon, Paperclip
 } from 'lucide-react';
+import { downloadFile } from '../services/documentConverter';
 
-export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloudFiles, backendConfig, t }) => {
+export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloudFiles, backendConfig, t, currentUser }) => {
   const [activeDriver, setActiveDriver] = useState('r2'); // 'r2' | 'cos' | 'oss' | 'alist' | 'local'
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
   const [copiedUrl, setCopiedUrl] = useState('');
   const [showUsageGuide, setShowUsageGuide] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Preview file modal
   const [previewFile, setPreviewFile] = useState(null);
@@ -45,6 +47,52 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
     }
   };
 
+  // Direct file upload from computer to current selected cloud bucket
+  const handleDirectUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const providerNames = {
+      r2: 'Cloudflare R2',
+      cos: 'Tencent COS',
+      oss: 'Alibaba OSS',
+      alist: 'AList / WebDAV',
+      local: '站内本地存储'
+    };
+
+    const newEntries = [];
+    for (const file of files) {
+      const sizeStr = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+      let fileUrl = '';
+      if (file.size < 5 * 1024 * 1024) {
+        fileUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+      } else {
+        fileUrl = URL.createObjectURL(file);
+      }
+
+      newEntries.push({
+        id: 'cf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+        name: file.name,
+        url: fileUrl,
+        provider: providerNames[activeDriver] || 'Cloudflare R2',
+        bucketKey: activeDriver,
+        size: sizeStr,
+        type: file.name.match(/\.(mp4|webm)$/i) ? 'video' : file.name.match(/\.(mp3|wav|flac)$/i) ? 'audio' : file.name.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? 'image' : 'document',
+        uploadedAt: new Date().toISOString().split('T')[0],
+        owner: currentUser?.username || 'admin'
+      });
+    }
+
+    setCloudFiles([...newEntries, ...cloudFiles]);
+    setSyncStatus(`成功将 ${newEntries.length} 个文件上传并调度至 ${providerNames[activeDriver]}！`);
+    setTimeout(() => setSyncStatus(''), 3000);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   // Add new file manually to current bucket
   const handleAddFile = (e) => {
     e.preventDefault();
@@ -66,7 +114,8 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
       bucketKey: activeDriver,
       size: newFileSize.trim() || '2.0 MB',
       type: newFileName.match(/\.(mp4|webm)$/i) ? 'video' : newFileName.match(/\.(mp3|wav|flac)$/i) ? 'audio' : newFileName.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? 'image' : 'document',
-      uploadedAt: new Date().toISOString().split('T')[0]
+      uploadedAt: new Date().toISOString().split('T')[0],
+      owner: currentUser?.username || 'admin'
     };
 
     setCloudFiles([newFile, ...cloudFiles]);
@@ -83,15 +132,9 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
     }
   };
 
-  // Download file
+  // Download file using unified robust downloader
   const handleDownloadFile = (file) => {
-    const a = document.createElement('a');
-    a.href = file.url;
-    a.download = file.name;
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadFile(file.url, file.name);
   };
 
   // Filter files by bucket
@@ -214,37 +257,78 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
           </span>
         </div>
 
-        {/* Quick Add File Form */}
-        <form onSubmit={handleAddFile} className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
-          <input
-            type="text"
-            placeholder="文件名 (如 宣传片.mp4 或 数据报表.pdf)"
-            value={newFileName}
-            onChange={(e) => setNewFileName(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white flex-1 min-w-[160px]"
-          />
-          <input
-            type="text"
-            placeholder="文件直链 URL (可外链或 CDN 地址)"
-            value={newFileUrl}
-            onChange={(e) => setNewFileUrl(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white flex-2 min-w-[220px]"
-          />
-          <input
-            type="text"
-            placeholder="大小 (如 2.5 MB)"
-            value={newFileSize}
-            onChange={(e) => setNewFileSize(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white w-24"
-          />
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>添加到当前选区</span>
-          </button>
-        </form>
+        {/* Dual Mode: Direct Computer Upload OR Manual External CDN / URL Insertion */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Direct Upload Box */}
+          <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/80 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center space-x-2 text-emerald-800 font-bold text-xs">
+                <Upload className="w-4 h-4 text-emerald-600" />
+                <span>直接从电脑上传到当前选区 ({currentProviderMap[activeDriver]})</span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                选择本地图片、文档、音频或视频，系统将自动编码并挂载至当前存储桶
+              </p>
+            </div>
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleDirectUpload}
+                className="hidden"
+                id="netdrive-direct-file-input"
+              />
+              <label
+                htmlFor="netdrive-direct-file-input"
+                className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors"
+              >
+                <FolderPlus className="w-3.5 h-3.5" />
+                <span>选择本地文件上传并挂载</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Manual Link Input */}
+          <form onSubmit={handleAddFile} className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200 flex flex-col justify-between space-y-2">
+            <div className="flex items-center space-x-2 text-slate-800 font-bold text-xs">
+              <Paperclip className="w-4 h-4 text-slate-600" />
+              <span>添加已有外部直链 / CDN 文件</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <input
+                type="text"
+                placeholder="文件名 (宣传片.mp4)"
+                value={newFileName}
+                onChange={(e) => setNewFileName(e.target.value)}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white"
+              />
+              <input
+                type="text"
+                placeholder="直链 URL"
+                value={newFileUrl}
+                onChange={(e) => setNewFileUrl(e.target.value)}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white"
+              />
+              <div className="flex items-center space-x-1.5">
+                <input
+                  type="text"
+                  placeholder="2.0 MB"
+                  value={newFileSize}
+                  onChange={(e) => setNewFileSize(e.target.value)}
+                  className="px-2 py-1.5 rounded-xl border border-slate-200 text-xs bg-white w-20"
+                />
+                <button
+                  type="submit"
+                  className="flex-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold flex items-center justify-center space-x-1 shadow-xs"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>添加</span>
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
 
         {/* Files Table for Current Provider */}
         <div className="overflow-x-auto">

@@ -8,6 +8,7 @@ import {
 import { downloadFile } from '../services/documentConverter';
 
 export const AdminFileAndPortalView = ({
+  currentUser,
   isAdmin,
   cloudFiles = [],
   setCloudFiles,
@@ -59,12 +60,27 @@ export const AdminFileAndPortalView = ({
     );
   }
 
-  // Single & Batch File Upload
-  const handleBatchUpload = (e) => {
+  // Single & Batch File Upload with FileReader DataURL persistence
+  const handleBatchUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    const newItems = files.map((file, idx) => {
+    const readAsDataUrl = (file) =>
+      new Promise((resolve) => {
+        // For large files (> 5MB), fallback to object URL to avoid localStorage quotas
+        if (file.size > 5 * 1024 * 1024) {
+          resolve(URL.createObjectURL(file));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target.result);
+        reader.onerror = () => resolve(URL.createObjectURL(file));
+        reader.readAsDataURL(file);
+      });
+
+    const newItems = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       const ext = file.name.split('.').pop().toLowerCase();
       let type = 'document';
       if (['mp4', 'webm', 'mov', 'avi'].includes(ext)) type = 'video';
@@ -72,21 +88,26 @@ export const AdminFileAndPortalView = ({
       else if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) type = 'image';
       else if (['zip', 'rar', 'tar', 'gz', '7z'].includes(ext)) type = 'archive';
 
-      return {
-        id: `admin-f-${Date.now()}-${idx}`,
+      const fileData = await readAsDataUrl(file);
+
+      newItems.push({
+        id: `admin-f-${Date.now()}-${i}`,
         name: file.name,
         size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
         type,
         provider: '站内专享文件区',
-        url: URL.createObjectURL(file),
+        url: fileData,
+        uploadedBy: currentUser?.username || '站长',
+        userId: currentUser?.id || 'admin',
         uploadedAt: new Date().toISOString().split('T')[0]
-      };
-    });
+      });
+    }
 
     if (setCloudFiles) {
       setCloudFiles((prev) => [...newItems, ...prev]);
     }
-    showToast(`成功批量上架 ${newItems.length} 个特权文件至管理员选区！`);
+    showToast(`成功上架 ${newItems.length} 个特权文件至站长选区，支持一键下载与查看！`);
+    e.target.value = '';
   };
 
   // Delete File

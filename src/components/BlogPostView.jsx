@@ -26,6 +26,7 @@ export const BlogPostView = ({
   const [isEditingModalOpen, setIsEditingModalOpen] = useState(false);
 
   const isAdmin = currentUser?.role === 'admin';
+  const canEditOrDelete = isAdmin || (currentUser && post.author && (post.author === currentUser.username || post.userId === currentUser.id));
 
   const showToast = (msg) => {
     setToast(msg);
@@ -155,8 +156,8 @@ export const BlogPostView = ({
             <span>复制全文</span>
           </button>
 
-          {/* Admin Controls: Edit & Delete */}
-          {isAdmin && (
+          {/* Author or Admin Controls: Edit & Delete */}
+          {canEditOrDelete && (
             <>
               <button
                 onClick={() => setIsEditingModalOpen(true)}
@@ -291,6 +292,7 @@ export const BlogPostView = ({
           onSave={handleSaveEditedArticle}
           cloudFiles={cloudFiles}
           bookmarks={bookmarks}
+          currentUser={currentUser}
           initialData={post}
         />
       )}

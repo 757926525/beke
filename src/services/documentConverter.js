@@ -101,19 +101,81 @@ export async function generateDocxBlob(article) {
  * @param {string} filename
  * @param {string} mimeType
  */
-export function downloadFile(content, filename, mimeType = 'text/plain;charset=utf-8') {
-  let blob;
-  if (content instanceof Blob) {
-    blob = content;
-  } else {
-    blob = new Blob([content], { type: mimeType });
+/**
+ * Safely trigger download for a Blob, data URL, http(s) URL, or string content
+ * @param {Blob|string} contentOrUrl
+ * @param {string} filename
+ * @param {string} mimeType
+ */
+export async function downloadFile(contentOrUrl, filename, mimeType = 'application/octet-stream') {
+  try {
+    if (typeof contentOrUrl === 'string') {
+      // If it's a data URL or blob URL
+      if (contentOrUrl.startsWith('data:') || contentOrUrl.startsWith('blob:')) {
+        const a = document.createElement('a');
+        a.href = contentOrUrl;
+        a.download = filename || 'download';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+
+      // If it's an HTTP/HTTPS remote URL
+      if (contentOrUrl.startsWith('http://') || contentOrUrl.startsWith('https://')) {
+        try {
+          const resp = await fetch(contentOrUrl);
+          const blob = await resp.blob();
+          const objUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = objUrl;
+          a.download = filename || 'download';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(objUrl);
+          return;
+        } catch {
+          // If fetch fails (e.g. CORS), trigger direct browser download link
+          const a = document.createElement('a');
+          a.href = contentOrUrl;
+          a.download = filename || 'download';
+          a.target = '_blank';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          return;
+        }
+      }
+
+      // Fallback: raw text content
+      const blob = new Blob([contentOrUrl], { type: mimeType });
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = filename || 'download.txt';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objUrl);
+      return;
+    }
+
+    if (contentOrUrl instanceof Blob) {
+      const objUrl = URL.createObjectURL(contentOrUrl);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = filename || 'download';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objUrl);
+    }
+  } catch (e) {
+    console.error('Download error:', e);
+    // Ultimate fallback: open in new tab
+    if (typeof contentOrUrl === 'string') {
+      window.open(contentOrUrl, '_blank');
+    }
   }
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }

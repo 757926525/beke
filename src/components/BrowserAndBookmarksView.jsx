@@ -6,7 +6,15 @@ import {
   Sparkles, CheckCircle2, AlertCircle
 } from 'lucide-react';
 
-export const BrowserAndBookmarksView = ({ bookmarks, setBookmarks, searchProxy, setSearchProxy, t }) => {
+export const BrowserAndBookmarksView = ({
+  bookmarks,
+  setBookmarks,
+  currentUser,
+  isAdmin,
+  searchProxy,
+  setSearchProxy,
+  t
+}) => {
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchOrUrl, setSearchOrUrl] = useState('https://www.google.com');
   const [currentFrameUrl, setCurrentFrameUrl] = useState('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://www.google.com/search?igu=1'));
@@ -103,12 +111,33 @@ export const BrowserAndBookmarksView = ({ bookmarks, setBookmarks, searchProxy, 
       title: newTitle,
       url: url,
       category: newCategory,
+      userId: currentUser?.id || 'guest',
+      createdBy: currentUser?.username || '访客',
       desc: '自定义添加的网址书签'
     };
     setBookmarks([item, ...bookmarks]);
     setNewTitle('');
     setNewUrl('');
     setShowAddModal(false);
+  };
+
+  const canManageBookmark = (bm) => {
+    if (isAdmin) return true;
+    if (currentUser && bm.userId && bm.userId === currentUser.id) return true;
+    if (currentUser && bm.createdBy && bm.createdBy === currentUser.username) return true;
+    return false;
+  };
+
+  const handleDeleteBookmark = (id, title, e) => {
+    if (e) e.stopPropagation();
+    const target = bookmarks.find((b) => b.id === id);
+    if (!canManageBookmark(target)) {
+      alert('权限不足：仅管理员或创建者可删除该书签');
+      return;
+    }
+    if (confirm(`确认移除书签「${title}」？`)) {
+      setBookmarks(bookmarks.filter((b) => b.id !== id));
+    }
   };
 
   const categories = [
@@ -315,13 +344,15 @@ export const BrowserAndBookmarksView = ({ bookmarks, setBookmarks, searchProxy, 
               </a>
             )}
 
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold cursor-pointer"
-            >
-              <BookmarkPlus className="w-3.5 h-3.5" />
-              <span>加书签</span>
-            </button>
+            {currentUser && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1 shadow-xs cursor-pointer"
+              >
+                <BookmarkPlus className="w-3.5 h-3.5" />
+                <span>添加书签</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -458,6 +489,15 @@ export const BrowserAndBookmarksView = ({ bookmarks, setBookmarks, searchProxy, 
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
+                  {canManageBookmark(bm) && (
+                    <button
+                      onClick={(e) => handleDeleteBookmark(bm.id, bm.title, e)}
+                      className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
+                      title="删除书签"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

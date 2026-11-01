@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
 
-export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
+export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
   const [selectedBook, setSelectedBook] = useState(null);
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
   const [mobileFullscreen, setMobileFullscreen] = useState(false);
@@ -81,11 +81,20 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
     }
   };
 
-  // Admin delete book
+  // Permission helper: admin can manage all, user can manage own
+  const canManageBook = (book) => {
+    if (isAdmin) return true;
+    if (currentUser && book.userId && book.userId === currentUser.id) return true;
+    if (currentUser && book.author && book.author === currentUser.username) return true;
+    return false;
+  };
+
+  // Delete book
   const handleDeleteBook = (id, title, e) => {
     if (e) e.stopPropagation();
-    if (!isAdmin) {
-      showToast('只有系统管理员或站长有权限下架图书！');
+    const target = books.find((b) => b.id === id);
+    if (!canManageBook(target)) {
+      showToast('权限不足：仅管理员或上传者可下架自己的图书！');
       return;
     }
     if (window.confirm(`确定要从白狐书架彻底删除《${title}》吗？`)) {
@@ -215,7 +224,8 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
         const newBook = {
           id: `book-batch-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
           title: file.name.replace(/\.[^/.]+$/, ''),
-          author: '批量上架',
+          author: currentUser?.username || '批量上架',
+          userId: currentUser?.id || 'guest',
           category: '经典文集',
           format: 'TXT',
           size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
@@ -293,14 +303,15 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
       const newBook = {
         id: `book-${Date.now()}`,
         title: bookForm.title,
-        author: bookForm.author || '白狐藏书',
+        author: bookForm.author || currentUser?.username || '白狐藏书',
+        userId: currentUser?.id || 'guest',
         category: bookForm.category,
         format: 'TXT',
         size: `${(new Blob([rawContent]).size / (1024 * 1024)).toFixed(2)} MB`,
         progress: 0,
         totalChapters: chapters.length,
         cover: bookForm.cover || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
-        description: bookForm.description || '由管理员本地上传导入的纯文本藏书。',
+        description: bookForm.description || '用户上传导入的纯文本藏书。',
         dateAdded: new Date().toISOString().split('T')[0],
         chapters: chapters
       };
@@ -502,23 +513,25 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            {/* Batch TXT Upload */}
-            <button
-              onClick={() => setIsBatchModalOpen(true)}
-              className="px-3.5 py-2.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors"
-            >
-              <Layers className="w-4 h-4 text-emerald-600" />
-              <span>批量上传 TXT</span>
-            </button>
+            {/* Batch TXT Upload - only for logged-in users */}
+            {currentUser && (
+              <>
+                <button
+                  onClick={() => setIsBatchModalOpen(true)}
+                  className="px-3.5 py-2.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Layers className="w-4 h-4 text-emerald-600" />
+                  <span>批量上传 TXT</span>
+                </button>
 
-            {isAdmin && (
-              <button
-                onClick={handleOpenAddModal}
-                className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>新增/上传 TXT 电子书</span>
-              </button>
+                <button
+                  onClick={handleOpenAddModal}
+                  className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm transition-colors cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>新增/上传 TXT 电子书</span>
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -558,19 +571,19 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
                   {book.chapters?.length || book.totalChapters || 1} 章节
                 </div>
 
-                {/* Admin Quick Action Floating Buttons */}
-                {isAdmin && (
+                {/* Owner or Admin Quick Action Floating Buttons */}
+                {canManageBook(book) && (
                   <div className="absolute bottom-3 right-3 flex items-center space-x-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={(e) => handleOpenEditModal(book, e)}
-                      className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-slate-700 shadow-sm"
+                      className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-slate-700 shadow-sm cursor-pointer"
                       title="编辑图书信息"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={(e) => handleDeleteBook(book.id, book.title, e)}
-                      className="p-1.5 rounded-lg bg-rose-500/90 hover:bg-rose-600 text-white shadow-sm"
+                      className="p-1.5 rounded-lg bg-rose-500/90 hover:bg-rose-600 text-white shadow-sm cursor-pointer"
                       title="下架删除图书"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

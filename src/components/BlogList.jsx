@@ -13,12 +13,14 @@ import { formatBytes, calculateUsedStorageBytes } from '../services/storageServi
 export const BlogList = ({
   posts,
   setPosts,
+  currentUser,
   onSelectPost,
   isAdmin,
   layout = 'grid',
   fontSize = 'standard',
   cloudFiles = [],
   bookmarks = [],
+  photos = [],
   siteName = 'fox',
   heroIntro,
   setHeroIntro,
@@ -67,9 +69,22 @@ export const BlogList = ({
     }
   };
 
-  // Delete Post
+  // Delete Post - only admin or author can delete
+  const canDeletePost = (post) => {
+    if (isAdmin) return true;
+    if (currentUser && post.author && (post.author === currentUser.username || post.userId === currentUser.id)) {
+      return true;
+    }
+    return false;
+  };
+
   const handleDeletePost = (id, title, e) => {
     e.stopPropagation();
+    const target = posts.find((p) => p.id === id);
+    if (!canDeletePost(target)) {
+      alert('权限不足：仅管理员或文章作者可删除此文章');
+      return;
+    }
     if (confirm(`确定彻底删除博文《${title}》吗？`)) {
       setPosts(posts.filter((p) => p.id !== id));
       showToast('文章已删除');
@@ -456,7 +471,7 @@ export const BlogList = ({
                 <BookmarkCheck className="w-4 h-4" />
               </button>
 
-              {isAdmin && (
+              {currentUser && (
                 <button
                   onClick={() => setShowNewModal(true)}
                   className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1 shadow-xs whitespace-nowrap transition-all cursor-pointer"
@@ -508,7 +523,7 @@ export const BlogList = ({
                         >
                           <Bookmark className={`w-3.5 h-3.5 ${post.isBookmarked ? 'fill-white' : ''}`} />
                         </button>
-                        {isAdmin && (
+                        {canDeletePost(post) && (
                           <button
                             onClick={(e) => handleDeletePost(post.id, post.title, e)}
                             title="删除博文"
@@ -607,7 +622,7 @@ export const BlogList = ({
                           >
                             <Bookmark className={`w-4 h-4 ${post.isBookmarked ? 'fill-emerald-600' : ''}`} />
                           </button>
-                          {isAdmin && (
+                          {canDeletePost(post) && (
                             <button
                               onClick={(e) => handleDeletePost(post.id, post.title, e)}
                               className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 cursor-pointer"
@@ -681,7 +696,7 @@ export const BlogList = ({
                     >
                       <Bookmark className={`w-3.5 h-3.5 ${post.isBookmarked ? 'fill-emerald-600' : ''}`} />
                     </button>
-                    {isAdmin && (
+                    {canDeletePost(post) && (
                       <button
                         onClick={(e) => handleDeletePost(post.id, post.title, e)}
                         className="p-1.5 rounded-xl border border-slate-200 hover:bg-rose-50 text-slate-500 hover:text-rose-600 cursor-pointer"
@@ -729,7 +744,7 @@ export const BlogList = ({
                     >
                       <Bookmark className={`w-3.5 h-3.5 ${post.isBookmarked ? 'fill-emerald-600' : ''}`} />
                     </button>
-                    {isAdmin && (
+                    {canDeletePost(post) && (
                       <button
                         onClick={(e) => handleDeletePost(post.id, post.title, e)}
                         className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
@@ -755,6 +770,8 @@ export const BlogList = ({
         onSave={handleSaveArticle}
         cloudFiles={cloudFiles}
         bookmarks={bookmarks}
+        photos={photos}
+        currentUser={currentUser}
         initialData={editingPost}
       />
     </div>

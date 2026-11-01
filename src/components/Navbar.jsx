@@ -36,9 +36,13 @@ export const Navbar = ({
 
   baseTabs.push(
     { id: 'bookmarks', label: '探索与收藏', icon: Compass },
-    { id: 'guide', label: '部署指南', icon: Rocket },
-    { id: 'admin', label: '系统设置', icon: Shield }
+    { id: 'guide', label: '部署指南', icon: Rocket }
   );
+
+  // 全能数据库后台与系统设置仅管理员可见
+  if (currentUser?.role === 'admin') {
+    baseTabs.push({ id: 'admin', label: '系统与数据库中枢', icon: Shield });
+  }
 
   const tabs = baseTabs;
 

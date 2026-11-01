@@ -10,6 +10,8 @@ export default function NewArticleModal({
   onSave,
   cloudFiles = [],
   bookmarks = [],
+  photos = [],
+  currentUser = null,
   initialData = null
 }) {
   const [title, setTitle] = useState(initialData?.title || '');
@@ -74,7 +76,8 @@ export default function NewArticleModal({
       title: title.trim(),
       summary: summary.trim() || title.trim(),
       content: content.trim(),
-      author: initialData?.author || '白狐居士',
+      author: initialData?.author || (currentUser?.username ? currentUser.username : '白狐居士'),
+      userId: initialData?.userId || currentUser?.id || 'guest',
       date: initialData?.date || new Date().toISOString().split('T')[0],
       category,
       tags: tagsInput.split(/[,，]/).map((t) => t.trim()).filter(Boolean),
@@ -185,10 +188,20 @@ export default function NewArticleModal({
               快捷插入与站内资源联动：
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {/* 1-click select photo from Cloud Gallery */}
+              <button
+                type="button"
+                onClick={() => setActivePicker('gallery')}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-xs"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                <span>一键选择插入云相册图片</span>
+              </button>
+
               {/* Insert local image */}
               <label className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-2xs">
-                <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
-                <span>插入本地图片</span>
+                <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                <span>上传本地图片</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -284,6 +297,64 @@ export default function NewArticleModal({
             </button>
           </div>
         </form>
+
+        {/* Modal Pickers: Cloud Gallery Photos (支持从相册各文件夹中一键插入) */}
+        {activePicker === 'gallery' && (
+          <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
+                  <ImageIcon className="w-4 h-4 text-emerald-600" />
+                  <span>从云相册选择插入配图 ({photos.length} 张可用)</span>
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setActivePicker(null)}
+                  className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="overflow-y-auto flex-1 pr-1 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {photos.length === 0 ? (
+                  <div className="col-span-full py-12 text-center text-xs text-slate-400">
+                    云相册暂无照片，请先在「光影视界」相册中上传
+                  </div>
+                ) : (
+                  photos.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        insertTextAtCursor(`![${p.title}](${p.url})\n*图注: ${p.title} (${p.folder || p.category || '云相册'})*`);
+                        setActivePicker(null);
+                      }}
+                      className="group cursor-pointer rounded-2xl border border-slate-200 hover:border-emerald-500 overflow-hidden bg-slate-50 hover:shadow-md transition-all flex flex-col justify-between"
+                    >
+                      <div className="relative aspect-4/3 overflow-hidden bg-slate-100">
+                        <img
+                          src={p.url}
+                          alt={p.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        />
+                        <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-black/60 text-white text-[9px] font-semibold">
+                          {p.folder || p.category || '相册'}
+                        </span>
+                      </div>
+                      <div className="p-2.5 space-y-1">
+                        <div className="font-bold text-xs text-slate-800 truncate">{p.title}</div>
+                        <div className="text-[10px] text-emerald-600 font-semibold flex items-center justify-between">
+                          <span>点击一键插入</span>
+                          <Check className="w-3 h-3" />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modal Pickers: NetDrive Files */}
         {activePicker === 'cloud' && (

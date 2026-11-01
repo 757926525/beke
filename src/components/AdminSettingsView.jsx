@@ -799,6 +799,28 @@ export const AdminSettingsView = ({
                   </span>
                 )}
               </div>
+
+              {/* 接入数据库对博客的最实际作用权威说明 */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50/50 to-white border border-emerald-200/80 space-y-2.5">
+                <div className="flex items-center space-x-2 text-emerald-800 font-bold text-xs">
+                  <Database className="w-4 h-4 text-emerald-600" />
+                  <span>核心解析：接入数据库对白狐博客最实际的作用</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-slate-600 leading-relaxed">
+                  <div className="p-2.5 rounded-xl bg-white/80 border border-emerald-100 space-y-1">
+                    <div className="font-bold text-emerald-700">1. 全球多端无缝协同</div>
+                    <p>摆脱单台浏览器缓存限制，站长在手机、平板与不同电脑上发布的博文、相册、书架和系统设置瞬间全球多端一致。</p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white/80 border border-emerald-100 space-y-1">
+                    <div className="font-bold text-emerald-700">2. 访客互动与海量评论沉淀</div>
+                    <p>访客发表的每一条评论和点赞直写数据库，无需重新构建部署静态页面即可实时呈现互动，真正实现动态社区化。</p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white/80 border border-emerald-100 space-y-1">
+                    <div className="font-bold text-emerald-700">3. 跨云调度索引与高可用容灾</div>
+                    <p>集中存储 Cloudflare R2、腾讯云 COS、阿里云 OSS 的文件索引，即使更换服务器或 CDN 边缘节点，所有资产元数据永不丢失。</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* 对象存储接入状态与测试 */}
