@@ -3,8 +3,10 @@ import {
   BookOpen, ChevronRight, ChevronLeft, Bookmark,
   Maximize2, Minimize2, ArrowLeft, Eye, Sparkles, Smartphone,
   BookMarked, Clock, Check, Download, Upload, Trash2, Edit3,
-  Plus, X, FileText, CheckCircle2, ShieldCheck, List
+  Plus, X, FileText, CheckCircle2, ShieldCheck, List, Layers,
+  RefreshCw, FileCode, ArrowRight
 } from 'lucide-react';
+import { convertDocxToText, downloadFile } from '../services/documentConverter';
 
 export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
   const [selectedBook, setSelectedBook] = useState(null);
@@ -15,7 +17,15 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
 
   // Admin / Upload / Edit Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+  const [isDocxPreviewModalOpen, setIsDocxPreviewModalOpen] = useState(false);
+  const [docxPreviewData, setDocxPreviewData] = useState({ title: '', text: '', fileName: '' });
   const [editingBookId, setEditingBookId] = useState(null);
+
+  // Batch upload state
+  const [batchFiles, setBatchFiles] = useState([]);
+  const [isConvertingBatch, setIsConvertingBatch] = useState(false);
+
   const [bookForm, setBookForm] = useState({
     title: '',
     author: '',
@@ -134,14 +144,31 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
     setIsModalOpen(true);
   };
 
-  // Local file upload parser for TXT / EPUB / PDF
-  const handleLocalFileUpload = (e) => {
+  // Local file upload parser for TXT / EPUB / PDF / DOCX
+  const handleLocalFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const fileName = file.name.replace(/\.[^/.]+$/, '');
     const extension = file.name.split('.').pop().toUpperCase();
     const sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+
+    if (extension === 'DOCX') {
+      try {
+        const text = await convertDocxToText(file);
+        setBookForm((prev) => ({
+          ...prev,
+          title: prev.title || fileName,
+          format: 'DOCX',
+          content: text
+        }));
+        showToast(`已成功解析 DOCX 文档并提取文字内容！`);
+        return;
+      } catch (err) {
+        console.error(err);
+        showToast('DOCX 文档解析失败，请检查文件格式');
+      }
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -158,9 +185,157 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
     if (file.type.includes('text') || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
       reader.readAsText(file);
     } else {
-      // For binary files (PDF/EPUB), read sample or preview text
       reader.readAsText(file.slice(0, 50000));
     }
+  };
+
+  // Batch file select handler
+  const handleBatchFilesSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setBatchFiles(files);
+    showToast(`已选入 ${files.length} 个待处理文档！`);
+  };
+
+  // Convert and add batch files directly to bookshelf as TXT books
+  const handleProcessBatchConversion = async (convertToTxt = true) => {
+    if (!batchFiles.length) {
+      showToast('请先选择需要批量处理的文档！');
+      return;
+    }
+
+    setIsConvertingBatch(true);
+    const newBooksToAdd = [];
+
+    try {
+      for (const file of batchFiles) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        let content = '';
+
+        if (ext === 'docx') {
+          try {
+            content = await convertDocxToText(file);
+          } catch (e) {
+            content = `DOCX 文本提取异常: ${e.message}`;
+          }
+        } else {
+          content = await file.text();
+        }
+
+        const lines = content.split('\n');
+        const chapters = [];
+        let currentChapter = { title: '第一章 · 引言', content: '' };
+
+        lines.forEach((line) => {
+          if (line.startsWith('#') || line.startsWith('第') || line.startsWith('Chapter') || line.startsWith('卷')) {
+            if (currentChapter.content.trim()) {
+              chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
+            }
+            currentChapter = { title: line.replace(/^[#\s]+/, '').trim(), content: '' };
+          } else {
+            currentChapter.content += line + '\n';
+          }
+        });
+        if (currentChapter.content.trim()) {
+          chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
+        }
+        if (chapters.length === 0) {
+          chapters.push({ title: '全本正文', content });
+        }
+
+        const newBook = {
+          id: `book-batch-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          title: file.name.replace(/\.[^/.]+$/, ''),
+          author: '批量导入',
+          category: '文档库',
+          format: convertToTxt ? 'TXT' : ext.toUpperCase(),
+          size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+          progress: 0,
+          totalChapters: chapters.length,
+          cover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
+          description: `批量上传并${convertToTxt ? '一键转换为 TXT ' : ''}上架至书架的文档 (${file.name})。`,
+          dateAdded: new Date().toISOString().split('T')[0],
+          chapters: chapters
+        };
+
+        newBooksToAdd.push(newBook);
+      }
+
+      setBooks([...newBooksToAdd, ...books]);
+      showToast(`成功批量转换并上架 ${newBooksToAdd.length} 本图书至书架！`);
+      setBatchFiles([]);
+      setIsBatchModalOpen(false);
+    } catch (err) {
+      console.error(err);
+      showToast('批量转换出现异常，请重试');
+    } finally {
+      setIsConvertingBatch(false);
+    }
+  };
+
+  // Preview or convert single DOCX file
+  const handlePreviewDocxFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await convertDocxToText(file);
+      setDocxPreviewData({
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        fileName: file.name,
+        text: text
+      });
+      setIsDocxPreviewModalOpen(true);
+    } catch (err) {
+      console.error(err);
+      showToast('DOCX 预览失败，无法解析文档');
+    }
+  };
+
+  // Save previewed DOCX text directly to bookshelf as TXT
+  const handleSaveDocxPreviewToBookshelf = () => {
+    if (!docxPreviewData.text) return;
+
+    const rawContent = docxPreviewData.text;
+    const lines = rawContent.split('\n');
+    const chapters = [];
+    let currentChapter = { title: '第一章 · 引言', content: '' };
+
+    lines.forEach((line) => {
+      if (line.startsWith('#') || line.startsWith('第') || line.startsWith('Chapter') || line.startsWith('卷')) {
+        if (currentChapter.content.trim()) {
+          chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
+        }
+        currentChapter = { title: line.replace(/^[#\s]+/, '').trim(), content: '' };
+      } else {
+        currentChapter.content += line + '\n';
+      }
+    });
+    if (currentChapter.content.trim()) {
+      chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
+    }
+    if (chapters.length === 0) {
+      chapters.push({ title: '全本正文', content: rawContent });
+    }
+
+    const newBook = {
+      id: `book-docx-${Date.now()}`,
+      title: docxPreviewData.title || 'DOCX 转换读物',
+      author: '格式转换',
+      category: 'DOCX转TXT',
+      format: 'TXT',
+      size: `${(new Blob([rawContent]).size / (1024 * 1024)).toFixed(2)} MB`,
+      progress: 0,
+      totalChapters: chapters.length,
+      cover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
+      description: `由 DOCX 文档「${docxPreviewData.fileName}」一键转换保存的纯文本图书。`,
+      dateAdded: new Date().toISOString().split('T')[0],
+      chapters: chapters
+    };
+
+    setBooks([newBook, ...books]);
+    setIsDocxPreviewModalOpen(false);
+    showToast(`《${newBook.title}》已一键转为 TXT 并存入白狐书架！`);
   };
 
   // Save book handler
@@ -422,7 +597,28 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
             </p>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {/* Batch Document Upload */}
+            <button
+              onClick={() => setIsBatchModalOpen(true)}
+              className="px-3.5 py-2.5 rounded-2xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors"
+            >
+              <Layers className="w-4 h-4 text-teal-600" />
+              <span>批量上传文档</span>
+            </button>
+
+            {/* Quick DOCX preview & conversion */}
+            <label className="px-3.5 py-2.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer">
+              <FileCode className="w-4 h-4 text-emerald-600" />
+              <span>查看/转换 DOCX</span>
+              <input
+                type="file"
+                accept=".docx"
+                onChange={handlePreviewDocxFile}
+                className="hidden"
+              />
+            </label>
+
             {isAdmin && (
               <button
                 onClick={handleOpenAddModal}
@@ -433,6 +629,28 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
               </button>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Quick Document Converter Banner on Home */}
+      <div className="rounded-3xl bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white p-5 sm:p-6 shadow-md border border-emerald-700/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="inline-flex items-center space-x-1.5 text-xs text-emerald-300 font-semibold">
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>智能文档引擎 · 批量处理 & DOCX 转 TXT</span>
+          </div>
+          <h2 className="text-base sm:text-lg font-bold">书架首页多格式文档中枢</h2>
+          <p className="text-xs text-emerald-100/80 max-w-2xl">
+            支持一键批量选择 DOCX / TXT / MD 文档转换为结构化白狐纯文本图书，智能拆分章节，直接上架墨香书阁，无需后端服务。
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsBatchModalOpen(true)}
+            className="px-4 py-2 rounded-xl bg-white text-emerald-900 font-bold text-xs hover:bg-emerald-50 transition-colors shadow-xs"
+          >
+            打开批量文档转换器 →
+          </button>
         </div>
       </div>
 
@@ -511,6 +729,160 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
           </div>
         ))}
       </div>
+
+      {/* Batch Document Upload Modal */}
+      {isBatchModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full border border-slate-200 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center space-x-2 text-slate-800 font-bold text-base">
+                <Layers className="w-5 h-5 text-emerald-600" />
+                <span>批量上传文档 & 自动转存书架</span>
+              </div>
+              <button
+                onClick={() => {
+                  setIsBatchModalOpen(false);
+                  setBatchFiles([]);
+                }}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-2">
+                <FileText className="w-8 h-8 text-emerald-600 mx-auto" />
+                <p className="font-bold text-slate-800">
+                  支持同时选择多份 DOCX / TXT / MD / EPUB 格式文档
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  文档将自动解析标题与章节，批量转换为标准白狐电子书存入墨香书阁。
+                </p>
+                <div>
+                  <label className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-xs">
+                    <Upload className="w-4 h-4" />
+                    <span>选择多个文件</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".docx,.txt,.md,.epub"
+                      onChange={handleBatchFilesSelect}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {batchFiles.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between font-semibold text-slate-700">
+                    <span>已选文件列表 ({batchFiles.length})</span>
+                    <button
+                      onClick={() => setBatchFiles([])}
+                      className="text-rose-500 hover:text-rose-700 text-[11px]"
+                    >
+                      清空列表
+                    </button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-xl divide-y divide-slate-100 bg-slate-50">
+                    {batchFiles.map((file, idx) => (
+                      <div key={idx} className="p-2.5 flex items-center justify-between text-xs">
+                        <div className="flex items-center space-x-2 truncate">
+                          <FileCode className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span className="truncate font-medium text-slate-700">{file.name}</span>
+                        </div>
+                        <span className="text-[11px] text-slate-400 font-mono shrink-0 ml-2">
+                          {(file.size / 1024).toFixed(1)} KB
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBatchModalOpen(false);
+                    setBatchFiles([]);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  disabled={batchFiles.length === 0 || isConvertingBatch}
+                  onClick={() => handleProcessBatchConversion(true)}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold shadow-xs flex items-center space-x-1.5"
+                >
+                  {isConvertingBatch ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>正在批量转换与导入...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Layers className="w-4 h-4" />
+                      <span>一键批量转为 TXT 并入库 ({batchFiles.length})</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DOCX Preview & 1-Click TXT Bookshelf Save Modal */}
+      {isDocxPreviewModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-2xl w-full border border-slate-200 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+              <div className="flex items-center space-x-2 text-slate-800 font-bold text-base">
+                <FileCode className="w-5 h-5 text-emerald-600" />
+                <span className="truncate">DOCX 解析预览：{docxPreviewData.fileName}</span>
+              </div>
+              <button
+                onClick={() => setIsDocxPreviewModalOpen(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto border border-slate-200 rounded-2xl p-4 bg-slate-50 font-mono text-xs whitespace-pre-line text-slate-700 leading-relaxed">
+              {docxPreviewData.text || '（空文档）'}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between shrink-0 text-xs">
+              <span className="text-slate-400">
+                字符总数: {docxPreviewData.text.length} 字
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => downloadFile(docxPreviewData.text, `${docxPreviewData.title}.txt`, 'text/plain;charset=utf-8')}
+                  className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium flex items-center space-x-1"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>下载为 TXT 文件</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveDocxPreviewToBookshelf}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center space-x-1.5 shadow-xs"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>一键转换为 TXT 保存到书架</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Book Upload / Edit Modal for Admins */}
       {isModalOpen && (

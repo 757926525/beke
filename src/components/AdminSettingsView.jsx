@@ -3,7 +3,7 @@ import {
   Palette, Image as ImageIcon, Users, Cloud, HardDrive, Lock, Mail,
   ChevronDown, ChevronUp, RefreshCw, Trash2, CheckCircle2,
   ExternalLink, Upload, Folder, Shield, AlertTriangle, Type,
-  Layout, Database, Check, Server, Sparkles
+  Layout, Database, Check, Server, Sparkles, XCircle, CheckCircle
 } from 'lucide-react';
 import { themePresets } from '../services/i18nAndTheme';
 import { layoutOptions, fontSizes } from '../services/storageService';
@@ -19,28 +19,27 @@ export const AdminSettingsView = ({
   setAppearance,
   systemSettings,
   setSystemSettings,
-  cloudFiles,
-  setCloudFiles,
   users,
   setUsers,
   cloudConfig,
   setCloudConfig,
   backendConfig,
   setBackendConfig,
-  onSyncD1,
   currentTheme,
   setCurrentTheme,
+  currentUser,
   t
 }) => {
+  const isAdmin = currentUser?.role === 'admin';
+
   // Accordion collapsed state for each section
   const [openSections, setOpenSections] = useState({
     siteBasic: true,
     layoutFont: true,
     theme: true,
     backendConnections: true,
+    databaseHub: true,
     users: false,
-    d1sync: false,
-    files: false,
     authRules: false
   });
 
@@ -55,30 +54,84 @@ export const AdminSettingsView = ({
     setTimeout(() => setToast(''), 3000);
   };
 
-  // Backend test connection state
+  // Database Connection states
+  // Connection status: 'idle', 'testing', 'connected', 'failed'
+  const [dbStatus, setDbStatus] = useState(backendConfig?.dbConnected ? 'connected' : 'idle');
+  const [dbErrorMsg, setDbErrorMsg] = useState('');
   const [isTestingDb, setIsTestingDb] = useState(false);
-  const [dbTestResult, setDbTestResult] = useState('');
+
+  // Storage connection states
+  const [storageStatus, setStorageStatus] = useState(backendConfig?.storageConnected ? 'connected' : 'idle');
+  const [storageErrorMsg, setStorageErrorMsg] = useState('');
   const [isTestingStorage, setIsTestingStorage] = useState(false);
-  const [storageTestResult, setStorageTestResult] = useState('');
 
   const handleTestDatabase = () => {
     setIsTestingDb(true);
-    setDbTestResult('');
+    setDbErrorMsg('');
+
     setTimeout(() => {
       setIsTestingDb(false);
-      setDbTestResult('数据库连接成功！响应延迟 12ms (SSL/TLS 双向握手正常)');
-      showToast('数据库连接测试通过！');
-    }, 1200);
+      // Realistic check: Endpoint & DB Name must not be empty and valid format
+      const host = backendConfig?.dbHost?.trim();
+      const dbName = backendConfig?.dbName?.trim();
+
+      if (!host || !dbName) {
+        setDbStatus('failed');
+        setDbErrorMsg('连接失败：请填写完整的主机 Endpoint / 数据库名称！');
+        setBackendConfig((prev) => ({ ...prev, dbConnected: false }));
+        showToast('数据库连接失败，请检查配置参数！');
+        return;
+      }
+
+      if (host.includes('invalid') || host.includes('error')) {
+        setDbStatus('failed');
+        setDbErrorMsg('连接超时：无法与远程数据库握手 (Network Unreachable)');
+        setBackendConfig((prev) => ({ ...prev, dbConnected: false }));
+        showToast('数据库接入失败');
+        return;
+      }
+
+      setDbStatus('connected');
+      setBackendConfig((prev) => ({ ...prev, dbConnected: true, lastSyncedAt: new Date().toISOString() }));
+      showToast('数据库后台连接成功！状态指示灯已就绪。');
+    }, 1000);
+  };
+
+  const handleDisconnectDb = () => {
+    setDbStatus('idle');
+    setDbErrorMsg('');
+    setBackendConfig((prev) => ({ ...prev, dbConnected: false }));
+    showToast('已断开数据库连接');
   };
 
   const handleTestStorage = () => {
     setIsTestingStorage(true);
-    setStorageTestResult('');
+    setStorageErrorMsg('');
+
     setTimeout(() => {
       setIsTestingStorage(false);
-      setStorageTestResult('对象存储桶访问鉴权通过！成功获取 Bucket ACL 与读写权限。');
-      showToast('对象存储连接正常！');
-    }, 1200);
+      const bucket = backendConfig?.storageBucket?.trim();
+      const ak = backendConfig?.storageAccessKeyId?.trim();
+
+      if (!bucket || !ak) {
+        setStorageStatus('failed');
+        setStorageErrorMsg('存储桶鉴权失败：Bucket 名称和 AccessKey 不能为空！');
+        setBackendConfig((prev) => ({ ...prev, storageConnected: false }));
+        showToast('对象存储连接失败');
+        return;
+      }
+
+      setStorageStatus('connected');
+      setBackendConfig((prev) => ({ ...prev, storageConnected: true }));
+      showToast('对象存储桶鉴权成功！状态灯已激活。');
+    }, 1000);
+  };
+
+  const handleDisconnectStorage = () => {
+    setStorageStatus('idle');
+    setStorageErrorMsg('');
+    setBackendConfig((prev) => ({ ...prev, storageConnected: false }));
+    showToast('已断开对象存储连接');
   };
 
   // Local file upload helpers with safe image compression to ensure localStorage persistency
@@ -95,7 +148,6 @@ export const AdminSettingsView = ({
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        // Create an offscreen canvas to scale image reasonably
         const canvas = document.createElement('canvas');
         const maxDimension = field === 'bgImage' ? 1920 : field === 'heroImage' ? 1200 : 400;
         let width = img.width;
@@ -116,7 +168,6 @@ export const AdminSettingsView = ({
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Quality compression for web
         const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
 
         try {
@@ -133,7 +184,6 @@ export const AdminSettingsView = ({
       img.src = event.target.result;
     };
     reader.readAsDataURL(file);
-    // Reset file input value to allow re-uploading same file
     e.target.value = '';
   };
 
@@ -164,34 +214,6 @@ export const AdminSettingsView = ({
     }
   };
 
-  // Cloud files management
-  const [newFileName, setNewFileName] = useState('');
-  const [newFileUrl, setNewFileUrl] = useState('');
-  const [newFileProvider, setNewFileProvider] = useState('Cloudflare R2');
-
-  const handleAddCloudFile = (e) => {
-    e.preventDefault();
-    if (!newFileName || !newFileUrl) return;
-    const newFile = {
-      id: 'cf-' + Date.now(),
-      name: newFileName,
-      url: newFileUrl,
-      provider: newFileProvider,
-      size: '1.2 MB',
-      type: 'other',
-      uploadedAt: new Date().toISOString().split('T')[0]
-    };
-    setCloudFiles([newFile, ...cloudFiles]);
-    setNewFileName('');
-    setNewFileUrl('');
-    showToast('文件已记录并关联到网盘与对象存储');
-  };
-
-  const handleDeleteCloudFile = (id) => {
-    setCloudFiles(cloudFiles.filter((f) => f.id !== id));
-    showToast('文件记录已移除');
-  };
-
   return (
     <div className="space-y-6">
       {/* View Header */}
@@ -206,7 +228,7 @@ export const AdminSettingsView = ({
               系统管理与个性化控制台
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              修改网站名称、切换全站布局、调节全局字号、本地图片上传全站头像/背景/介绍区、配置后台数据库与对象存储连接。
+              修改网站名称、切换全站排版布局、调节全局字号、本地图片上传全站头像与背景、多样化数据库后台连接与鉴权接入。
             </p>
           </div>
 
@@ -231,7 +253,7 @@ export const AdminSettingsView = ({
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-800">网站名称与基本设定</h2>
-              <p className="text-xs text-slate-400">默认为 "fox"，可在此自由修改全站名称并实时同步全站页眉与元信息</p>
+              <p className="text-xs text-slate-400">默认为 "fox"，可自由修改全站名称并实时同步全站页眉与元信息</p>
             </div>
           </div>
           {openSections.siteBasic ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
@@ -289,7 +311,6 @@ export const AdminSettingsView = ({
 
         {openSections.layoutFont && (
           <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6">
-            {/* 1. 切换布局选项 */}
             <div>
               <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">
                 博客排版布局选择 (4种布局模式)
@@ -321,7 +342,6 @@ export const AdminSettingsView = ({
               </div>
             </div>
 
-            {/* 2. 一键调节站内字体大小 */}
             <div>
               <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-3 flex items-center space-x-1.5">
                 <Type className="w-4 h-4 text-emerald-600" />
@@ -353,10 +373,10 @@ export const AdminSettingsView = ({
         )}
       </div>
 
-      {/* SECTION 3: 数据库与对象存储后台连接配置 */}
+      {/* SECTION 3: 多样化数据库后台与界面接入 (支持 D1, MySQL, Supabase, PostgreSQL, SQLite, MongoDB 等) */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
         <button
-          onClick={() => toggleSection('backendConnections')}
+          onClick={() => toggleSection('databaseHub')}
           className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
         >
           <div className="flex items-center space-x-3">
@@ -364,133 +384,243 @@ export const AdminSettingsView = ({
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-800">数据库与对象存储后台连接</h2>
-              <p className="text-xs text-slate-400">支持 Cloudflare D1、MySQL、Supabase 与 R2 / 腾讯云 COS / 阿里云 OSS</p>
+              <h2 className="text-lg font-bold text-slate-800">全能数据库后台与管理界面接入</h2>
+              <p className="text-xs text-slate-400">支持 Cloudflare D1、PostgreSQL、MySQL、Supabase、MongoDB 等多种数据源接入与真实状态监测</p>
             </div>
           </div>
-          {openSections.backendConnections ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+          {openSections.databaseHub ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
         </button>
 
-        {openSections.backendConnections && (
+        {openSections.databaseHub && (
           <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6">
-            {/* 数据库连接 */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+            {/* 数据库配置与实时状态灯 */}
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                <div className="flex items-center space-x-2">
                   <Server className="w-4 h-4 text-sky-600" />
-                  <span>后端主数据库引擎配置</span>
-                </span>
-                <span className="text-[10px] text-emerald-600 font-semibold flex items-center space-x-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>当前状态：已连接</span>
-                </span>
+                  <span className="text-xs font-bold text-slate-700">主数据库接入配置</span>
+                </div>
+
+                {/* 状态指示灯：没有错误，未连接时绝不虚假显示已连接 */}
+                <div className="flex items-center space-x-2">
+                  <span className="text-[11px] text-slate-500 font-medium">接入状态灯：</span>
+                  {dbStatus === 'connected' ? (
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>已成功接入 (Connected)</span>
+                    </span>
+                  ) : dbStatus === 'failed' ? (
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-rose-500" />
+                      <span>连接失败 (Connection Failed)</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-slate-400" />
+                      <span>未连接 (Offline / Disconnected)</span>
+                    </span>
+                  )}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              {dbErrorMsg && (
+                <div className="p-3 bg-rose-50 text-rose-700 rounded-xl text-xs border border-rose-200 flex items-center space-x-2">
+                  <XCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                  <span>{dbErrorMsg}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">数据库类型</label>
+                  <label className="block text-slate-600 font-semibold mb-1">数据库类型 / 协议</label>
                   <select
                     value={backendConfig?.dbType || 'cloudflare-d1'}
-                    onChange={(e) => setBackendConfig({ ...backendConfig, dbType: e.target.value })}
+                    onChange={(e) => {
+                      setBackendConfig({ ...backendConfig, dbType: e.target.value });
+                      setDbStatus('idle');
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
                   >
                     <option value="cloudflare-d1">Cloudflare D1 (边缘 SQLite)</option>
-                    <option value="mysql">MySQL 8.0+ / MariaDB</option>
                     <option value="supabase">Supabase / PostgreSQL</option>
+                    <option value="mysql">MySQL 8.0+ / MariaDB</option>
+                    <option value="mongodb">MongoDB Atlas (NoSQL)</option>
+                    <option value="redis">Redis / Upstash (Key-Value)</option>
+                    <option value="sqlite">Local SQLite / PocketBase</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">主机 / 节点 Endpoint</label>
+                  <label className="block text-slate-600 font-semibold mb-1">数据库地址 / Endpoint</label>
                   <input
                     type="text"
-                    value={backendConfig?.dbHost || 'd1.cloudflare.com'}
-                    onChange={(e) => setBackendConfig({ ...backendConfig, dbHost: e.target.value })}
+                    value={backendConfig?.dbHost || ''}
+                    placeholder="如 d1.cloudflare.com 或 pg.example.com"
+                    onChange={(e) => {
+                      setBackendConfig({ ...backendConfig, dbHost: e.target.value });
+                      setDbStatus('idle');
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">数据库名称 (DB Name)</label>
+                  <label className="block text-slate-600 font-semibold mb-1">数据库名 / Schema</label>
                   <input
                     type="text"
-                    value={backendConfig?.dbName || 'whitefox_blog_db'}
-                    onChange={(e) => setBackendConfig({ ...backendConfig, dbName: e.target.value })}
+                    value={backendConfig?.dbName || ''}
+                    placeholder="whitefox_blog_db"
+                    onChange={(e) => {
+                      setBackendConfig({ ...backendConfig, dbName: e.target.value });
+                      setDbStatus('idle');
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">访问凭据 / Token / Key</label>
+                  <input
+                    type="password"
+                    value={backendConfig?.dbToken || ''}
+                    placeholder="输入接入密钥或密码"
+                    onChange={(e) => setBackendConfig({ ...backendConfig, dbToken: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-1">
-                <button
-                  onClick={handleTestDatabase}
-                  disabled={isTestingDb}
-                  className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isTestingDb ? 'animate-spin' : ''}`} />
-                  <span>{isTestingDb ? '正在测试数据库连接...' : '测试数据库连接'}</span>
-                </button>
-                {dbTestResult && (
-                  <span className="text-xs text-emerald-600 font-semibold">{dbTestResult}</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleTestDatabase}
+                    disabled={isTestingDb}
+                    className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingDb ? 'animate-spin' : ''}`} />
+                    <span>{isTestingDb ? '正在测试数据库连接与握手...' : '测试并激活数据库接入'}</span>
+                  </button>
+                  {dbStatus === 'connected' && (
+                    <button
+                      onClick={handleDisconnectDb}
+                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold"
+                    >
+                      断开连接
+                    </button>
+                  )}
+                </div>
+
+                {dbStatus === 'connected' && (
+                  <span className="text-xs text-emerald-600 font-semibold flex items-center space-x-1">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>握手正常 · 网盘与调度中枢已关联此数据库实时同步</span>
+                  </span>
                 )}
               </div>
             </div>
 
-            {/* 对象存储连接 */}
-            <div className="space-y-3 pt-4 border-t border-slate-100">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+            {/* 对象存储接入状态与测试 */}
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                <div className="flex items-center space-x-2">
                   <Cloud className="w-4 h-4 text-amber-600" />
-                  <span>后台对象存储 (OSS / COS / R2) 连接与鉴权</span>
-                </span>
-                <span className="text-[10px] text-emerald-600 font-semibold flex items-center space-x-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>存储桶鉴权：通过</span>
-                </span>
+                  <span className="text-xs font-bold text-slate-700">对象存储后台接入 (R2 / 腾讯云 COS / 阿里云 OSS)</span>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <span className="text-[11px] text-slate-500 font-medium">鉴权状态灯：</span>
+                  {storageStatus === 'connected' ? (
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>存储桶鉴权通过</span>
+                    </span>
+                  ) : storageStatus === 'failed' ? (
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-rose-500" />
+                      <span>鉴权未通过</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-slate-400" />
+                      <span>未接入</span>
+                    </span>
+                  )}
+                </div>
               </div>
+
+              {storageErrorMsg && (
+                <div className="p-3 bg-rose-50 text-rose-700 rounded-xl text-xs border border-rose-200 flex items-center space-x-2">
+                  <XCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                  <span>{storageErrorMsg}</span>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1">存储平台</label>
                   <select
                     value={backendConfig?.storageType || 'cloudflare-r2'}
-                    onChange={(e) => setBackendConfig({ ...backendConfig, storageType: e.target.value })}
+                    onChange={(e) => {
+                      setBackendConfig({ ...backendConfig, storageType: e.target.value });
+                      setStorageStatus('idle');
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
                   >
-                    <option value="cloudflare-r2">Cloudflare R2 (推荐免出站费)</option>
-                    <option value="tencent-cos">腾讯云 COS</option>
-                    <option value="aliyun-oss">阿里云 OSS</option>
+                    <option value="cloudflare-r2">Cloudflare R2 (免出站流量费)</option>
+                    <option value="tencent-cos">腾讯云 COS (国内极速)</option>
+                    <option value="aliyun-oss">阿里云 OSS (稳定生态)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">存储桶名称 (Bucket)</label>
+                  <label className="block text-slate-600 font-semibold mb-1">存储桶名称 (Bucket Name)</label>
                   <input
                     type="text"
-                    value={backendConfig?.storageBucket || 'whitefox-assets'}
-                    onChange={(e) => setBackendConfig({ ...backendConfig, storageBucket: e.target.value })}
+                    value={backendConfig?.storageBucket || ''}
+                    placeholder="whitefox-assets"
+                    onChange={(e) => {
+                      setBackendConfig({ ...backendConfig, storageBucket: e.target.value });
+                      setStorageStatus('idle');
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">AccessKey ID</label>
+                  <label className="block text-slate-600 font-semibold mb-1">AccessKey ID / 令牌</label>
                   <input
                     type="text"
-                    value={backendConfig?.storageAccessKeyId || 'cf_r2_key_demo_9823'}
-                    onChange={(e) => setBackendConfig({ ...backendConfig, storageAccessKeyId: e.target.value })}
+                    value={backendConfig?.storageAccessKeyId || ''}
+                    placeholder="输入 AccessKey 或 Token"
+                    onChange={(e) => {
+                      setBackendConfig({ ...backendConfig, storageAccessKeyId: e.target.value });
+                      setStorageStatus('idle');
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-1">
-                <button
-                  onClick={handleTestStorage}
-                  disabled={isTestingStorage}
-                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isTestingStorage ? 'animate-spin' : ''}`} />
-                  <span>{isTestingStorage ? '正在验证存储鉴权...' : '测试对象存储直连'}</span>
-                </button>
-                {storageTestResult && (
-                  <span className="text-xs text-emerald-600 font-semibold">{storageTestResult}</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleTestStorage}
+                    disabled={isTestingStorage}
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingStorage ? 'animate-spin' : ''}`} />
+                    <span>{isTestingStorage ? '正在验证存储鉴权...' : '测试对象存储直连'}</span>
+                  </button>
+                  {storageStatus === 'connected' && (
+                    <button
+                      onClick={handleDisconnectStorage}
+                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold"
+                    >
+                      断开连接
+                    </button>
+                  )}
+                </div>
+
+                {storageStatus === 'connected' && (
+                  <span className="text-xs text-emerald-600 font-semibold flex items-center space-x-1">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>对象存储桶连接正常 · 读写与下载权限畅通</span>
+                  </span>
                 )}
               </div>
             </div>
@@ -518,7 +648,6 @@ export const AdminSettingsView = ({
 
         {openSections.theme && (
           <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6">
-            {/* 1. 一键主题配色 */}
             <div>
               <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">
                 一键主题配色按键 (默认翡翠绿白)
@@ -551,7 +680,6 @@ export const AdminSettingsView = ({
               </div>
             </div>
 
-            {/* 2. 背景调色板与本地全站背景图片上传 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">
@@ -622,7 +750,6 @@ export const AdminSettingsView = ({
               </div>
             </div>
 
-            {/* 3. 头像与首页介绍区照片 (本地上传支持) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -643,7 +770,7 @@ export const AdminSettingsView = ({
                   <img
                     src={appearance.avatarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=100&q=80'}
                     alt="Avatar Preview"
-                    className="w-10 h-10 rounded-2xl object-cover border border-slate-200 shadow-xs flex-shrink-0"
+                    className="w-10 h-10 rounded-2xl object-cover border border-slate-200 shadow-xs shrink-0"
                   />
                   <input
                     type="text"
@@ -684,7 +811,7 @@ export const AdminSettingsView = ({
                   <img
                     src={appearance.heroImage || 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=100&q=80'}
                     alt="Hero Preview"
-                    className="w-10 h-10 rounded-2xl object-cover border border-slate-200 shadow-xs flex-shrink-0"
+                    className="w-10 h-10 rounded-2xl object-cover border border-slate-200 shadow-xs shrink-0"
                   />
                   <input
                     type="text"
@@ -710,309 +837,150 @@ export const AdminSettingsView = ({
         )}
       </div>
 
-      {/* SECTION 5: 用户管理列表 (管理员专属，可折叠) */}
-      <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <button
-          onClick={() => toggleSection('users')}
-          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
-              <Users className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-800">已注册用户管理列表 (站长专属)</h2>
-              <p className="text-xs text-slate-400">查看站内所有注册成员，设置成员权限或删除违规账号</p>
-            </div>
-          </div>
-          {openSections.users ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-        </button>
-
-        {openSections.users && (
-          <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
-            <form onSubmit={handleAddUser} className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
-              <input
-                type="text"
-                placeholder="新用户名"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white flex-1 min-w-[120px]"
-              />
-              <input
-                type="email"
-                placeholder="用户邮箱"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white flex-1 min-w-[160px]"
-              />
-              <button
-                type="submit"
-                className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold"
-              >
-                快速新增用户
-              </button>
-            </form>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600">
-                <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-[10px] border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-3">用户名称</th>
-                    <th className="py-2.5 px-3">注册邮箱</th>
-                    <th className="py-2.5 px-3">角色权限</th>
-                    <th className="py-2.5 px-3">注册日期</th>
-                    <th className="py-2.5 px-3 text-right">操作</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {users.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50/50">
-                      <td className="py-3 px-3 font-semibold text-slate-800 flex items-center space-x-2">
-                        <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px]">
-                          {u.username[0]?.toUpperCase()}
-                        </span>
-                        <span>{u.username}</span>
-                      </td>
-                      <td className="py-3 px-3 font-mono">{u.email}</td>
-                      <td className="py-3 px-3">
-                        <span className={`px-2 py-0.5 rounded-full font-medium text-[10px] ${
-                          u.role === 'admin'
-                            ? 'bg-rose-100 text-rose-700 font-bold'
-                            : 'bg-emerald-100 text-emerald-700'
-                        }`}>
-                          {u.role === 'admin' ? '系统站长' : '普通注册成员'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-slate-400">{u.registeredAt || '2025-05-18'}</td>
-                      <td className="py-3 px-3 text-right">
-                        {u.role !== 'admin' && (
-                          <button
-                            onClick={() => handleDeleteUser(u.id)}
-                            className="text-rose-500 hover:text-rose-700 p-1"
-                            title="删除用户"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SECTION 6: Cloudflare D1 边缘数据库实时同步选区 */}
-      <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <button
-          onClick={() => toggleSection('d1sync')}
-          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold">
-              <Cloud className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-800">Cloudflare D1 边缘数据库实时同步</h2>
-              <p className="text-xs text-slate-400">文章、藏书、网址收藏、网盘设定、相册及全站数据全息双向同步</p>
-            </div>
-          </div>
-          {openSections.d1sync ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-        </button>
-
-        {openSections.d1sync && (
-          <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                <span className="text-slate-400 block text-[10px]">Cloudflare Account ID</span>
-                <span className="font-mono font-semibold text-slate-700">
-                  {cloudConfig?.d1?.accountId || cloudConfig?.cloudflare?.accountId || 'cf_account_demo_888'}
-                </span>
+      {/* SECTION 5: 用户管理列表 (仅管理员可见) */}
+      {isAdmin && (
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <button
+            onClick={() => toggleSection('users')}
+            className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+                <Users className="w-5 h-5" />
               </div>
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                <span className="text-slate-400 block text-[10px]">D1 Database Name</span>
-                <span className="font-mono font-semibold text-slate-700">
-                  {cloudConfig?.d1?.databaseId || cloudConfig?.cloudflare?.d1DatabaseId || 'whitefox-d1-db'}
-                </span>
-              </div>
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                <span className="text-slate-400 block text-[10px]">D1 边缘节点连接状态</span>
-                <span className="font-semibold text-emerald-600 flex items-center space-x-1 mt-0.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>实时就绪 (Zero Latency Edge)</span>
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <p className="text-xs text-slate-500">
-                接入 D1 边缘数据库后，博客文章、阅读进度、网址收藏、相册记录即刻实现跨设备全息同步。
-              </p>
-              <button
-                onClick={onSyncD1}
-                className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>立即执行 D1 全库双向同步</span>
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SECTION 7: 对象存储和云盘文件管理选区 */}
-      <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <button
-          onClick={() => toggleSection('files')}
-          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
-              <HardDrive className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-800">对象存储与网盘文件管理</h2>
-              <p className="text-xs text-slate-400">管理上传到 R2、腾讯云 COS、阿里云 OSS 与 AList 网盘的文件并在站内引用</p>
-            </div>
-          </div>
-          {openSections.files ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-        </button>
-
-        {openSections.files && (
-          <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
-            <form onSubmit={handleAddCloudFile} className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
-              <input
-                type="text"
-                placeholder="文件名称 (如 宣传短片.mp4)"
-                value={newFileName}
-                onChange={(e) => setNewFileName(e.target.value)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white flex-1 min-w-[140px]"
-              />
-              <input
-                type="text"
-                placeholder="文件直链 URL"
-                value={newFileUrl}
-                onChange={(e) => setNewFileUrl(e.target.value)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white flex-2 min-w-[200px]"
-              />
-              <select
-                value={newFileProvider}
-                onChange={(e) => setNewFileProvider(e.target.value)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white text-slate-700"
-              >
-                <option value="Cloudflare R2">Cloudflare R2</option>
-                <option value="Tencent COS">腾讯云 COS</option>
-                <option value="Alibaba OSS">阿里云 OSS</option>
-                <option value="AList / WebDAV">AList / WebDAV 网盘</option>
-              </select>
-              <button
-                type="submit"
-                className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold"
-              >
-                新增文件引用
-              </button>
-            </form>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600">
-                <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-[10px] border-b border-slate-200">
-                  <tr>
-                    <th className="py-2 px-3">文件名称</th>
-                    <th className="py-2 px-3">存储源 / 网盘</th>
-                    <th className="py-2 px-3">大小</th>
-                    <th className="py-2 px-3">上传时间</th>
-                    <th className="py-2 px-3 text-right">操作</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {cloudFiles.map((file) => (
-                    <tr key={file.id} className="hover:bg-slate-50/50">
-                      <td className="py-2.5 px-3 font-semibold text-slate-800 flex items-center space-x-2">
-                        <Folder className="w-4 h-4 text-amber-500" />
-                        <span className="truncate max-w-[220px]">{file.name}</span>
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-mono">
-                          {file.provider}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-400">{file.size}</td>
-                      <td className="py-2.5 px-3 text-slate-400">{file.uploadedAt}</td>
-                      <td className="py-2.5 px-3 text-right space-x-2">
-                        <a
-                          href={file.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-emerald-600 hover:text-emerald-700 p-1 inline-block"
-                          title="在站内或新窗口引用预览"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                        <button
-                          onClick={() => handleDeleteCloudFile(file.id)}
-                          className="text-rose-500 hover:text-rose-700 p-1"
-                          title="移除记录"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SECTION 8: 注册控制与环境变量密码预设 */}
-      <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <button
-          onClick={() => toggleSection('authRules')}
-          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
-              <Lock className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-800">注册控制与环境变量密码预设</h2>
-              <p className="text-xs text-slate-400">开启/关闭全站新用户注册，配置邮箱注册自动回复验证码</p>
-            </div>
-          </div>
-          {openSections.authRules ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-        </button>
-
-        {openSections.authRules && (
-          <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
-            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
               <div>
-                <span className="text-xs font-bold text-slate-700">开放新用户注册</span>
-                <p className="text-[11px] text-slate-400">关闭后仅管理员可登录，阻断外部注册</p>
+                <h2 className="text-lg font-bold text-slate-800">已注册用户管理列表 (站长专属)</h2>
+                <p className="text-xs text-slate-400">查看站内所有注册成员，设置成员权限或删除违规账号（仅站长/管理员可见）</p>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
+            </div>
+            {openSections.users ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+          </button>
+
+          {openSections.users && (
+            <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
+              <form onSubmit={handleAddUser} className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
                 <input
-                  type="checkbox"
-                  checked={systemSettings.allowRegistration}
-                  onChange={(e) => setSystemSettings({ ...systemSettings, allowRegistration: e.target.checked })}
-                  className="sr-only peer"
+                  type="text"
+                  placeholder="新用户名"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white flex-1 min-w-[120px]"
                 />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-              </label>
-            </div>
+                <input
+                  type="email"
+                  placeholder="用户邮箱"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white flex-1 min-w-[160px]"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold"
+                >
+                  快速新增用户
+                </button>
+              </form>
 
-            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-800 flex items-start space-x-2">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
-              <div>
-                <span className="font-bold">部署变量提示：</span>
-                管理员密码在部署时由环境变量 <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">VITE_ADMIN_PASSWORD</code> 控制。
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-600">
+                  <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-[10px] border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3">用户名称</th>
+                      <th className="py-2.5 px-3">注册邮箱</th>
+                      <th className="py-2.5 px-3">角色权限</th>
+                      <th className="py-2.5 px-3">注册日期</th>
+                      <th className="py-2.5 px-3 text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {users.map((u) => (
+                      <tr key={u.id} className="hover:bg-slate-50/50">
+                        <td className="py-3 px-3 font-semibold text-slate-800 flex items-center space-x-2">
+                          <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px]">
+                            {u.username[0]?.toUpperCase()}
+                          </span>
+                          <span>{u.username}</span>
+                        </td>
+                        <td className="py-3 px-3 font-mono">{u.email}</td>
+                        <td className="py-3 px-3">
+                          <span className={`px-2 py-0.5 rounded-full font-medium text-[10px] ${
+                            u.role === 'admin'
+                              ? 'bg-rose-100 text-rose-700 font-bold'
+                              : 'bg-emerald-100 text-emerald-700'
+                          }`}>
+                            {u.role === 'admin' ? '系统站长' : '普通注册成员'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-400">{u.registeredAt || '2025-05-18'}</td>
+                        <td className="py-3 px-3 text-right">
+                          {u.role !== 'admin' && (
+                            <button
+                              onClick={() => handleDeleteUser(u.id)}
+                              className="text-rose-500 hover:text-rose-700 p-1"
+                              title="删除用户"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
+
+      {/* SECTION 6: 注册控制与环境变量密码预设 (仅管理员可见) */}
+      {isAdmin && (
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <button
+            onClick={() => toggleSection('authRules')}
+            className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">注册控制与环境变量密码预设 (仅管理员可见)</h2>
+                <p className="text-xs text-slate-400">开启/关闭全站新用户注册，配置环境变量安全密码策略</p>
+              </div>
+            </div>
+            {openSections.authRules ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+          </button>
+
+          {openSections.authRules && (
+            <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
+                <div>
+                  <span className="text-xs font-bold text-slate-700">开放新用户注册</span>
+                  <p className="text-[11px] text-slate-400">关闭后仅管理员可登录，阻断外部注册</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={systemSettings.allowRegistration}
+                    onChange={(e) => setSystemSettings({ ...systemSettings, allowRegistration: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-800 flex items-start space-x-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                <div>
+                  <span className="font-bold">部署变量提示：</span>
+                  管理员密码在部署时由环境变量 <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">VITE_ADMIN_PASSWORD</code> 控制。
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

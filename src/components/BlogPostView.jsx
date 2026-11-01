@@ -2,12 +2,25 @@ import React, { useState } from 'react';
 import {
   ArrowLeft, Calendar, Eye, User, Bookmark,
   Share2, MessageSquare, Send, CheckCircle2, HardDrive,
-  Copy, Trash2, Edit3
+  Copy, Trash2, Edit3, Download, FileText
 } from 'lucide-react';
+import { generateDocxBlob, downloadFile } from '../services/documentConverter';
 
-export const BlogPostView = ({ post, onBack, currentUser, onAddComment, onDeletePost, fontSize = 'standard', t }) => {
+export const BlogPostView = ({
+  post,
+  onBack,
+  currentUser,
+  onAddComment,
+  onDeletePost,
+  onEditPost,
+  fontSize = 'standard',
+  t
+}) => {
   const [commentText, setCommentText] = useState('');
   const [toast, setToast] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+
+  const isAdmin = currentUser?.role === 'admin';
 
   const showToast = (msg) => {
     setToast(msg);
@@ -29,8 +42,31 @@ export const BlogPostView = ({ post, onBack, currentUser, onAddComment, onDelete
     }
   };
 
+  // 1-Click TXT Download
+  const handleDownloadTxt = () => {
+    const fullText = `标题: ${post.title}\n作者: ${post.author}\n分类: ${post.category}\n发布日期: ${post.date}\n标签: ${(post.tags || []).join(', ')}\n\n正文:\n${post.content}\n\n---\n来源: 白狐 (WhiteFox) 博客系统`;
+    downloadFile(fullText, `${post.title}.txt`, 'text/plain;charset=utf-8');
+    showToast(`文章「${post.title}.txt」下载已启动！`);
+  };
+
+  // 1-Click DOCX Download
+  const handleDownloadDocx = async () => {
+    try {
+      setIsExporting(true);
+      showToast('正在生成 DOCX Word 文档排版...');
+      const blob = await generateDocxBlob(post);
+      downloadFile(blob, `${post.title}.docx`);
+      setIsExporting(false);
+      showToast(`文章「${post.title}.docx」生成完成并已下载！`);
+    } catch (err) {
+      setIsExporting(false);
+      console.error('Docx generation error:', err);
+      showToast('生成 DOCX 遇到错误，请尝试下载 TXT 格式！');
+    }
+  };
+
   const handleSaveToCloud = () => {
-    showToast(`文章已成功保存快照到多云网盘 (Cloud Snapshot)`);
+    showToast(`文章快照已同步至多云调度中枢与对象存储桶`);
   };
 
   const handleCommentSubmit = (e) => {
@@ -47,7 +83,12 @@ export const BlogPostView = ({ post, onBack, currentUser, onAddComment, onDelete
     showToast('评论发布成功！');
   };
 
-  // Font size class mapping
+  const handleDelete = () => {
+    if (confirm(`确认删除文章「${post.title}」？`)) {
+      onDeletePost(post.id);
+    }
+  };
+
   const contentFontSizeClass = {
     compact: 'text-xs sm:text-sm',
     standard: 'text-sm sm:text-base',
@@ -66,31 +107,67 @@ export const BlogPostView = ({ post, onBack, currentUser, onAddComment, onDelete
       )}
 
       {/* Navigation bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <button
           onClick={onBack}
-          className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/80 hover:bg-white text-xs font-semibold text-slate-700 border border-slate-200 shadow-xs"
+          className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/80 hover:bg-white text-xs font-semibold text-slate-700 border border-slate-200 shadow-xs self-start"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>返回博文列表</span>
         </button>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 1-Click Download Options: TXT & DOCX */}
+          <button
+            onClick={handleDownloadTxt}
+            className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold shadow-2xs"
+            title="一键下载为纯文本 TXT"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-600" />
+            <span>下载 TXT</span>
+          </button>
+
+          <button
+            onClick={handleDownloadDocx}
+            disabled={isExporting}
+            className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold shadow-2xs"
+            title="一键下载为 Word 文档 DOCX"
+          >
+            <FileText className="w-3.5 h-3.5 text-blue-600" />
+            <span>{isExporting ? '导出中...' : '下载 DOCX'}</span>
+          </button>
+
           <button
             onClick={handleCopyContent}
-            className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold"
+            className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold shadow-2xs"
             title="一键复制文章 Markdown 全文"
           >
             <Copy className="w-3.5 h-3.5 text-emerald-600" />
-            <span>一键复制全文</span>
+            <span>复制全文</span>
           </button>
-          <button
-            onClick={handleSaveToCloud}
-            className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold"
-          >
-            <HardDrive className="w-3.5 h-3.5" />
-            <span>存至多云</span>
-          </button>
+
+          {/* Admin Controls: Edit & Delete */}
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => onEditPost && onEditPost(post)}
+                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold"
+                title="编辑此文章"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                <span>编辑文章</span>
+              </button>
+              <button
+                onClick={handleDelete}
+                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-800 text-xs font-semibold"
+                title="删除文章"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>删除</span>
+              </button>
+            </>
+          )}
+
           <button
             onClick={handleShare}
             className="p-1.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"

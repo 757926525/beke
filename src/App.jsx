@@ -246,6 +246,8 @@ export function App() {
               isAdmin={currentUser?.role === 'admin'}
               layout={siteLayout}
               fontSize={fontSize}
+              cloudFiles={cloudFiles}
+              bookmarks={bookmarks}
               t={t}
             />
           )}
@@ -255,6 +257,11 @@ export function App() {
               post={activePost}
               onBack={() => setActivePostId(null)}
               currentUser={currentUser}
+              cloudFiles={cloudFiles}
+              bookmarks={bookmarks}
+              onUpdatePost={(updatedPost) => {
+                setPosts(posts.map((p) => (p.id === updatedPost.id ? updatedPost : p)));
+              }}
               onAddComment={(comment) => {
                 const updated = posts.map((p) =>
                   p.id === activePost.id
@@ -287,6 +294,7 @@ export function App() {
               setCloudConfig={setCloudConfig}
               cloudFiles={cloudFiles}
               setCloudFiles={setCloudFiles}
+              backendConfig={backendConfig}
               t={t}
             />
           )}
@@ -302,6 +310,8 @@ export function App() {
           {activeTab === 'media' && (
             <MediaPlayerView
               isAdmin={currentUser?.role === 'admin'}
+              cloudFiles={cloudFiles}
+              setCloudFiles={setCloudFiles}
               t={t}
             />
           )}
@@ -332,20 +342,18 @@ export function App() {
               setAppearance={setAppearance}
               systemSettings={systemSettings}
               setSystemSettings={setSystemSettings}
-              cloudFiles={cloudFiles}
-              setCloudFiles={setCloudFiles}
               users={users}
               setUsers={setUsers}
               cloudConfig={cloudConfig}
               setCloudConfig={setCloudConfig}
               backendConfig={backendConfig}
               setBackendConfig={setBackendConfig}
-              onSyncD1={handleSyncD1}
               currentTheme={currentTheme}
               setCurrentTheme={(th) => {
                 setThemeId(th.id);
                 setAppearance((prev) => ({ ...prev, themeId: th.id }));
               }}
+              currentUser={currentUser}
               t={t}
             />
           )}

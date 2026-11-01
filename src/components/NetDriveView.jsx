@@ -4,24 +4,37 @@ import {
   FolderPlus, Upload, Trash2, ExternalLink,
   ShieldAlert, RefreshCw, Key, Globe, Eye,
   CheckCircle2, Folder, Copy, BookOpen, ChevronDown, ChevronUp,
-  Terminal, Info, Check, ShieldCheck
+  Terminal, Info, Check, ShieldCheck, Download, Plus, FileText,
+  FileCode, Play, Music, Image as ImageIcon
 } from 'lucide-react';
 
-export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloudFiles, t }) => {
-  const [activeDriver, setActiveDriver] = useState('r2'); // 'r2' | 'cos' | 'oss' | 'alist'
+export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloudFiles, backendConfig, t }) => {
+  const [activeDriver, setActiveDriver] = useState('r2'); // 'r2' | 'cos' | 'oss' | 'alist' | 'local'
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
   const [copiedUrl, setCopiedUrl] = useState('');
-  const [showUsageGuide, setShowUsageGuide] = useState(true);
+  const [showUsageGuide, setShowUsageGuide] = useState(false);
+
+  // Preview file modal
+  const [previewFile, setPreviewFile] = useState(null);
+
+  // Manual new file form
+  const [newFileName, setNewFileName] = useState('');
+  const [newFileUrl, setNewFileUrl] = useState('');
+  const [newFileSize, setNewFileSize] = useState('1.5 MB');
+
+  const isDbConnected = backendConfig?.dbConnected;
 
   const handleManualSync = () => {
     setIsSyncing(true);
-    setSyncStatus('正在与多云端存储与网盘同步状态...');
+    setSyncStatus(isDbConnected ? '正在与后台数据库及各存储桶执行实时双向全息索引同步...' : '正在同步多云端存储与网盘缓存状态...');
     setTimeout(() => {
       setIsSyncing(false);
-      setSyncStatus('多云与网盘目录同步完成！所有存储节点正常响应。');
-      setTimeout(() => setSyncStatus(''), 3000);
-    }, 1000);
+      setSyncStatus(isDbConnected
+        ? '多云中枢与已连接数据库已完成全息同步！所有云存储桶列表已最新。'
+        : '多云与网盘目录同步完成！所有存储节点正常响应。');
+      setTimeout(() => setSyncStatus(''), 3500);
+    }, 1200);
   };
 
   const handleCopy = (url) => {
@@ -32,6 +45,71 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
     }
   };
 
+  // Add new file manually to current bucket
+  const handleAddFile = (e) => {
+    e.preventDefault();
+    if (!newFileName.trim() || !newFileUrl.trim()) return;
+
+    const providerNames = {
+      r2: 'Cloudflare R2',
+      cos: 'Tencent COS',
+      oss: 'Alibaba OSS',
+      alist: 'AList / WebDAV',
+      local: '站内本地存储'
+    };
+
+    const newFile = {
+      id: 'cf-' + Date.now(),
+      name: newFileName.trim(),
+      url: newFileUrl.trim(),
+      provider: providerNames[activeDriver] || 'Cloudflare R2',
+      bucketKey: activeDriver,
+      size: newFileSize.trim() || '2.0 MB',
+      type: newFileName.match(/\.(mp4|webm)$/i) ? 'video' : newFileName.match(/\.(mp3|wav|flac)$/i) ? 'audio' : newFileName.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? 'image' : 'document',
+      uploadedAt: new Date().toISOString().split('T')[0]
+    };
+
+    setCloudFiles([newFile, ...cloudFiles]);
+    setNewFileName('');
+    setNewFileUrl('');
+    setSyncStatus(`已向 ${providerNames[activeDriver]} 添加文件记录并同步！`);
+    setTimeout(() => setSyncStatus(''), 3000);
+  };
+
+  // Delete file
+  const handleDeleteFile = (id, name) => {
+    if (confirm(`确认删除「${name}」的存储引用？`)) {
+      setCloudFiles(cloudFiles.filter((f) => f.id !== id));
+    }
+  };
+
+  // Download file
+  const handleDownloadFile = (file) => {
+    const a = document.createElement('a');
+    a.href = file.url;
+    a.download = file.name;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  // Filter files by bucket
+  const currentProviderMap = {
+    r2: 'Cloudflare R2',
+    cos: 'Tencent COS',
+    oss: 'Alibaba OSS',
+    alist: 'AList / WebDAV',
+    local: '站内本地存储'
+  };
+
+  const filteredFiles = cloudFiles.filter((f) => {
+    if (f.bucketKey) return f.bucketKey === activeDriver;
+    // Fallback matching by provider name
+    const targetName = currentProviderMap[activeDriver];
+    return f.provider === targetName || (activeDriver === 'r2' && !f.provider);
+  });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -40,24 +118,36 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
           <div>
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold mb-2">
               <HardDrive className="w-3.5 h-3.5" />
-              <span>多云聚合 · 云盘与对象存储选区</span>
+              <span>多云聚合 · 云盘与对象存储调度中枢</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
               网盘与多云调度中枢
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              集中调度 Cloudflare R2、腾讯云 COS、阿里云 OSS 与 AList/WebDAV 挂载网盘，支持跨云文件管理与站内直链调度。
+              集中调度与管理 Cloudflare R2、腾讯云 COS、阿里云 OSS 与 AList/WebDAV 存储桶，支持不同平台独立分区、在线查看、下载与数据库实时同步。
             </p>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {isDbConnected ? (
+              <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-2xl bg-emerald-100 text-emerald-800 text-xs font-semibold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>数据库实时全息同步已激活</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-2xl bg-amber-100 text-amber-800 text-xs font-semibold">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <span>离线缓存模式 (未连接数据库)</span>
+              </span>
+            )}
+
             <button
               onClick={handleManualSync}
               disabled={isSyncing}
               className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-2 shadow-xs transition-colors"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? '同步中...' : '同步多云状态'}</span>
+              <span>{isSyncing ? '同步中...' : isDbConnected ? '执行数据库与多云全息同步' : '同步多云状态'}</span>
             </button>
           </div>
         </div>
@@ -70,29 +160,36 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
         )}
       </div>
 
-      {/* Cloud Providers Selection Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Cloud Providers Selection Cards (不同平台独立选区) */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
           { id: 'r2', name: 'Cloudflare R2', icon: Cloud, desc: '0 出站费边缘存储' },
           { id: 'cos', name: '腾讯云 COS', icon: Server, desc: '国内极速 CDN 存储' },
           { id: 'oss', name: '阿里云 OSS', icon: Database, desc: '高可用对象存储' },
           { id: 'alist', name: 'AList / WebDAV', icon: HardDrive, desc: '多网盘聚合挂载' },
+          { id: 'local', name: '站内存储池', icon: FolderPlus, desc: '本地视频转存与媒体' },
         ].map((p) => {
           const Icon = p.icon;
           const isSelected = activeDriver === p.id;
+          const count = cloudFiles.filter((f) => (f.bucketKey ? f.bucketKey === p.id : f.provider === currentProviderMap[p.id])).length;
           return (
             <button
               key={p.id}
               onClick={() => setActiveDriver(p.id)}
-              className={`p-4 rounded-2xl border text-left transition-all ${
+              className={`p-4 rounded-2xl border text-left transition-all relative ${
                 isSelected
                   ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
                   : 'bg-white/80 hover:bg-white border-slate-200'
               }`}
             >
-              <div className="flex items-center space-x-2">
-                <Icon className={`w-4 h-4 ${isSelected ? 'text-emerald-600' : 'text-slate-500'}`} />
-                <span className="font-bold text-xs text-slate-800">{p.name}</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Icon className={`w-4 h-4 ${isSelected ? 'text-emerald-600' : 'text-slate-500'}`} />
+                  <span className="font-bold text-xs text-slate-800">{p.name}</span>
+                </div>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
+                  {count}
+                </span>
               </div>
               <p className="text-[10px] text-slate-400 mt-1">{p.desc}</p>
             </button>
@@ -100,11 +197,144 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
         })}
       </div>
 
-      {/* Driver Configuration Form */}
+      {/* Direct File Management & Upload Bar for Selected Provider */}
+      <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <h2 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+              <Folder className="w-4 h-4 text-emerald-600" />
+              <span>当前选区文件管理：{currentProviderMap[activeDriver]}</span>
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              可直接在此区域新增文件直链、在线预览查看、下载或删除，支持与博客文章及媒体影音互相引用
+            </p>
+          </div>
+          <span className="text-xs font-mono text-slate-500 bg-slate-100 px-3 py-1 rounded-xl self-start sm:self-auto">
+            已调度文件: {filteredFiles.length} 项
+          </span>
+        </div>
+
+        {/* Quick Add File Form */}
+        <form onSubmit={handleAddFile} className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
+          <input
+            type="text"
+            placeholder="文件名 (如 宣传片.mp4 或 数据报表.pdf)"
+            value={newFileName}
+            onChange={(e) => setNewFileName(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white flex-1 min-w-[160px]"
+          />
+          <input
+            type="text"
+            placeholder="文件直链 URL (可外链或 CDN 地址)"
+            value={newFileUrl}
+            onChange={(e) => setNewFileUrl(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white flex-2 min-w-[220px]"
+          />
+          <input
+            type="text"
+            placeholder="大小 (如 2.5 MB)"
+            value={newFileSize}
+            onChange={(e) => setNewFileSize(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white w-24"
+          />
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>添加到当前选区</span>
+          </button>
+        </form>
+
+        {/* Files Table for Current Provider */}
+        <div className="overflow-x-auto">
+          {filteredFiles.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 space-y-2">
+              <Folder className="w-10 h-10 mx-auto text-slate-300 stroke-[1.5]" />
+              <p className="text-xs">该存储平台暂无归档文件，请在上方直接添加或通过站内媒体一键转存</p>
+            </div>
+          ) : (
+            <table className="w-full text-left text-xs text-slate-600">
+              <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-[10px] border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-3">文件名称</th>
+                  <th className="py-2.5 px-3">类型</th>
+                  <th className="py-2.5 px-3">文件大小</th>
+                  <th className="py-2.5 px-3">同步日期</th>
+                  <th className="py-2.5 px-3 text-right">操作 (预览 / 下载 / 复制 / 删除)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredFiles.map((file) => (
+                  <tr key={file.id} className="hover:bg-slate-50/50">
+                    <td className="py-3 px-3 font-semibold text-slate-800 flex items-center space-x-2">
+                      <Folder className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="truncate max-w-[240px]">{file.name}</span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono">
+                        {file.type || 'file'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-slate-400 font-mono">{file.size}</td>
+                    <td className="py-3 px-3 text-slate-400">{file.uploadedAt}</td>
+                    <td className="py-3 px-3 text-right space-x-2">
+                      {/* View / Preview */}
+                      <button
+                        onClick={() => setPreviewFile(file)}
+                        className="text-sky-600 hover:text-sky-700 inline-block p-1"
+                        title="在线查看与预览"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                      {/* Download */}
+                      <button
+                        onClick={() => handleDownloadFile(file)}
+                        className="text-emerald-600 hover:text-emerald-700 inline-block p-1"
+                        title="下载此文件"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+                      {/* Copy Link */}
+                      <button
+                        onClick={() => handleCopy(file.url)}
+                        className="text-slate-500 hover:text-emerald-600 inline-block p-1"
+                        title="复制直链"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                      {/* Open Link */}
+                      <a
+                        href={file.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-slate-400 hover:text-slate-600 inline-block p-1"
+                        title="在新标签页打开"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                      {/* Delete */}
+                      <button
+                        onClick={() => handleDeleteFile(file.id, file.name)}
+                        className="text-rose-500 hover:text-rose-700 inline-block p-1"
+                        title="移除文件"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Driver Configuration Card */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
         <h2 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
           <Key className="w-4 h-4 text-emerald-600" />
-          <span>当前存储源配置与密钥绑定</span>
+          <span>当前选区接入配置 ({currentProviderMap[activeDriver]})</span>
         </h2>
 
         {activeDriver === 'r2' && (
@@ -120,7 +350,7 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                     cloudflare: { ...cloudConfig.cloudflare, r2BucketName: e.target.value }
                   })
                 }
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
               />
             </div>
             <div>
@@ -134,8 +364,7 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                     cloudflare: { ...cloudConfig.cloudflare, publicDomain: e.target.value }
                   })
                 }
-                placeholder="https://r2.yourdomain.com"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
               />
             </div>
           </div>
@@ -154,7 +383,7 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                     tencentCos: { ...cloudConfig.tencentCos, bucket: e.target.value }
                   })
                 }
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
               />
             </div>
             <div>
@@ -168,7 +397,7 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                     tencentCos: { ...cloudConfig.tencentCos, region: e.target.value }
                   })
                 }
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
               />
             </div>
           </div>
@@ -187,7 +416,7 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                     aliyunOss: { ...cloudConfig.aliyunOss, bucket: e.target.value }
                   })
                 }
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
               />
             </div>
             <div>
@@ -201,7 +430,7 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                     aliyunOss: { ...cloudConfig.aliyunOss, region: e.target.value }
                   })
                 }
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
               />
             </div>
           </div>
@@ -220,7 +449,7 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                     alist: { ...cloudConfig.alist, endpoint: e.target.value }
                   })
                 }
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
               />
             </div>
             <div>
@@ -234,9 +463,18 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                     alist: { ...cloudConfig.alist, basePath: e.target.value }
                   })
                 }
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
               />
             </div>
+          </div>
+        )}
+
+        {activeDriver === 'local' && (
+          <div className="p-3 bg-emerald-50 text-emerald-800 rounded-xl text-xs space-y-1">
+            <span className="font-bold">站内本地存储池说明：</span>
+            <p className="text-[11px] leading-relaxed">
+              站内存储池用于保存本地上传的音视频、书籍文档及媒体转存记录。在连接后台主数据库后，站内池文件将自动同步至云端。
+            </p>
           </div>
         )}
       </div>
@@ -261,9 +499,7 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
 
         {showUsageGuide && (
           <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6 text-xs text-slate-600">
-            {/* Guide Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* R2 Guide */}
               <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 space-y-3">
                 <div className="flex items-center space-x-2 text-emerald-800 font-bold">
                   <Cloud className="w-4 h-4 text-emerald-600" />
@@ -277,7 +513,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                 </ol>
               </div>
 
-              {/* Tencent COS Guide */}
               <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 space-y-3">
                 <div className="flex items-center space-x-2 text-blue-800 font-bold">
                   <Server className="w-4 h-4 text-blue-600" />
@@ -291,7 +526,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                 </ol>
               </div>
 
-              {/* Alibaba OSS Guide */}
               <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 space-y-3">
                 <div className="flex items-center space-x-2 text-orange-800 font-bold">
                   <Database className="w-4 h-4 text-orange-600" />
@@ -305,7 +539,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                 </ol>
               </div>
 
-              {/* AList / WebDAV Guide */}
               <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 space-y-3">
                 <div className="flex items-center space-x-2 text-purple-800 font-bold">
                   <HardDrive className="w-4 h-4 text-purple-600" />
@@ -319,77 +552,65 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                 </ol>
               </div>
             </div>
-
-            {/* Quick Tips Box */}
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 flex items-start space-x-3">
-              <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <div className="font-bold text-xs">安全与边缘加速最佳实践：</div>
-                <p className="text-[11px] leading-relaxed">
-                  白狐博客推荐使用「<strong>Cloudflare Pages + Cloudflare R2</strong>」组合，全球 Anycast 边缘网络加速且免费额度充沛，完全无出站流量账单隐患。对于国内访客，可接入「腾讯云 EdgeOne」或「阿里云 ESA」作为国内前置 CDN。
-                </p>
-              </div>
-            </div>
           </div>
         )}
       </div>
 
-      {/* Cloud Files Listing */}
-      <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-800">已调度网盘与对象存储文件 ({cloudFiles.length})</h2>
-          <span className="text-xs text-slate-400">已就绪实时索引与站内直达</span>
-        </div>
+      {/* Online Preview Modal */}
+      {previewFile && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center space-x-2">
+                <Folder className="w-4 h-4 text-emerald-600" />
+                <h3 className="font-bold text-sm text-slate-800 truncate">{previewFile.name}</h3>
+              </div>
+              <button
+                onClick={() => setPreviewFile(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-[10px] border-b border-slate-200">
-              <tr>
-                <th className="py-2.5 px-3">文件名</th>
-                <th className="py-2.5 px-3">存储端</th>
-                <th className="py-2.5 px-3">大小</th>
-                <th className="py-2.5 px-3">日期</th>
-                <th className="py-2.5 px-3 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {cloudFiles.map((file) => (
-                <tr key={file.id} className="hover:bg-slate-50/50">
-                  <td className="py-3 px-3 font-semibold text-slate-800 flex items-center space-x-2">
-                    <Folder className="w-4 h-4 text-emerald-600" />
-                    <span>{file.name}</span>
-                  </td>
-                  <td className="py-3 px-3">
-                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono">
-                      {file.provider}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-slate-400">{file.size}</td>
-                  <td className="py-3 px-3 text-slate-400">{file.uploadedAt}</td>
-                  <td className="py-3 px-3 text-right space-x-2">
-                    <button
-                      onClick={() => handleCopy(file.url)}
-                      className="text-slate-500 hover:text-emerald-600 inline-block p-1"
-                      title="复制文件链接"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-                    <a
-                      href={file.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-emerald-600 hover:text-emerald-700 inline-block p-1"
-                      title="打开外链"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            <div className="rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 p-2 flex items-center justify-center min-h-[220px]">
+              {previewFile.type === 'video' || previewFile.name.match(/\.(mp4|webm)$/i) ? (
+                <video src={previewFile.url} controls className="max-h-[300px] w-full rounded-xl" />
+              ) : previewFile.type === 'audio' || previewFile.name.match(/\.(mp3|wav|flac)$/i) ? (
+                <audio src={previewFile.url} controls className="w-full" />
+              ) : previewFile.name.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? (
+                <img src={previewFile.url} alt={previewFile.name} className="max-h-[300px] object-contain rounded-xl" />
+              ) : (
+                <div className="text-center p-6 space-y-2">
+                  <FileText className="w-12 h-12 text-slate-300 mx-auto" />
+                  <p className="text-xs text-slate-500">文档或通用二进制文件，可直接下载或在站内文章中引用</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <div className="text-xs text-slate-400 font-mono">
+                {previewFile.provider} · {previewFile.size}
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => handleCopy(previewFile.url)}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs text-slate-700 font-semibold"
+                >
+                  复制直链
+                </button>
+                <button
+                  onClick={() => handleDownloadFile(previewFile)}
+                  className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs text-white font-semibold flex items-center space-x-1"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>下载文件</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

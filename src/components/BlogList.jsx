@@ -5,6 +5,8 @@ import {
   Edit3, LayoutGrid, Layers, AlignLeft, List
 } from 'lucide-react';
 
+import NewArticleModal from './NewArticleModal';
+
 export const BlogList = ({
   posts,
   setPosts,
@@ -12,21 +14,16 @@ export const BlogList = ({
   isAdmin,
   layout = 'grid',
   fontSize = 'standard',
+  cloudFiles = [],
+  bookmarks = [],
   t
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('全部');
   const [filterBookmarkedOnly, setFilterBookmarkedOnly] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [editingPost, setEditingPost] = useState(null);
   const [toast, setToast] = useState('');
-
-  // Form states for creating a new post
-  const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState('技术视界');
-  const [newSummary, setNewSummary] = useState('');
-  const [newContent, setNewContent] = useState('');
-  const [newTags, setNewTags] = useState('架构, 边缘计算');
-  const [newCover, setNewCover] = useState('');
 
   const categories = ['全部', '技术视界', '多云架构', '数字生活', '边缘计算'];
 
@@ -61,42 +58,15 @@ export const BlogList = ({
     }
   };
 
-  // Create Post
-  const handleCreatePost = (e) => {
-    e.preventDefault();
-    if (!newTitle.trim()) return;
-    const post = {
-      id: 'p-' + Date.now(),
-      title: newTitle.trim(),
-      category: newCategory,
-      summary: newSummary.trim() || newContent.slice(0, 100) + '...',
-      content: newContent.trim(),
-      date: new Date().toISOString().split('T')[0],
-      author: 'fox (站长)',
-      views: 1,
-      tags: newTags.split(',').map((t) => t.trim()).filter(Boolean),
-      cover: newCover.trim() || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80',
-      isBookmarked: false,
-      comments: []
-    };
-    setPosts([post, ...posts]);
-    setShowNewModal(false);
-    setNewTitle('');
-    setNewSummary('');
-    setNewContent('');
-    setNewCover('');
-    showToast('新博文发布成功！');
-  };
-
-  // Local image upload for cover
-  const handleCoverUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setNewCover(reader.result);
-      };
-      reader.readAsDataURL(file);
+  // Save new or edited post from NewArticleModal
+  const handleSaveArticle = (articleData) => {
+    if (editingPost) {
+      setPosts(posts.map((p) => (p.id === articleData.id ? { ...p, ...articleData } : p)));
+      showToast(`文章「${articleData.title}」已成功更新！`);
+      setEditingPost(null);
+    } else {
+      setPosts([articleData, ...posts]);
+      showToast(`文章「${articleData.title}」已成功发布！`);
     }
   };
 
@@ -458,113 +428,18 @@ export const BlogList = ({
         </div>
       )}
 
-      {/* New Post Modal */}
-      {showNewModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-xl w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-slate-800 flex items-center space-x-2">
-              <Edit3 className="w-5 h-5 text-emerald-600" />
-              <span>撰写新博文 (fox 博客创作中心)</span>
-            </h3>
-
-            <form onSubmit={handleCreatePost} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">文章标题</label>
-                <input
-                  type="text"
-                  required
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="标题..."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">专栏分类</label>
-                  <select
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
-                  >
-                    <option value="技术视界">技术视界</option>
-                    <option value="多云架构">多云架构</option>
-                    <option value="边缘计算">边缘计算</option>
-                    <option value="数字生活">数字生活</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">标签 (逗号分隔)</label>
-                  <input
-                    type="text"
-                    value={newTags}
-                    onChange={(e) => setNewTags(e.target.value)}
-                    placeholder="如: Cloudflare, D1, 腾讯云"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">文章封面 (URL 或本地上传)</label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={newCover}
-                    onChange={(e) => setNewCover(e.target.value)}
-                    placeholder="https://... 封面图片直链"
-                    className="flex-1 px-3 py-2 rounded-xl border border-slate-200"
-                  />
-                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 font-semibold">
-                    <span>本地上传</span>
-                    <input type="file" accept="image/*" onChange={handleCoverUpload} className="hidden" />
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">文章摘要</label>
-                <textarea
-                  rows={2}
-                  value={newSummary}
-                  onChange={(e) => setNewSummary(e.target.value)}
-                  placeholder="文章简要介绍..."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">正文内容 (Markdown / 纯文本)</label>
-                <textarea
-                  rows={8}
-                  required
-                  value={newContent}
-                  onChange={(e) => setNewContent(e.target.value)}
-                  placeholder="支持完整的 Markdown 格式..."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono"
-                />
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowNewModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-medium"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
-                >
-                  立即发布博文
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* New / Edit Article Modal */}
+      <NewArticleModal
+        isOpen={showNewModal || !!editingPost}
+        onClose={() => {
+          setShowNewModal(false);
+          setEditingPost(null);
+        }}
+        onSave={handleSaveArticle}
+        cloudFiles={cloudFiles}
+        bookmarks={bookmarks}
+        initialData={editingPost}
+      />
     </div>
   );
 };

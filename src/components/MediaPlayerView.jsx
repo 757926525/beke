@@ -1,10 +1,11 @@
 import React, { useState, useRef } from 'react';
 import {
   Play, Pause, RotateCcw, Volume2, Maximize, Smartphone, Monitor, Film, Music,
-  Upload, Trash2, Plus, Download, CheckCircle2, Video, Radio, Layers, Eye, RefreshCw
+  Upload, Trash2, Plus, Download, CheckCircle2, Video, Radio, Layers, Eye, RefreshCw,
+  FolderInput, HardDrive, Check
 } from 'lucide-react';
 
-export const MediaPlayerView = ({ isAdmin, t }) => {
+export const MediaPlayerView = ({ isAdmin, cloudFiles, setCloudFiles, t }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [aspectRatio, setAspectRatio] = useState('16:9'); // '16:9', '9:16', '4:3', '21:9', '1:1'
   const videoRef = useRef(null);
@@ -91,6 +92,27 @@ export const MediaPlayerView = ({ isAdmin, t }) => {
     setIsPlaying(false);
   };
 
+  // 1-Click transfer to in-site storage / NetDrive
+  const handleTransferToStorage = (m, e) => {
+    if (e) e.stopPropagation();
+    if (setCloudFiles) {
+      const newCloudFile = {
+        id: 'cf-transfer-' + Date.now(),
+        name: `${m.title}.${m.type === 'video' ? 'mp4' : 'mp3'}`,
+        url: m.url,
+        provider: '站内本地存储',
+        bucketKey: 'local',
+        size: m.size || '3.5 MB',
+        type: m.type,
+        uploadedAt: new Date().toISOString().split('T')[0]
+      };
+      setCloudFiles((prev) => [newCloudFile, ...prev]);
+      showToast(`已成功将「${m.title}」一键转存到站内存储池与调度中枢！`);
+    } else {
+      showToast(`已将「${m.title}」转存至站内媒体库！`);
+    }
+  };
+
   // Local media file upload
   const handleLocalMediaUpload = (e) => {
     const file = e.target.files?.[0];
@@ -119,13 +141,14 @@ export const MediaPlayerView = ({ isAdmin, t }) => {
         : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
       duration: '本地流',
       size: sizeStr,
-      date: new Date().toISOString().split('T')[0]
+      date: new Date().toISOString().split('T')[0],
+      isLocalUpload: true
     };
 
     setMediaList([newMediaItem, ...mediaList]);
     setActiveMedia(newMediaItem);
     if (isVideo) setAspectRatio('16:9');
-    showToast(`本地媒体「${file.name}」载入就绪并已切换播放！`);
+    showToast(`本地媒体「${file.name}」载入就绪！可点击下方按钮一键转存到站内。`);
   };
 
   // Delete media item
@@ -176,11 +199,10 @@ export const MediaPlayerView = ({ isAdmin, t }) => {
               白狐媒体影音中枢
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              原生适配 16:9 宽屏、9:16 手机短视频竖屏、21:9 影院超宽画幅与 4:3 复古比例；支持本地音视频上传、播放与完整管理。
+              原生适配 16:9 宽屏、9:16 手机短视频竖屏、21:9 影院超宽画幅与 4:3 复古比例；支持本地音视频上传、播放、一键转存到站内存储池。
             </p>
           </div>
 
-          {/* Action Buttons & Local Upload */}
           <div className="flex items-center space-x-3">
             <label className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-2 shadow-xs cursor-pointer transition-colors">
               <Upload className="w-3.5 h-3.5" />
@@ -208,36 +230,48 @@ export const MediaPlayerView = ({ isAdmin, t }) => {
             </div>
           </div>
 
-          {/* Aspect Ratio Switcher Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/80">
-            <span className="text-[10px] font-bold text-slate-400 px-2 uppercase">画幅调节:</span>
-            {[
-              { id: '16:9', label: '16:9 宽屏', icon: Monitor },
-              { id: '9:16', label: '9:16 竖屏短视频', icon: Smartphone },
-              { id: '21:9', label: '21:9 影院超宽', icon: Film },
-              { id: '4:3', label: '4:3 经典', icon: Layers },
-            ].map((ratio) => {
-              const Icon = ratio.icon;
-              const isActive = aspectRatio === ratio.id;
-              return (
-                <button
-                  key={ratio.id}
-                  onClick={() => setAspectRatio(ratio.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 ${
-                    isActive
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-                  }`}
-                >
-                  <Icon className="w-3 h-3" />
-                  <span>{ratio.label}</span>
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 1-click Transfer button */}
+            <button
+              onClick={(e) => handleTransferToStorage(activeMedia, e)}
+              className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold flex items-center space-x-1.5 shadow-xs"
+              title="转存到站内存储池与调度中枢"
+            >
+              <FolderInput className="w-3.5 h-3.5 text-emerald-600" />
+              <span>一键转存到站内</span>
+            </button>
+
+            {/* Aspect Ratio Switcher Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/80">
+              <span className="text-[10px] font-bold text-slate-400 px-2 uppercase">画幅调节:</span>
+              {[
+                { id: '16:9', label: '16:9 宽屏', icon: Monitor },
+                { id: '9:16', label: '9:16 竖屏短视频', icon: Smartphone },
+                { id: '21:9', label: '21:9 影院超宽', icon: Film },
+                { id: '4:3', label: '4:3 经典', icon: Layers },
+              ].map((ratio) => {
+                const Icon = ratio.icon;
+                const isActive = aspectRatio === ratio.id;
+                return (
+                  <button
+                    key={ratio.id}
+                    onClick={() => setAspectRatio(ratio.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 ${
+                      isActive
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                    }`}
+                  >
+                    <Icon className="w-3 h-3" />
+                    <span>{ratio.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Video Canvas Container with elegant frame and responsive ratio */}
+        {/* Video Canvas Container */}
         <div className="w-full flex justify-center py-2">
           <div
             className={`relative rounded-3xl overflow-hidden bg-slate-950 shadow-2xl transition-all duration-500 border border-slate-800 flex items-center justify-center ${
@@ -299,11 +333,11 @@ export const MediaPlayerView = ({ isAdmin, t }) => {
               白狐媒体节目库与文件管理 ({mediaList.length})
             </h3>
             <p className="text-xs text-slate-400">
-              包含白狐博客宣传片、竖屏全画幅短片、无损音乐与本地用户上传内容
+              包含白狐博客宣传片、竖屏短视频、无损音乐与用户本地上传，可一键转存至站内存储中枢
             </p>
           </div>
           <span className="text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full font-medium">
-            支持拖拽播放 / 本地多码率输出
+            支持一键转存到站内 · 多云调度互通
           </span>
         </div>
 
@@ -357,6 +391,13 @@ export const MediaPlayerView = ({ isAdmin, t }) => {
 
                   {/* Management Buttons */}
                   <div className="flex items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={(e) => handleTransferToStorage(m, e)}
+                      className="p-1 rounded-lg hover:bg-emerald-50 text-slate-500 hover:text-emerald-700"
+                      title="一键转存到站内"
+                    >
+                      <FolderInput className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={(e) => handleDownloadMedia(m, e)}
                       className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-emerald-600"
