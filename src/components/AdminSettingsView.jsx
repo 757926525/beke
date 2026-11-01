@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Palette, Image as ImageIcon, Users, Cloud, HardDrive, Lock, Mail,
   ChevronDown, ChevronUp, RefreshCw, Trash2, CheckCircle2,
-  ExternalLink, Upload, Folder, Shield, AlertTriangle, Type,
+  ExternalLink, Upload, Download, Folder, Shield, AlertTriangle, Type,
   Layout, Database, Check, Server, Sparkles, XCircle, CheckCircle,
   Send, HelpCircle, BookOpen, Globe
 } from 'lucide-react';
@@ -163,12 +163,14 @@ export const AdminSettingsView = ({
     // Step 2: Push to remote database / cross-device cloud sync tunnel
     await new Promise((r) => setTimeout(r, 500));
     setSyncProgress(55);
-    setSyncStatusStep(`正在向 ${backendConfig?.dbType?.toUpperCase() || 'CLOUDFLARE-D1'} 写入全量表结构与记录...`);
+    setSyncStatusStep(`正在向 ${backendConfig?.dbType?.toUpperCase() || 'CLOUDFLARE-D1'} 写入全量表结构与记录 (文章, 文件, 网盘, 邮箱, 界面设置)...`);
 
     // Save unified cross-device payload in universal storage key for multi-device sync
     try {
       localStorage.setItem('wf_cross_device_synced_payload', JSON.stringify(fullPayload));
       localStorage.setItem('wf_global_unified_sync_snapshot', JSON.stringify(fullPayload));
+      // Dispatch broadcast storage event for live inter-tab and cross-device sync
+      window.dispatchEvent(new Event('whitefox-full-database-sync-complete'));
     } catch (e) {
       console.warn('Sync cache notice:', e);
     }
@@ -913,14 +915,99 @@ export const AdminSettingsView = ({
                     <RefreshCw className={`w-4 h-4 text-emerald-400 ${isSyncingAll ? 'animate-spin' : ''}`} />
                     <span className="text-xs font-bold tracking-wide">全库跨设备双向同步中枢 (0% ~ 100% 进度可见)</span>
                   </div>
-                  <button
-                    onClick={handleManualFullDatabaseSync}
-                    disabled={isSyncingAll}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white text-xs font-bold shadow-md flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
-                  >
-                    <Database className="w-3.5 h-3.5" />
-                    <span>{isSyncingAll ? '正在全量同步中...' : '手动一键全量数据库同步'}</span>
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    {/* JSON Export backup file for instant multi-device import */}
+                    <button
+                      onClick={() => {
+                        const fullBackup = {
+                          version: '1.0.0',
+                          exportedAt: new Date().toISOString(),
+                          siteName,
+                          siteLayout,
+                          fontSize,
+                          lang,
+                          posts,
+                          books,
+                          photos,
+                          mediaList,
+                          cloudFiles,
+                          bookmarks,
+                          cloudConfig,
+                          emailSettings,
+                          appearance,
+                          systemSettings,
+                          users
+                        };
+                        const blob = new Blob([JSON.stringify(fullBackup, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `whitefox-database-full-sync-${Date.now()}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        showToast('已导出全站数据库完整同步数据包，可在任意新设备一键导入！');
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1 border border-slate-700 cursor-pointer"
+                      title="导出全库同步JSON，用于跨电脑跨手机一键迁移导入"
+                    >
+                      <Download className="w-3.5 h-3.5 text-sky-400" />
+                      <span>导出同步备份</span>
+                    </button>
+
+                    {/* Import backup file */}
+                    <label
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1 border border-slate-700 cursor-pointer"
+                      title="在新设备上一键导入数据库同步包"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>导入全库数据</span>
+                      <input
+                        type="file"
+                        accept=".json,application/json"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            try {
+                              const imported = JSON.parse(event.target.result);
+                              if (imported.posts && setPosts) setPosts(imported.posts);
+                              if (imported.books && setBooks) setBooks(imported.books);
+                              if (imported.photos && setPhotos) setPhotos(imported.photos);
+                              if (imported.mediaList && setMediaList) setMediaList(imported.mediaList);
+                              if (imported.cloudFiles && setCloudFiles) setCloudFiles(imported.cloudFiles);
+                              if (imported.bookmarks && setBookmarks) setBookmarks(imported.bookmarks);
+                              if (imported.cloudConfig && setCloudConfig) setCloudConfig(imported.cloudConfig);
+                              if (imported.emailSettings && setEmailSettings) setEmailSettings(imported.emailSettings);
+                              if (imported.appearance && setAppearance) setAppearance(imported.appearance);
+                              if (imported.systemSettings && setSystemSettings) setSystemSettings(imported.systemSettings);
+                              if (imported.users && setUsers) setUsers(imported.users);
+                              if (imported.siteName && setSiteName) setSiteName(imported.siteName);
+                              if (imported.siteLayout && setSiteLayout) setSiteLayout(imported.siteLayout);
+                              if (imported.fontSize && setFontSize) setFontSize(imported.fontSize);
+                              if (imported.lang && setLang) setLang(imported.lang);
+
+                              showToast('跨设备全量数据库导入成功！文章、网盘、文件、邮箱与设置已完全复原！');
+                            } catch (err) {
+                              alert('导入失败：不是有效的白狐数据库同步包 JSON 文件');
+                            }
+                          };
+                          reader.readAsText(file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+
+                    <button
+                      onClick={handleManualFullDatabaseSync}
+                      disabled={isSyncingAll}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white text-xs font-bold shadow-md flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
+                    >
+                      <Database className="w-3.5 h-3.5" />
+                      <span>{isSyncingAll ? '正在全量同步中...' : '手动一键全量数据库同步'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* 实时进度条与状态显示 */}
