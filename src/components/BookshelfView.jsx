@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import {
-  BookOpen, ChevronRight, ChevronLeft, Bookmark,
-  Maximize2, Minimize2, ArrowLeft, Eye, Sparkles, Smartphone,
-  BookMarked, Clock, Check, Download, Upload, Trash2, Edit3,
-  Plus, X, FileText, CheckCircle2, ShieldCheck, List, Layers,
-  RefreshCw, FileCode, ArrowRight
+  BookOpen, ChevronRight, ChevronLeft,
+  Maximize2, Minimize2, ArrowLeft,
+  BookMarked, Download, Upload, Trash2, Edit3,
+  Plus, X, FileText, CheckCircle2, List, Layers,
+  RefreshCw, Check, AlertCircle
 } from 'lucide-react';
-import { convertDocxToText, downloadFile } from '../services/documentConverter';
+import { downloadFile } from '../services/documentConverter';
 
 export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
   const [selectedBook, setSelectedBook] = useState(null);
@@ -18,13 +18,11 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
   // Admin / Upload / Edit Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
-  const [isDocxPreviewModalOpen, setIsDocxPreviewModalOpen] = useState(false);
-  const [docxPreviewData, setDocxPreviewData] = useState({ title: '', text: '', fileName: '' });
   const [editingBookId, setEditingBookId] = useState(null);
 
-  // Batch upload state
+  // Batch upload state (TXT only)
   const [batchFiles, setBatchFiles] = useState([]);
-  const [isConvertingBatch, setIsConvertingBatch] = useState(false);
+  const [isImportingBatch, setIsImportingBatch] = useState(false);
 
   const [bookForm, setBookForm] = useState({
     title: '',
@@ -62,7 +60,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
     }
   };
 
-  // Download book function
+  // Download book function (TXT format)
   const handleDownloadBook = (book, e) => {
     if (e) e.stopPropagation();
     try {
@@ -75,16 +73,8 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
         bookText += book.content;
       }
 
-      const blob = new Blob([bookText], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${book.title}_白狐书架.${book.format?.toLowerCase() || 'txt'}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      showToast(`《${book.title}》已成功开始离线下载！`);
+      downloadFile(bookText, `${book.title}_白狐书架.txt`, 'text/plain;charset=utf-8');
+      showToast(`《${book.title}》TXT 文件已成功开始下载！`);
     } catch (err) {
       console.error(err);
       showToast('电子书下载导出失败，请重试');
@@ -112,7 +102,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
     setEditingBookId(null);
     setBookForm({
       title: '',
-      author: '白狐书友',
+      author: '白狐居士',
       category: '技术专著',
       format: 'TXT',
       description: '',
@@ -136,7 +126,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
       title: book.title,
       author: book.author,
       category: book.category || '古典哲学',
-      format: book.format || 'TXT',
+      format: 'TXT',
       description: book.description || '',
       cover: book.cover || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
       content: allContent
@@ -144,84 +134,63 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
     setIsModalOpen(true);
   };
 
-  // Local file upload parser for TXT / EPUB / PDF / DOCX
-  const handleLocalFileUpload = async (e) => {
+  // Local file upload parser strictly for TXT format
+  const handleLocalFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const fileName = file.name.replace(/\.[^/.]+$/, '');
-    const extension = file.name.split('.').pop().toUpperCase();
-    const sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
-
-    if (extension === 'DOCX') {
-      try {
-        const text = await convertDocxToText(file);
-        setBookForm((prev) => ({
-          ...prev,
-          title: prev.title || fileName,
-          format: 'DOCX',
-          content: text
-        }));
-        showToast(`已成功解析 DOCX 文档并提取文字内容！`);
-        return;
-      } catch (err) {
-        console.error(err);
-        showToast('DOCX 文档解析失败，请检查文件格式');
-      }
+    if (!file.name.toLowerCase().endsWith('.txt') && !file.type.includes('text')) {
+      showToast('温馨提示：本藏书阁仅支持 TXT 格式纯文本图书！');
+      e.target.value = '';
+      return;
     }
 
+    const fileName = file.name.replace(/\.[^/.]+$/, '');
     const reader = new FileReader();
     reader.onload = (event) => {
       const rawText = event.target.result;
       setBookForm((prev) => ({
         ...prev,
         title: prev.title || fileName,
-        format: extension || 'TXT',
-        content: typeof rawText === 'string' ? rawText : `[${extension} 二进制电子书文件已载入，大小 ${sizeStr}]`
+        format: 'TXT',
+        content: typeof rawText === 'string' ? rawText : ''
       }));
-      showToast(`已成功读取本地文件「${file.name}」！`);
+      showToast(`已成功载入本地 TXT 文本「${file.name}」！`);
     };
-
-    if (file.type.includes('text') || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
-      reader.readAsText(file);
-    } else {
-      reader.readAsText(file.slice(0, 50000));
-    }
+    reader.readAsText(file);
   };
 
-  // Batch file select handler
+  // Batch file select handler (strictly TXT)
   const handleBatchFilesSelect = (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    setBatchFiles(files);
-    showToast(`已选入 ${files.length} 个待处理文档！`);
-  };
+    const allFiles = Array.from(e.target.files || []);
+    const validTxtFiles = allFiles.filter(f => f.name.toLowerCase().endsWith('.txt') || f.type.includes('text'));
 
-  // Convert and add batch files directly to bookshelf as TXT books
-  const handleProcessBatchConversion = async (convertToTxt = true) => {
-    if (!batchFiles.length) {
-      showToast('请先选择需要批量处理的文档！');
+    if (validTxtFiles.length < allFiles.length) {
+      showToast(`已过滤掉非 TXT 文件，仅支持导入 TXT 格式图书！`);
+    }
+
+    if (!validTxtFiles.length) {
+      showToast('请选择 .txt 格式纯文本文件！');
       return;
     }
 
-    setIsConvertingBatch(true);
+    setBatchFiles(validTxtFiles);
+    showToast(`已选入 ${validTxtFiles.length} 份 TXT 文本图书！`);
+  };
+
+  // Batch import TXT files directly to bookshelf
+  const handleProcessBatchImport = async () => {
+    if (!batchFiles.length) {
+      showToast('请先选择需要批量导入的 TXT 文档！');
+      return;
+    }
+
+    setIsImportingBatch(true);
     const newBooksToAdd = [];
 
     try {
       for (const file of batchFiles) {
-        const ext = file.name.split('.').pop().toLowerCase();
-        let content = '';
-
-        if (ext === 'docx') {
-          try {
-            content = await convertDocxToText(file);
-          } catch (e) {
-            content = `DOCX 文本提取异常: ${e.message}`;
-          }
-        } else {
-          content = await file.text();
-        }
-
+        const content = await file.text();
         const lines = content.split('\n');
         const chapters = [];
         let currentChapter = { title: '第一章 · 引言', content: '' };
@@ -246,14 +215,14 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
         const newBook = {
           id: `book-batch-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
           title: file.name.replace(/\.[^/.]+$/, ''),
-          author: '批量导入',
-          category: '文档库',
-          format: convertToTxt ? 'TXT' : ext.toUpperCase(),
+          author: '批量上架',
+          category: '经典文集',
+          format: 'TXT',
           size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
           progress: 0,
           totalChapters: chapters.length,
           cover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
-          description: `批量上传并${convertToTxt ? '一键转换为 TXT ' : ''}上架至书架的文档 (${file.name})。`,
+          description: `批量上传入库的纯文本电子书 (${file.name})。`,
           dateAdded: new Date().toISOString().split('T')[0],
           chapters: chapters
         };
@@ -262,80 +231,15 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
       }
 
       setBooks([...newBooksToAdd, ...books]);
-      showToast(`成功批量转换并上架 ${newBooksToAdd.length} 本图书至书架！`);
+      showToast(`成功批量上架 ${newBooksToAdd.length} 本 TXT 图书至书架！`);
       setBatchFiles([]);
       setIsBatchModalOpen(false);
     } catch (err) {
       console.error(err);
-      showToast('批量转换出现异常，请重试');
+      showToast('批量导入出现异常，请重试');
     } finally {
-      setIsConvertingBatch(false);
+      setIsImportingBatch(false);
     }
-  };
-
-  // Preview or convert single DOCX file
-  const handlePreviewDocxFile = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const text = await convertDocxToText(file);
-      setDocxPreviewData({
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        fileName: file.name,
-        text: text
-      });
-      setIsDocxPreviewModalOpen(true);
-    } catch (err) {
-      console.error(err);
-      showToast('DOCX 预览失败，无法解析文档');
-    }
-  };
-
-  // Save previewed DOCX text directly to bookshelf as TXT
-  const handleSaveDocxPreviewToBookshelf = () => {
-    if (!docxPreviewData.text) return;
-
-    const rawContent = docxPreviewData.text;
-    const lines = rawContent.split('\n');
-    const chapters = [];
-    let currentChapter = { title: '第一章 · 引言', content: '' };
-
-    lines.forEach((line) => {
-      if (line.startsWith('#') || line.startsWith('第') || line.startsWith('Chapter') || line.startsWith('卷')) {
-        if (currentChapter.content.trim()) {
-          chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
-        }
-        currentChapter = { title: line.replace(/^[#\s]+/, '').trim(), content: '' };
-      } else {
-        currentChapter.content += line + '\n';
-      }
-    });
-    if (currentChapter.content.trim()) {
-      chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
-    }
-    if (chapters.length === 0) {
-      chapters.push({ title: '全本正文', content: rawContent });
-    }
-
-    const newBook = {
-      id: `book-docx-${Date.now()}`,
-      title: docxPreviewData.title || 'DOCX 转换读物',
-      author: '格式转换',
-      category: 'DOCX转TXT',
-      format: 'TXT',
-      size: `${(new Blob([rawContent]).size / (1024 * 1024)).toFixed(2)} MB`,
-      progress: 0,
-      totalChapters: chapters.length,
-      cover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
-      description: `由 DOCX 文档「${docxPreviewData.fileName}」一键转换保存的纯文本图书。`,
-      dateAdded: new Date().toISOString().split('T')[0],
-      chapters: chapters
-    };
-
-    setBooks([newBook, ...books]);
-    setIsDocxPreviewModalOpen(false);
-    showToast(`《${newBook.title}》已一键转为 TXT 并存入白狐书架！`);
   };
 
   // Save book handler
@@ -377,7 +281,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
         title: bookForm.title,
         author: bookForm.author || '佚名',
         category: bookForm.category,
-        format: bookForm.format,
+        format: 'TXT',
         description: bookForm.description,
         cover: bookForm.cover,
         chapters: chapters,
@@ -391,17 +295,17 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
         title: bookForm.title,
         author: bookForm.author || '白狐藏书',
         category: bookForm.category,
-        format: bookForm.format,
-        size: `${(Math.random() * 3 + 0.5).toFixed(1)} MB`,
+        format: 'TXT',
+        size: `${(new Blob([rawContent]).size / (1024 * 1024)).toFixed(2)} MB`,
         progress: 0,
         totalChapters: chapters.length,
         cover: bookForm.cover || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
-        description: bookForm.description || '由管理员本地上传导入的藏书。',
+        description: bookForm.description || '由管理员本地上传导入的纯文本藏书。',
         dateAdded: new Date().toISOString().split('T')[0],
         chapters: chapters
       };
       setBooks([newBook, ...books]);
-      showToast(`成功将《${newBook.title}》上架到白狐书架！`);
+      showToast(`成功将 TXT 图书《${newBook.title}》上架到白狐书架！`);
     }
 
     setIsModalOpen(false);
@@ -423,7 +327,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
             : 'space-y-6'
         }`}
       >
-        {/* Reader Top Bar (Preserves Mobile Notch & avoids overlap) */}
+        {/* Reader Top Bar */}
         <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between sticky top-2 z-20">
           <button
             onClick={() => {
@@ -455,7 +359,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
             <button
               onClick={(e) => handleDownloadBook(selectedBook, e)}
               className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 flex items-center space-x-1 text-xs"
-              title="下载离线版本"
+              title="下载 TXT 离线版本"
             >
               <Download className="w-4 h-4" />
             </button>
@@ -534,7 +438,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
             <h1 className="text-xl sm:text-2xl font-bold text-slate-800">{chapter.title}</h1>
             <div className="flex items-center space-x-4 text-xs text-slate-400 mt-2">
               <span>作者: {selectedBook.author}</span>
-              <span>格式: {selectedBook.format || 'TXT'}</span>
+              <span>格式: 纯文本 TXT</span>
             </div>
           </div>
 
@@ -587,37 +491,25 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
           <div>
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold mb-2">
               <BookOpen className="w-3.5 h-3.5" />
-              <span>墨香书阁 · 沉浸式藏书与电子书管理</span>
+              <span>墨香书阁 · 纯文本阅读与书库管理</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
               书架精选专区
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              汇聚技术专著与古籍文学，支持本地电子书上传、离线打包下载，以及管理员一键编辑与图书下架。
+              汇聚技术专著与古籍文学，仅支持 TXT 格式纯文本图书。提供纯净沉浸式阅读与离线下载。
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            {/* Batch Document Upload */}
+            {/* Batch TXT Upload */}
             <button
               onClick={() => setIsBatchModalOpen(true)}
-              className="px-3.5 py-2.5 rounded-2xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors"
+              className="px-3.5 py-2.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors"
             >
-              <Layers className="w-4 h-4 text-teal-600" />
-              <span>批量上传文档</span>
+              <Layers className="w-4 h-4 text-emerald-600" />
+              <span>批量上传 TXT</span>
             </button>
-
-            {/* Quick DOCX preview & conversion */}
-            <label className="px-3.5 py-2.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer">
-              <FileCode className="w-4 h-4 text-emerald-600" />
-              <span>查看/转换 DOCX</span>
-              <input
-                type="file"
-                accept=".docx"
-                onChange={handlePreviewDocxFile}
-                className="hidden"
-              />
-            </label>
 
             {isAdmin && (
               <button
@@ -625,33 +517,24 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
                 className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                <span>上传/新增电子书</span>
+                <span>新增/上传 TXT 电子书</span>
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* Quick Document Converter Banner on Home */}
-      <div className="rounded-3xl bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white p-5 sm:p-6 shadow-md border border-emerald-700/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="inline-flex items-center space-x-1.5 text-xs text-emerald-300 font-semibold">
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>智能文档引擎 · 批量处理 & DOCX 转 TXT</span>
-          </div>
-          <h2 className="text-base sm:text-lg font-bold">书架首页多格式文档中枢</h2>
-          <p className="text-xs text-emerald-100/80 max-w-2xl">
-            支持一键批量选择 DOCX / TXT / MD 文档转换为结构化白狐纯文本图书，智能拆分章节，直接上架墨香书阁，无需后端服务。
-          </p>
+      {/* Format Notice Banner */}
+      <div className="rounded-2xl bg-emerald-50/80 border border-emerald-200/80 p-4 flex items-center justify-between text-xs text-emerald-900">
+        <div className="flex items-center space-x-2.5">
+          <AlertCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="font-medium">
+            书架标准格式说明：本藏书阁全面采用轻量化纯文本规范，<strong>仅支持 TXT 格式</strong>，以保证手机和桌面端极致的排版加载速度与章节解析兼容性。
+          </span>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsBatchModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-white text-emerald-900 font-bold text-xs hover:bg-emerald-50 transition-colors shadow-xs"
-          >
-            打开批量文档转换器 →
-          </button>
-        </div>
+        <span className="hidden sm:inline-block px-2.5 py-1 rounded-lg bg-emerald-200/60 font-mono text-[11px] font-bold text-emerald-800">
+          Format: .TXT ONLY
+        </span>
       </div>
 
       {/* Book Grid */}
@@ -669,7 +552,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
                 <div className="absolute top-3 left-3 px-2 py-1 rounded-full bg-black/60 backdrop-blur-xs text-[10px] text-white font-mono">
-                  {book.format || 'EPUB'} · {book.size || '1.0 MB'}
+                  TXT · {book.size || '1.0 MB'}
                 </div>
                 <div className="absolute top-3 right-3 px-2 py-1 rounded-full bg-emerald-600 text-[10px] text-white font-mono">
                   {book.chapters?.length || book.totalChapters || 1} 章节
@@ -721,7 +604,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
               <button
                 onClick={(e) => handleDownloadBook(book, e)}
                 className="px-3 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-emerald-700 text-xs font-semibold flex items-center justify-center transition-colors"
-                title="导出下载到本地"
+                title="导出下载 TXT 到本地"
               >
                 <Download className="w-3.5 h-3.5" />
               </button>
@@ -730,14 +613,14 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
         ))}
       </div>
 
-      {/* Batch Document Upload Modal */}
+      {/* Batch TXT Upload Modal */}
       {isBatchModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full border border-slate-200 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center space-x-2 text-slate-800 font-bold text-base">
                 <Layers className="w-5 h-5 text-emerald-600" />
-                <span>批量上传文档 & 自动转存书架</span>
+                <span>批量上传 TXT 文档至书架</span>
               </div>
               <button
                 onClick={() => {
@@ -754,19 +637,19 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
               <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-2">
                 <FileText className="w-8 h-8 text-emerald-600 mx-auto" />
                 <p className="font-bold text-slate-800">
-                  支持同时选择多份 DOCX / TXT / MD / EPUB 格式文档
+                  支持同时选择多份纯文本 TXT 格式图书（仅支持 TXT 格式）
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  文档将自动解析标题与章节，批量转换为标准白狐电子书存入墨香书阁。
+                  系统将自动解析章节目录结构（以第X章或#作为章节标志），批量完成书籍上架。
                 </p>
                 <div>
                   <label className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-xs">
                     <Upload className="w-4 h-4" />
-                    <span>选择多个文件</span>
+                    <span>选择多个 TXT 文件</span>
                     <input
                       type="file"
                       multiple
-                      accept=".docx,.txt,.md,.epub"
+                      accept=".txt,text/plain"
                       onChange={handleBatchFilesSelect}
                       className="hidden"
                     />
@@ -777,7 +660,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
               {batchFiles.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between font-semibold text-slate-700">
-                    <span>已选文件列表 ({batchFiles.length})</span>
+                    <span>已选 TXT 文件 ({batchFiles.length})</span>
                     <button
                       onClick={() => setBatchFiles([])}
                       className="text-rose-500 hover:text-rose-700 text-[11px]"
@@ -789,7 +672,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
                     {batchFiles.map((file, idx) => (
                       <div key={idx} className="p-2.5 flex items-center justify-between text-xs">
                         <div className="flex items-center space-x-2 truncate">
-                          <FileCode className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
                           <span className="truncate font-medium text-slate-700">{file.name}</span>
                         </div>
                         <span className="text-[11px] text-slate-400 font-mono shrink-0 ml-2">
@@ -814,19 +697,19 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
                 </button>
                 <button
                   type="button"
-                  disabled={batchFiles.length === 0 || isConvertingBatch}
-                  onClick={() => handleProcessBatchConversion(true)}
+                  disabled={batchFiles.length === 0 || isImportingBatch}
+                  onClick={handleProcessBatchImport}
                   className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold shadow-xs flex items-center space-x-1.5"
                 >
-                  {isConvertingBatch ? (
+                  {isImportingBatch ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>正在批量转换与导入...</span>
+                      <span>正在批量上架入库...</span>
                     </>
                   ) : (
                     <>
                       <Layers className="w-4 h-4" />
-                      <span>一键批量转为 TXT 并入库 ({batchFiles.length})</span>
+                      <span>确认批量入库 ({batchFiles.length})</span>
                     </>
                   )}
                 </button>
@@ -836,62 +719,14 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
         </div>
       )}
 
-      {/* DOCX Preview & 1-Click TXT Bookshelf Save Modal */}
-      {isDocxPreviewModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-2xl w-full border border-slate-200 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
-              <div className="flex items-center space-x-2 text-slate-800 font-bold text-base">
-                <FileCode className="w-5 h-5 text-emerald-600" />
-                <span className="truncate">DOCX 解析预览：{docxPreviewData.fileName}</span>
-              </div>
-              <button
-                onClick={() => setIsDocxPreviewModalOpen(false)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto border border-slate-200 rounded-2xl p-4 bg-slate-50 font-mono text-xs whitespace-pre-line text-slate-700 leading-relaxed">
-              {docxPreviewData.text || '（空文档）'}
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between shrink-0 text-xs">
-              <span className="text-slate-400">
-                字符总数: {docxPreviewData.text.length} 字
-              </span>
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => downloadFile(docxPreviewData.text, `${docxPreviewData.title}.txt`, 'text/plain;charset=utf-8')}
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium flex items-center space-x-1"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>下载为 TXT 文件</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveDocxPreviewToBookshelf}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center space-x-1.5 shadow-xs"
-                >
-                  <BookOpen className="w-4 h-4" />
-                  <span>一键转换为 TXT 保存到书架</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Book Upload / Edit Modal for Admins */}
+      {/* Book Upload / Edit Modal for Admins (TXT only) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full border border-slate-200 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center space-x-2 text-emerald-800 font-bold text-base">
                 <BookMarked className="w-5 h-5 text-emerald-600" />
-                <span>{editingBookId ? '管理员编辑电子书' : '上传/新增电子书到白狐书架'}</span>
+                <span>{editingBookId ? '管理员编辑电子书 (仅支持 TXT)' : '上传/新增 TXT 电子书'}</span>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -902,23 +737,23 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
             </div>
 
             <form onSubmit={handleSaveBook} className="space-y-4 text-xs">
-              {/* Local File Selector */}
+              {/* Local TXT File Selector */}
               <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-emerald-900">从本地快速上传电子书 (TXT / EPUB / PDF / MD)</span>
+                  <span className="font-bold text-emerald-900">快速读取本地 TXT 文件</span>
                   <label className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer font-semibold flex items-center space-x-1 shadow-xs">
                     <Upload className="w-3.5 h-3.5" />
-                    <span>选择本地文件</span>
+                    <span>选择本地 TXT</span>
                     <input
                       type="file"
-                      accept=".txt,.md,.epub,.pdf"
+                      accept=".txt,text/plain"
                       onChange={handleLocalFileUpload}
                       className="hidden"
                     />
                   </label>
                 </div>
                 <p className="text-[11px] text-emerald-700">
-                  支持自动提取文本标题、分章节结构并生成多章节沉浸式阅读器内容。
+                  支持自动解析标题、提取分章节目录，构建原汁原味的沉浸式阅读器。
                 </p>
               </div>
 
@@ -962,17 +797,13 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-bold mb-1">格式格式 (Format)</label>
-                  <select
-                    value={bookForm.format}
-                    onChange={(e) => setBookForm({ ...bookForm, format: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
-                  >
-                    <option value="EPUB">EPUB</option>
-                    <option value="PDF">PDF</option>
-                    <option value="TXT">TXT</option>
-                    <option value="MOBI">MOBI</option>
-                  </select>
+                  <label className="block text-slate-600 font-bold mb-1">电子书格式</label>
+                  <input
+                    type="text"
+                    disabled
+                    value="纯文本 TXT 格式 (规范标准)"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-100 text-slate-500 font-mono text-[11px]"
+                  />
                 </div>
               </div>
 
@@ -1006,7 +837,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
                   rows={6}
                   value={bookForm.content}
                   onChange={(e) => setBookForm({ ...bookForm, content: e.target.value })}
-                  placeholder="可直接粘贴全文，或通过上方选择本地文件导入..."
+                  placeholder="可直接粘贴纯文本 TXT 内容，或通过上方选择本地 TXT 文件导入..."
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono text-[11px]"
                 />
               </div>
@@ -1023,7 +854,7 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs"
                 >
-                  {editingBookId ? '保存图书修改' : '确认上架图书'}
+                  {editingBookId ? '保存图书修改' : '确认上架 TXT 图书'}
                 </button>
               </div>
             </form>
@@ -1033,3 +864,4 @@ export const BookshelfView = ({ books, setBooks, isAdmin, t }) => {
     </div>
   );
 };
+export default BookshelfView;

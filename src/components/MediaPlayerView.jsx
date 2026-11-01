@@ -5,78 +5,32 @@ import {
   FolderInput, HardDrive, Check
 } from 'lucide-react';
 
-export const MediaPlayerView = ({ isAdmin, cloudFiles, setCloudFiles, t }) => {
+export const MediaPlayerView = ({
+  isAdmin,
+  mediaList,
+  setMediaList,
+  cloudFiles,
+  setCloudFiles,
+  t
+}) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [aspectRatio, setAspectRatio] = useState('16:9'); // '16:9', '9:16', '4:3', '21:9', '1:1'
   const videoRef = useRef(null);
   const audioRef = useRef(null);
   const [toastMessage, setToastMessage] = useState('');
 
-  // Media Library State
-  const [mediaList, setMediaList] = useState([
-    {
-      id: 'm-promo-1',
-      title: '白狐博客宣传片 · 竖屏与横屏全适配演示',
-      desc: '东方美学设计，全平台响应式与边缘计算多云博客技术宣传片',
-      type: 'video',
-      aspect: '16:9',
-      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-      poster: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
-      duration: '09:56',
-      size: '12.4 MB',
-      date: '2025-05-18'
-    },
-    {
-      id: 'm-promo-2',
-      title: '极速边缘 · 手机短视频竖屏演示 (9:16 沉浸画幅)',
-      desc: '专为移动端小红书 / 抖音 / 视频号打造的 9:16 全屏沉浸体验',
-      type: 'video',
-      aspect: '9:16',
-      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-      poster: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80',
-      duration: '00:15',
-      size: '2.8 MB',
-      date: '2025-05-18'
-    },
-    {
-      id: 'm-promo-3',
-      title: '东方风韵 · 宽荧幕电影感演示 (21:9 超宽屏)',
-      desc: '青丘古峰与数字空间，21:9 影院级超宽视角',
-      type: 'video',
-      aspect: '21:9',
-      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-      poster: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80',
-      duration: '00:15',
-      size: '3.1 MB',
-      date: '2025-05-17'
-    },
-    {
-      id: 'm-audio-1',
-      title: '青丘幽引 · 东方禅意氛围原声曲',
-      desc: '高品质无损音频，古筝、初雪与山涧风声相伴研墨',
-      type: 'audio',
-      aspect: '1:1',
-      url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-      poster: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
-      duration: '06:12',
-      size: '5.8 MB',
-      date: '2025-05-15'
-    },
-    {
-      id: 'm-audio-2',
-      title: '白狐技术电台: 从单体到多云全球边缘架构',
-      desc: '白狐博客开发者访谈播客第一期：Cloudflare + 腾讯云协同实践',
-      type: 'audio',
-      aspect: '1:1',
-      url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-      poster: 'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?auto=format&fit=crop&w=600&q=80',
-      duration: '07:05',
-      size: '6.5 MB',
-      date: '2025-05-16'
-    }
-  ]);
-
-  const [activeMedia, setActiveMedia] = useState(mediaList[0]);
+  const [activeMedia, setActiveMedia] = useState(mediaList[0] || {
+    id: 'm-default',
+    title: '白狐博客宣传片',
+    desc: '东方美学设计，全平台响应式与边缘计算多云博客技术宣传片',
+    type: 'video',
+    aspect: '16:9',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    poster: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
+    duration: '09:56',
+    size: '12.4 MB',
+    date: '2025-05-18'
+  });
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -113,7 +67,7 @@ export const MediaPlayerView = ({ isAdmin, cloudFiles, setCloudFiles, t }) => {
     }
   };
 
-  // Local media file upload
+  // Local media file upload - converts to Base64 data URL for small files, or object URL with localStorage sync
   const handleLocalMediaUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -126,29 +80,58 @@ export const MediaPlayerView = ({ isAdmin, cloudFiles, setCloudFiles, t }) => {
       return;
     }
 
-    const objectUrl = URL.createObjectURL(file);
     const sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 
-    const newMediaItem = {
-      id: `media-${Date.now()}`,
-      title: file.name.replace(/\.[^/.]+$/, ''),
-      desc: `本地上传的${isVideo ? '视频' : '音频'}媒体文件 (${sizeStr})`,
-      type: isVideo ? 'video' : 'audio',
-      aspect: isVideo ? '16:9' : '1:1',
-      url: objectUrl,
-      poster: isVideo
-        ? 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80'
-        : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
-      duration: '本地流',
-      size: sizeStr,
-      date: new Date().toISOString().split('T')[0],
-      isLocalUpload: true
+    // If file is reasonably sized, read as data URL for permanent persistence
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target.result;
+      const newMediaItem = {
+        id: `media-${Date.now()}`,
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        desc: `本地上传的${isVideo ? '视频' : '音频'}媒体文件 (${sizeStr})`,
+        type: isVideo ? 'video' : 'audio',
+        aspect: isVideo ? '16:9' : '1:1',
+        url: dataUrl,
+        poster: isVideo
+          ? 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80'
+          : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
+        duration: '本地流',
+        size: sizeStr,
+        date: new Date().toISOString().split('T')[0],
+        isLocalUpload: true
+      };
+
+      const updated = [newMediaItem, ...mediaList];
+      setMediaList(updated);
+      setActiveMedia(newMediaItem);
+      if (isVideo) setAspectRatio('16:9');
+      showToast(`本地媒体「${file.name}」已持久保存入库，刷新页面不丢失！`);
     };
 
-    setMediaList([newMediaItem, ...mediaList]);
-    setActiveMedia(newMediaItem);
-    if (isVideo) setAspectRatio('16:9');
-    showToast(`本地媒体「${file.name}」载入就绪！可点击下方按钮一键转存到站内。`);
+    reader.onerror = () => {
+      // Fallback to object URL
+      const objectUrl = URL.createObjectURL(file);
+      const fallbackItem = {
+        id: `media-${Date.now()}`,
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        desc: `本地上传的${isVideo ? '视频' : '音频'}媒体文件 (${sizeStr})`,
+        type: isVideo ? 'video' : 'audio',
+        aspect: isVideo ? '16:9' : '1:1',
+        url: objectUrl,
+        poster: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80',
+        duration: '本地流',
+        size: sizeStr,
+        date: new Date().toISOString().split('T')[0],
+        isLocalUpload: true
+      };
+      setMediaList([fallbackItem, ...mediaList]);
+      setActiveMedia(fallbackItem);
+      showToast(`本地媒体「${file.name}」载入就绪！`);
+    };
+
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   // Delete media item
@@ -193,20 +176,20 @@ export const MediaPlayerView = ({ isAdmin, cloudFiles, setCloudFiles, t }) => {
           <div>
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold mb-2">
               <Film className="w-3.5 h-3.5" />
-              <span>全画幅多媒体影视厅 · 宣传片与本地音视频管理</span>
+              <span>全画幅多媒体影视厅 · 持久化媒体中枢</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
               白狐媒体影音中枢
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              原生适配 16:9 宽屏、9:16 手机短视频竖屏、21:9 影院超宽画幅与 4:3 复古比例；支持本地音视频上传、播放、一键转存到站内存储池。
+              原生适配 16:9 宽屏、9:16 手机短视频竖屏、21:9 影院超宽画幅与 4:3 复古比例；上传音视频持久化保存，页面刷新不丢失。
             </p>
           </div>
 
           <div className="flex items-center space-x-3">
             <label className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-2 shadow-xs cursor-pointer transition-colors">
               <Upload className="w-3.5 h-3.5" />
-              <span>上传本地音视频</span>
+              <span>上传本地音视频 (持久保存)</span>
               <input
                 type="file"
                 accept="video/*,audio/*"
@@ -234,7 +217,7 @@ export const MediaPlayerView = ({ isAdmin, cloudFiles, setCloudFiles, t }) => {
             {/* 1-click Transfer button */}
             <button
               onClick={(e) => handleTransferToStorage(activeMedia, e)}
-              className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold flex items-center space-x-1.5 shadow-xs"
+              className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
               title="转存到站内存储池与调度中枢"
             >
               <FolderInput className="w-3.5 h-3.5 text-emerald-600" />
@@ -256,7 +239,7 @@ export const MediaPlayerView = ({ isAdmin, cloudFiles, setCloudFiles, t }) => {
                   <button
                     key={ratio.id}
                     onClick={() => setAspectRatio(ratio.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 cursor-pointer ${
                       isActive
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
@@ -333,11 +316,11 @@ export const MediaPlayerView = ({ isAdmin, cloudFiles, setCloudFiles, t }) => {
               白狐媒体节目库与文件管理 ({mediaList.length})
             </h3>
             <p className="text-xs text-slate-400">
-              包含白狐博客宣传片、竖屏短视频、无损音乐与用户本地上传，可一键转存至站内存储中枢
+              数据自动持久化到本地存储，页面刷新不丢失；支持一键转存至站内存储中枢
             </p>
           </div>
           <span className="text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full font-medium">
-            支持一键转存到站内 · 多云调度互通
+            全域本地持久化已激活 · 实时同步
           </span>
         </div>
 
@@ -393,21 +376,21 @@ export const MediaPlayerView = ({ isAdmin, cloudFiles, setCloudFiles, t }) => {
                   <div className="flex items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={(e) => handleTransferToStorage(m, e)}
-                      className="p-1 rounded-lg hover:bg-emerald-50 text-slate-500 hover:text-emerald-700"
+                      className="p-1 rounded-lg hover:bg-emerald-50 text-slate-500 hover:text-emerald-700 cursor-pointer"
                       title="一键转存到站内"
                     >
                       <FolderInput className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={(e) => handleDownloadMedia(m, e)}
-                      className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-emerald-600"
+                      className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-emerald-600 cursor-pointer"
                       title="下载本地媒体"
                     >
                       <Download className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={(e) => handleDeleteMedia(m.id, m.title, e)}
-                      className="p-1 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600"
+                      className="p-1 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 cursor-pointer"
                       title="删除此媒体"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -422,3 +405,4 @@ export const MediaPlayerView = ({ isAdmin, cloudFiles, setCloudFiles, t }) => {
     </div>
   );
 };
+export default MediaPlayerView;

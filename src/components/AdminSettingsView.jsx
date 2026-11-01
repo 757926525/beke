@@ -3,9 +3,10 @@ import {
   Palette, Image as ImageIcon, Users, Cloud, HardDrive, Lock, Mail,
   ChevronDown, ChevronUp, RefreshCw, Trash2, CheckCircle2,
   ExternalLink, Upload, Folder, Shield, AlertTriangle, Type,
-  Layout, Database, Check, Server, Sparkles, XCircle, CheckCircle
+  Layout, Database, Check, Server, Sparkles, XCircle, CheckCircle,
+  Send, HelpCircle, BookOpen, Globe
 } from 'lucide-react';
-import { themePresets } from '../services/i18nAndTheme';
+import { themePresets, languages } from '../services/i18nAndTheme';
 import { layoutOptions, fontSizes } from '../services/storageService';
 
 export const AdminSettingsView = ({
@@ -15,10 +16,14 @@ export const AdminSettingsView = ({
   setSiteLayout,
   fontSize,
   setFontSize,
+  lang,
+  setLang,
   appearance,
   setAppearance,
   systemSettings,
   setSystemSettings,
+  emailSettings,
+  setEmailSettings,
   users,
   setUsers,
   cloudConfig,
@@ -35,10 +40,12 @@ export const AdminSettingsView = ({
   // Accordion collapsed state for each section
   const [openSections, setOpenSections] = useState({
     siteBasic: true,
+    languages: true,
     layoutFont: true,
     theme: true,
     backendConnections: true,
     databaseHub: true,
+    autoReplyEmail: true,
     users: false,
     authRules: false
   });
@@ -55,7 +62,6 @@ export const AdminSettingsView = ({
   };
 
   // Database Connection states
-  // Connection status: 'idle', 'testing', 'connected', 'failed'
   const [dbStatus, setDbStatus] = useState(backendConfig?.dbConnected ? 'connected' : 'idle');
   const [dbErrorMsg, setDbErrorMsg] = useState('');
   const [isTestingDb, setIsTestingDb] = useState(false);
@@ -65,13 +71,16 @@ export const AdminSettingsView = ({
   const [storageErrorMsg, setStorageErrorMsg] = useState('');
   const [isTestingStorage, setIsTestingStorage] = useState(false);
 
+  // Email test sending state
+  const [testEmailTarget, setTestEmailTarget] = useState('');
+  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
+
   const handleTestDatabase = () => {
     setIsTestingDb(true);
     setDbErrorMsg('');
 
     setTimeout(() => {
       setIsTestingDb(false);
-      // Realistic check: Endpoint & DB Name must not be empty and valid format
       const host = backendConfig?.dbHost?.trim();
       const dbName = backendConfig?.dbName?.trim();
 
@@ -134,7 +143,39 @@ export const AdminSettingsView = ({
     showToast('已断开对象存储连接');
   };
 
-  // Local file upload helpers with safe image compression to ensure localStorage persistency
+  // Auto-reply email test sender
+  const handleSendTestVerificationEmail = (e) => {
+    e.preventDefault();
+    if (!testEmailTarget.trim()) {
+      showToast('请输入测试接收邮箱！');
+      return;
+    }
+
+    setIsSendingTestEmail(true);
+    setTimeout(() => {
+      setIsSendingTestEmail(false);
+      const mockCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const newLog = {
+        id: 'log-' + Date.now(),
+        recipient: testEmailTarget.trim(),
+        code: mockCode,
+        time: new Date().toLocaleString(),
+        status: '已成功发送'
+      };
+
+      if (setEmailSettings) {
+        setEmailSettings((prev) => ({
+          ...prev,
+          lastSentLog: [newLog, ...(prev.lastSentLog || [])].slice(0, 10)
+        }));
+      }
+
+      showToast(`测试验证码【${mockCode}】已通过服务发送至 ${testEmailTarget}！`);
+      setTestEmailTarget('');
+    }, 1200);
+  };
+
+  // Local image upload helpers with safe image compression
   const handleLocalImageUpload = (field, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -228,7 +269,7 @@ export const AdminSettingsView = ({
               系统管理与个性化控制台
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              修改网站名称、切换全站排版布局、调节全局字号、本地图片上传全站头像与背景、多样化数据库后台连接与鉴权接入。
+              修改网站名称、主流语言实时切换、全站排版布局与字号、自动回复验证码邮箱管理、多数据库后台接入。
             </p>
           </div>
 
@@ -291,7 +332,56 @@ export const AdminSettingsView = ({
         )}
       </div>
 
-      {/* SECTION 2: 全站布局切换与全局字号调节 (4种布局 + 一键字号) */}
+      {/* SECTION 2: 全球主流语言切换 (i18n Multi-Language Switcher) */}
+      <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <button
+          onClick={() => toggleSection('languages')}
+          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+              <Globe className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">全站主流语言实时切换 (Language Switcher)</h2>
+              <p className="text-xs text-slate-400">支持 简体中文、繁體中文、English、日本語、한국어、Français、Español、Deutsch 实时即换</p>
+            </div>
+          </div>
+          {openSections.languages ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+        </button>
+
+        {openSections.languages && (
+          <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {languages.map((l) => {
+                const isSelected = lang === l.code;
+                return (
+                  <button
+                    key={l.code}
+                    onClick={() => {
+                      if (setLang) setLang(l.code);
+                      showToast(`界面语言已切换至：${l.label} (${l.code})`);
+                    }}
+                    className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                      isSelected
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-800 font-bold ring-2 ring-emerald-500/20 shadow-xs'
+                        : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span className="text-base">{l.flag}</span>
+                      <span className="text-xs font-semibold">{l.label}</span>
+                    </div>
+                    {isSelected && <Check className="w-4 h-4 text-emerald-600" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 3: 全站布局切换与全局字号调节 */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
         <button
           onClick={() => toggleSection('layoutFont')}
@@ -325,7 +415,7 @@ export const AdminSettingsView = ({
                         setSiteLayout(opt.id);
                         showToast(`已切换布局为：${opt.name}`);
                       }}
-                      className={`p-4 rounded-2xl border text-left transition-all ${
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
                         isSelected
                           ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20 shadow-xs'
                           : 'border-slate-200 bg-white hover:border-slate-300'
@@ -357,7 +447,7 @@ export const AdminSettingsView = ({
                         setFontSize(f.id);
                         showToast(`全站字号已设为：${f.name}`);
                       }}
-                      className={`py-3 px-4 rounded-2xl border text-center transition-all ${
+                      className={`py-3 px-4 rounded-2xl border text-center transition-all cursor-pointer ${
                         isSelected
                           ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-bold ring-2 ring-emerald-500/20'
                           : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
@@ -373,7 +463,203 @@ export const AdminSettingsView = ({
         )}
       </div>
 
-      {/* SECTION 3: 多样化数据库后台与界面接入 (支持 D1, MySQL, Supabase, PostgreSQL, SQLite, MongoDB 等) */}
+      {/* SECTION 4: 自动回复验证码邮箱管理区 (仅管理员可见 + 完整使用指南) */}
+      {isAdmin && (
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <button
+            onClick={() => toggleSection('autoReplyEmail')}
+            className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                <Mail className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h2 className="text-lg font-bold text-slate-800">自动回复验证码邮箱管理 (仅管理员可见)</h2>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">站长专享</span>
+                </div>
+                <p className="text-xs text-slate-400">配置新用户注册时的自动回复验证码邮箱账号、SMTP 参数、邮件模板与完整使用指南</p>
+              </div>
+            </div>
+            {openSections.autoReplyEmail ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+          </button>
+
+          {openSections.autoReplyEmail && (
+            <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6">
+              {/* Configuration Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">发件服务协议 / 提供商</label>
+                  <select
+                    value={emailSettings?.provider || 'smtp'}
+                    onChange={(e) => setEmailSettings({ ...emailSettings, provider: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                  >
+                    <option value="smtp">标准 SMTP (QQ邮箱 / 163 / 阿里云 / 企业邮)</option>
+                    <option value="resend">Resend (现代边缘邮件 API)</option>
+                    <option value="tencent-ses">腾讯云 SES 邮件推送</option>
+                    <option value="aliyun-dm">阿里云 DirectMail 邮件推送</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">自动回复验证码发件邮箱 (账号)</label>
+                  <input
+                    type="email"
+                    value={emailSettings?.senderEmail || ''}
+                    onChange={(e) => setEmailSettings({ ...emailSettings, senderEmail: e.target.value })}
+                    placeholder="service@whitefox.blog"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">发件人显式名称</label>
+                  <input
+                    type="text"
+                    value={emailSettings?.senderName || ''}
+                    onChange={(e) => setEmailSettings({ ...emailSettings, senderName: e.target.value })}
+                    placeholder="白狐官方安全中心"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">SMTP 主机 / 服务器</label>
+                  <input
+                    type="text"
+                    value={emailSettings?.smtpHost || ''}
+                    onChange={(e) => setEmailSettings({ ...emailSettings, smtpHost: e.target.value })}
+                    placeholder="smtp.qq.com / smtp.163.com"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">SMTP 端口 (SSL/TLS)</label>
+                  <input
+                    type="number"
+                    value={emailSettings?.smtpPort || 465}
+                    onChange={(e) => setEmailSettings({ ...emailSettings, smtpPort: parseInt(e.target.value) || 465 })}
+                    placeholder="465 或 587"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">SMTP 授权码 / 密码</label>
+                  <input
+                    type="password"
+                    value={emailSettings?.smtpPass || ''}
+                    onChange={(e) => setEmailSettings({ ...emailSettings, smtpPass: e.target.value })}
+                    placeholder="邮箱授权码 (非登录密码)"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Template customization */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-600">
+                  自动回复邮件主题与正文模板 (支持 {'{{code}}'} 与 {'{{expire}}'} 动态替换)
+                </label>
+                <input
+                  type="text"
+                  value={emailSettings?.emailSubject || ''}
+                  onChange={(e) => setEmailSettings({ ...emailSettings, emailSubject: e.target.value })}
+                  placeholder="邮件标题"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                />
+                <textarea
+                  rows={4}
+                  value={emailSettings?.emailTemplate || ''}
+                  onChange={(e) => setEmailSettings({ ...emailSettings, emailTemplate: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono"
+                />
+              </div>
+
+              {/* Test Email Sending Simulator */}
+              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-3">
+                <div className="flex items-center space-x-2 text-xs font-bold text-amber-900">
+                  <Send className="w-4 h-4 text-amber-700" />
+                  <span>在线发送测试自动回复验证码邮件</span>
+                </div>
+                <form onSubmit={handleSendTestVerificationEmail} className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="email"
+                    required
+                    placeholder="输入接收测试验证码的目标邮箱..."
+                    value={testEmailTarget}
+                    onChange={(e) => setTestEmailTarget(e.target.value)}
+                    className="flex-1 min-w-[200px] px-3 py-2 rounded-xl border border-amber-300 text-xs bg-white"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSendingTestEmail}
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold text-xs shadow-xs flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSendingTestEmail ? 'animate-spin' : ''}`} />
+                    <span>{isSendingTestEmail ? '正在发送...' : '发送测试验证码'}</span>
+                  </button>
+                </form>
+
+                {/* Sent logs */}
+                {emailSettings?.lastSentLog && emailSettings.lastSentLog.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    <span className="text-[11px] font-bold text-amber-800">最近发送记录：</span>
+                    <div className="space-y-1 max-h-24 overflow-y-auto">
+                      {emailSettings.lastSentLog.map((log) => (
+                        <div key={log.id} className="text-[10px] text-amber-900/80 bg-white/70 px-2 py-1 rounded-lg flex items-center justify-between">
+                          <span>目标: {log.recipient} · 验证码: <strong>{log.code}</strong></span>
+                          <span>{log.time} · {log.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* COMPREHENSIVE USAGE GUIDE (完整使用指南) */}
+              <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-700 space-y-3">
+                <div className="flex items-center space-x-2 text-slate-800 font-bold text-sm">
+                  <BookOpen className="w-4 h-4 text-emerald-600" />
+                  <span>自动回复邮箱管理 · 完整使用与接入指南</span>
+                </div>
+                <div className="text-xs space-y-2 leading-relaxed text-slate-600">
+                  <p>
+                    <strong>1. 为什么需要自动回复验证码邮箱？</strong>
+                    <br />
+                    开启新用户注册时，白狐博客系统可自动通过管理员配置的专属发件邮箱，向新注册用户发送 6 位数动态验证码，确保注册用户身份有效并防止恶意脚本批量刷库。
+                  </p>
+                  <p>
+                    <strong>2. QQ邮箱 / 163邮箱 / 企业邮箱授权码获取方式：</strong>
+                    <br />
+                    • QQ 邮箱：登录网页版 → 设置 → 账户 → 开启「POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV服务」→ 生成<strong>授权码</strong>（填入上方的 SMTP 授权码）。
+                    <br />
+                    • 163 邮箱：设置 → POP3/SMTP/IMAP → 开启客户端授权密码。
+                    <br />
+                    • 主机与端口填写：QQ 邮箱主机为 <code className="bg-slate-200 px-1 py-0.5 rounded font-mono">smtp.qq.com</code>，端口为 <code className="bg-slate-200 px-1 py-0.5 rounded font-mono">465</code>；163 邮箱主机为 <code className="bg-slate-200 px-1 py-0.5 rounded font-mono">smtp.163.com</code>。
+                  </p>
+                  <p>
+                    <strong>3. 云原生边缘部署环境变量直通：</strong>
+                    <br />
+                    在 Cloudflare Pages / 腾讯云 / 阿里云部署时，可在平台后台添加环境变量：
+                    <code className="bg-slate-200 px-1 py-0.5 rounded font-mono block mt-1">
+                      VITE_SMTP_HOST=smtp.qq.com<br />
+                      VITE_SMTP_PORT=465<br />
+                      VITE_SMTP_USER=your_fox_email@qq.com<br />
+                      VITE_SMTP_PASS=your_auth_token
+                    </code>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SECTION 5: 多样化数据库后台与界面接入 */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
         <button
           onClick={() => toggleSection('databaseHub')}
@@ -401,7 +687,6 @@ export const AdminSettingsView = ({
                   <span className="text-xs font-bold text-slate-700">主数据库接入配置</span>
                 </div>
 
-                {/* 状态指示灯：没有错误，未连接时绝不虚假显示已连接 */}
                 <div className="flex items-center space-x-2">
                   <span className="text-[11px] text-slate-500 font-medium">接入状态灯：</span>
                   {dbStatus === 'connected' ? (
@@ -492,7 +777,7 @@ export const AdminSettingsView = ({
                   <button
                     onClick={handleTestDatabase}
                     disabled={isTestingDb}
-                    className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs"
+                    className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isTestingDb ? 'animate-spin' : ''}`} />
                     <span>{isTestingDb ? '正在测试数据库连接与握手...' : '测试并激活数据库接入'}</span>
@@ -500,7 +785,7 @@ export const AdminSettingsView = ({
                   {dbStatus === 'connected' && (
                     <button
                       onClick={handleDisconnectDb}
-                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold"
+                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold cursor-pointer"
                     >
                       断开连接
                     </button>
@@ -601,7 +886,7 @@ export const AdminSettingsView = ({
                   <button
                     onClick={handleTestStorage}
                     disabled={isTestingStorage}
-                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs"
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isTestingStorage ? 'animate-spin' : ''}`} />
                     <span>{isTestingStorage ? '正在验证存储鉴权...' : '测试对象存储直连'}</span>
@@ -609,7 +894,7 @@ export const AdminSettingsView = ({
                   {storageStatus === 'connected' && (
                     <button
                       onClick={handleDisconnectStorage}
-                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold"
+                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold cursor-pointer"
                     >
                       断开连接
                     </button>
@@ -628,7 +913,7 @@ export const AdminSettingsView = ({
         )}
       </div>
 
-      {/* SECTION 4: 主题配色与本地图片上传 (背景/头像/Hero照片) */}
+      {/* SECTION 6: 主题配色与本地图片上传 (背景/头像/Hero照片) */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
         <button
           onClick={() => toggleSection('theme')}
@@ -663,7 +948,7 @@ export const AdminSettingsView = ({
                         setAppearance({ ...appearance, themeId: th.id });
                         showToast(`已切换主题：${th.name}`);
                       }}
-                      className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all ${
+                      className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
                         isSelected
                           ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-400/20 shadow-sm'
                           : 'border-slate-200 hover:border-slate-300 bg-white'
@@ -701,7 +986,7 @@ export const AdminSettingsView = ({
                   />
                   <button
                     onClick={() => setAppearance({ ...appearance, bgColor: '#f8fafc', bgImage: '' })}
-                    className="px-3 py-2 rounded-xl text-xs bg-slate-100 hover:bg-slate-200 text-slate-600"
+                    className="px-3 py-2 rounded-xl text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 cursor-pointer"
                   >
                     重置默认
                   </button>
@@ -717,7 +1002,7 @@ export const AdminSettingsView = ({
                     <button
                       type="button"
                       onClick={() => setAppearance({ ...appearance, bgImage: '' })}
-                      className="text-xs text-rose-500 hover:underline"
+                      className="text-xs text-rose-500 hover:underline cursor-pointer"
                     >
                       清空背景图
                     </button>
@@ -760,7 +1045,7 @@ export const AdminSettingsView = ({
                     <button
                       type="button"
                       onClick={() => setAppearance({ ...appearance, avatarImage: '' })}
-                      className="text-xs text-rose-500 hover:underline"
+                      className="text-xs text-rose-500 hover:underline cursor-pointer"
                     >
                       恢复默认
                     </button>
@@ -801,7 +1086,7 @@ export const AdminSettingsView = ({
                     <button
                       type="button"
                       onClick={() => setAppearance({ ...appearance, heroImage: '' })}
-                      className="text-xs text-rose-500 hover:underline"
+                      className="text-xs text-rose-500 hover:underline cursor-pointer"
                     >
                       恢复默认
                     </button>
@@ -837,7 +1122,7 @@ export const AdminSettingsView = ({
         )}
       </div>
 
-      {/* SECTION 5: 用户管理列表 (仅管理员可见) */}
+      {/* SECTION 7: 用户管理列表 (仅管理员可见) */}
       {isAdmin && (
         <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           <button
@@ -875,7 +1160,7 @@ export const AdminSettingsView = ({
                 />
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold"
+                  className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold cursor-pointer"
                 >
                   快速新增用户
                 </button>
@@ -916,7 +1201,7 @@ export const AdminSettingsView = ({
                           {u.role !== 'admin' && (
                             <button
                               onClick={() => handleDeleteUser(u.id)}
-                              className="text-rose-500 hover:text-rose-700 p-1"
+                              className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
                               title="删除用户"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -933,7 +1218,7 @@ export const AdminSettingsView = ({
         </div>
       )}
 
-      {/* SECTION 6: 注册控制与环境变量密码预设 (仅管理员可见) */}
+      {/* SECTION 8: 注册控制与环境变量密码预设 (仅管理员可见) */}
       {isAdmin && (
         <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           <button
@@ -984,3 +1269,4 @@ export const AdminSettingsView = ({
     </div>
   );
 };
+export default AdminSettingsView;

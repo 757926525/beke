@@ -4,18 +4,14 @@ import {
   Upload,
   Plus,
   Trash2,
-  FolderSync,
-  UploadCloud,
   CheckCircle2,
   Maximize2,
   MapPin,
   Calendar,
   X
 } from 'lucide-react';
-import { initialPhotos } from '../data/mockData';
 
-export const GalleryView = ({ t }) => {
-  const [photos, setPhotos] = useState(initialPhotos);
+export const GalleryView = ({ photos, setPhotos, t }) => {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('全部');
   const [uploadStatus, setUploadStatus] = useState(null);
@@ -27,19 +23,49 @@ export const GalleryView = ({ t }) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const newPhoto = {
-      id: `photo-${Date.now()}`,
-      title: file.name.replace(/\.[^/.]+$/, ""),
-      desc: '本地上传的摄影照片，已安全记录至相册与云端存储。',
-      url: URL.createObjectURL(file),
-      category: '白狐物语',
-      date: new Date().toISOString().split('T')[0],
-      location: '随拍记录'
-    };
+    // Use FileReader for base64 persistence to localStorage so it survives page reload
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      // Compress through HTML5 Canvas
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 1200;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
 
-    setPhotos([newPhoto, ...photos]);
-    setUploadStatus(`照片《${newPhoto.title}》上传成功并入库！`);
-    setTimeout(() => setUploadStatus(null), 3000);
+        const newPhoto = {
+          id: `photo-${Date.now()}`,
+          title: file.name.replace(/\.[^/.]+$/, ""),
+          desc: '本地上传的摄影照片，已安全记录至相册与本地持久化存储。',
+          url: dataUrl,
+          category: '白狐物语',
+          date: new Date().toISOString().split('T')[0],
+          location: '随拍记录'
+        };
+
+        setPhotos([newPhoto, ...photos]);
+        setUploadStatus(`照片《${newPhoto.title}》上传成功并已持久化入库！`);
+        setTimeout(() => setUploadStatus(null), 3000);
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -58,13 +84,13 @@ export const GalleryView = ({ t }) => {
         <div>
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold mb-2">
             <ImageIcon className="w-3.5 h-3.5" />
-            <span>光影视界 · 云端图床</span>
+            <span>光影视界 · 云端图床与持久图库</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
             白狐光影视觉集与云相册
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            无缝直连 Cloudflare R2 / 腾讯云 COS / 阿里云 OSS 对象存储，支持大图高清灯箱浏览。
+            无缝直连 Cloudflare R2 / 腾讯云 COS / 阿里云 OSS 对象存储，上传图片持久化保存，页面刷新不丢失。
           </p>
         </div>
 
@@ -78,7 +104,7 @@ export const GalleryView = ({ t }) => {
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-all flex items-center space-x-1.5"
+            className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
           >
             <Upload className="w-4 h-4" />
             <span>上传照片至相册</span>
@@ -159,7 +185,7 @@ export const GalleryView = ({ t }) => {
                 <button
                   onClick={() => handleRemovePhoto(photo.id)}
                   title="删除照片"
-                  className="p-1 rounded-lg text-slate-400 hover:text-rose-500"
+                  className="p-1 rounded-lg text-slate-400 hover:text-rose-500 cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

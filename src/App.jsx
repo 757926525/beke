@@ -7,6 +7,7 @@ import { BookshelfView } from './components/BookshelfView';
 import { GalleryView } from './components/GalleryView';
 import { BrowserAndBookmarksView } from './components/BrowserAndBookmarksView';
 import { MediaPlayerView } from './components/MediaPlayerView';
+import { AdminFileAndPortalView } from './components/AdminFileAndPortalView';
 import { DownloaderView } from './components/DownloaderView';
 import { DeploymentGuideView } from './components/DeploymentGuideView';
 import { AdminSettingsView } from './components/AdminSettingsView';
@@ -14,12 +15,15 @@ import { AuthModal } from './components/AuthModal';
 import {
   initialPosts,
   initialBooks,
+  initialPhotos,
+  initialMedia,
   initialBookmarks,
   initialCloudConfig,
   initialCloudFiles,
   initialUsers,
   defaultAppearance,
   defaultSystemSettings,
+  defaultEmailSettings,
   defaultSearchProxy,
   defaultBackendConfig,
   loadFromStorage,
@@ -54,12 +58,76 @@ export function App() {
   const [themeId, setThemeId] = useState(() => loadFromStorage(STORAGE_KEYS.THEME, 'emerald-white'));
   const [appearance, setAppearance] = useState(() => loadFromStorage(STORAGE_KEYS.APPEARANCE, defaultAppearance));
   const [systemSettings, setSystemSettings] = useState(() => loadFromStorage(STORAGE_KEYS.SYSTEM_SETTINGS, defaultSystemSettings));
+  const [emailSettings, setEmailSettings] = useState(() => loadFromStorage(STORAGE_KEYS.EMAIL_SETTINGS, defaultEmailSettings));
   const [searchProxy, setSearchProxy] = useState(() => loadFromStorage(STORAGE_KEYS.SEARCH_PROXY, defaultSearchProxy));
   const [backendConfig, setBackendConfig] = useState(() => loadFromStorage(STORAGE_KEYS.BACKEND_CONFIG, defaultBackendConfig));
 
   // Application Data States
   const [posts, setPosts] = useState(() => loadFromStorage(STORAGE_KEYS.POSTS, initialPosts));
   const [books, setBooks] = useState(() => loadFromStorage(STORAGE_KEYS.BOOKS, initialBooks));
+  const [photos, setPhotos] = useState(() => loadFromStorage(STORAGE_KEYS.PHOTOS, initialPhotos));
+  const [mediaList, setMediaList] = useState(() => loadFromStorage(STORAGE_KEYS.MEDIA_LIST, [
+    {
+      id: 'm-promo-1',
+      title: '白狐博客宣传片 · 竖屏与横屏全适配演示',
+      desc: '东方美学设计，全平台响应式与边缘计算多云博客技术宣传片',
+      type: 'video',
+      aspect: '16:9',
+      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+      poster: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
+      duration: '09:56',
+      size: '12.4 MB',
+      date: '2025-05-18'
+    },
+    {
+      id: 'm-promo-2',
+      title: '极速边缘 · 手机短视频竖屏演示 (9:16 沉浸画幅)',
+      desc: '专为移动端打造的 9:16 全屏沉浸体验',
+      type: 'video',
+      aspect: '9:16',
+      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+      poster: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80',
+      duration: '00:15',
+      size: '2.8 MB',
+      date: '2025-05-18'
+    },
+    {
+      id: 'm-promo-3',
+      title: '东方风韵 · 宽荧幕电影感演示 (21:9 超宽屏)',
+      desc: '青丘古峰与数字空间，21:9 影院级超宽视角',
+      type: 'video',
+      aspect: '21:9',
+      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+      poster: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80',
+      duration: '00:15',
+      size: '3.1 MB',
+      date: '2025-05-17'
+    },
+    {
+      id: 'm-audio-1',
+      title: '青丘幽引 · 东方禅意氛围原声曲',
+      desc: '高品质无损音频，古筝、初雪与山涧风声相伴研墨',
+      type: 'audio',
+      aspect: '1:1',
+      url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+      poster: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
+      duration: '06:12',
+      size: '5.8 MB',
+      date: '2025-05-15'
+    },
+    {
+      id: 'm-audio-2',
+      title: '白狐技术电台: 从单体到多云全球边缘架构',
+      desc: '白狐博客开发者访谈播客第一期：Cloudflare + 腾讯云协同实践',
+      type: 'audio',
+      aspect: '1:1',
+      url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+      poster: 'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?auto=format&fit=crop&w=600&q=80',
+      duration: '07:05',
+      size: '6.5 MB',
+      date: '2025-05-16'
+    }
+  ]));
   const [bookmarks, setBookmarks] = useState(() => loadFromStorage(STORAGE_KEYS.BOOKMARKS, initialBookmarks));
   const [cloudConfig, setCloudConfig] = useState(() => loadFromStorage(STORAGE_KEYS.CLOUD_CONFIG, initialCloudConfig));
   const [cloudFiles, setCloudFiles] = useState(() => loadFromStorage(STORAGE_KEYS.CLOUD_FILES, initialCloudFiles));
@@ -78,8 +146,11 @@ export function App() {
   useEffect(() => saveToStorage(STORAGE_KEYS.SYSTEM_SETTINGS, systemSettings), [systemSettings]);
   useEffect(() => saveToStorage(STORAGE_KEYS.SEARCH_PROXY, searchProxy), [searchProxy]);
   useEffect(() => saveToStorage(STORAGE_KEYS.BACKEND_CONFIG, backendConfig), [backendConfig]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.EMAIL_SETTINGS, emailSettings), [emailSettings]);
   useEffect(() => saveToStorage(STORAGE_KEYS.POSTS, posts), [posts]);
   useEffect(() => saveToStorage(STORAGE_KEYS.BOOKS, books), [books]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.PHOTOS, photos), [photos]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.MEDIA_LIST, mediaList), [mediaList]);
   useEffect(() => saveToStorage(STORAGE_KEYS.BOOKMARKS, bookmarks), [bookmarks]);
   useEffect(() => saveToStorage(STORAGE_KEYS.CLOUD_CONFIG, cloudConfig), [cloudConfig]);
   useEffect(() => saveToStorage(STORAGE_KEYS.CLOUD_FILES, cloudFiles), [cloudFiles]);
@@ -304,11 +375,26 @@ export function App() {
           )}
 
           {activeTab === 'gallery' && (
-            <GalleryView t={t} />
+            <GalleryView
+              photos={photos}
+              setPhotos={setPhotos}
+              t={t}
+            />
           )}
 
           {activeTab === 'media' && (
             <MediaPlayerView
+              isAdmin={currentUser?.role === 'admin'}
+              mediaList={mediaList}
+              setMediaList={setMediaList}
+              cloudFiles={cloudFiles}
+              setCloudFiles={setCloudFiles}
+              t={t}
+            />
+          )}
+
+          {activeTab === 'admin-portal' && currentUser?.role === 'admin' && (
+            <AdminFileAndPortalView
               isAdmin={currentUser?.role === 'admin'}
               cloudFiles={cloudFiles}
               setCloudFiles={setCloudFiles}
@@ -338,10 +424,14 @@ export function App() {
               setSiteLayout={setSiteLayout}
               fontSize={fontSize}
               setFontSize={setFontSize}
+              lang={lang}
+              setLang={setLang}
               appearance={appearance}
               setAppearance={setAppearance}
               systemSettings={systemSettings}
               setSystemSettings={setSystemSettings}
+              emailSettings={emailSettings}
+              setEmailSettings={setEmailSettings}
               users={users}
               setUsers={setUsers}
               cloudConfig={cloudConfig}

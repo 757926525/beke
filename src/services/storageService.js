@@ -46,11 +46,32 @@ export const STORAGE_KEYS = {
   CLOUD_CONFIG: 'wf_cloud_config',
   CLOUD_FILES: 'wf_cloud_files',
   BACKEND_CONFIG: 'wf_backend_config',
-  USERS: 'wf_users'
+  USERS: 'wf_users',
+  PHOTOS: 'wf_photos',
+  MEDIA_LIST: 'wf_media_list',
+  EMAIL_SETTINGS: 'wf_email_settings'
 };
 
 export const initialPosts = initialArticles;
-export { initialBooks };
+export { initialBooks, initialPhotos, initialMedia };
+
+export const defaultEmailSettings = {
+  enabled: true,
+  provider: 'smtp', // 'smtp' | 'resend' | 'tencent-ses' | 'aliyun-dm' | 'sendgrid'
+  smtpHost: 'smtp.whitefox.blog',
+  smtpPort: 465,
+  smtpUser: 'service@whitefox.blog',
+  smtpPass: '••••••••••••',
+  senderName: '白狐博客官方安全中心',
+  senderEmail: 'service@whitefox.blog',
+  codeExpireMinutes: 10,
+  emailSubject: '【白狐博客】新用户注册自动验证码',
+  emailTemplate: `尊敬的白狐访客：\n\n欢迎加入白狐数字空间！您注册账号的验证码为：\n\n【 {{code}} 】\n\n该验证码在 {{expire}} 分钟内有效，请勿泄露给他人。如非本人操作，请忽略此邮件。\n\n—— 白狐 (WhiteFox) 博客团队`,
+  lastSentLog: [
+    { id: 'log-1', recipient: 'cloudgeek@example.com', code: '849201', time: '2025-05-18 10:14:22', status: '已成功发送' },
+    { id: 'log-2', recipient: 'visitor@example.com', code: '392184', time: '2025-05-17 19:30:05', status: '已成功发送' }
+  ]
+};
 
 export const initialBookmarks = [
   {

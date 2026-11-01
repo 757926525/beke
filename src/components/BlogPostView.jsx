@@ -5,20 +5,25 @@ import {
   Copy, Trash2, Edit3, Download, FileText
 } from 'lucide-react';
 import { generateDocxBlob, downloadFile } from '../services/documentConverter';
+import { RichContentRenderer } from './RichContentRenderer';
+import NewArticleModal from './NewArticleModal';
 
 export const BlogPostView = ({
   post,
   onBack,
   currentUser,
+  cloudFiles = [],
+  bookmarks = [],
+  onUpdatePost,
   onAddComment,
   onDeletePost,
-  onEditPost,
   fontSize = 'standard',
   t
 }) => {
   const [commentText, setCommentText] = useState('');
   const [toast, setToast] = useState('');
   const [isExporting, setIsExporting] = useState(false);
+  const [isEditingModalOpen, setIsEditingModalOpen] = useState(false);
 
   const isAdmin = currentUser?.role === 'admin';
 
@@ -65,10 +70,6 @@ export const BlogPostView = ({
     }
   };
 
-  const handleSaveToCloud = () => {
-    showToast(`文章快照已同步至多云调度中枢与对象存储桶`);
-  };
-
   const handleCommentSubmit = (e) => {
     e.preventDefault();
     if (!commentText.trim()) return;
@@ -87,6 +88,14 @@ export const BlogPostView = ({
     if (confirm(`确认删除文章「${post.title}」？`)) {
       onDeletePost(post.id);
     }
+  };
+
+  const handleSaveEditedArticle = (updatedData) => {
+    if (onUpdatePost) {
+      onUpdatePost(updatedData);
+      showToast(`文章「${updatedData.title}」修改已实时保存！`);
+    }
+    setIsEditingModalOpen(false);
   };
 
   const contentFontSizeClass = {
@@ -150,8 +159,8 @@ export const BlogPostView = ({
           {isAdmin && (
             <>
               <button
-                onClick={() => onEditPost && onEditPost(post)}
-                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold"
+                onClick={() => setIsEditingModalOpen(true)}
+                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold cursor-pointer shadow-xs transition-colors"
                 title="编辑此文章"
               >
                 <Edit3 className="w-3.5 h-3.5 text-amber-600" />
@@ -159,11 +168,11 @@ export const BlogPostView = ({
               </button>
               <button
                 onClick={handleDelete}
-                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-800 text-xs font-semibold"
+                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-800 text-xs font-semibold cursor-pointer shadow-xs transition-colors"
                 title="删除文章"
               >
                 <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                <span>删除</span>
+                <span>删除文章</span>
               </button>
             </>
           )}
@@ -210,9 +219,9 @@ export const BlogPostView = ({
           </div>
         )}
 
-        {/* Body */}
-        <div className={`prose prose-slate max-w-none text-slate-700 leading-relaxed whitespace-pre-line py-2 ${contentFontSizeClass}`}>
-          {post.content}
+        {/* Rich Embedded Body Rendering (Media, Images, Citations, Links) */}
+        <div className={`text-slate-700 leading-relaxed py-2 ${contentFontSizeClass}`}>
+          <RichContentRenderer content={post.content} />
         </div>
 
         {/* Tags */}
@@ -273,6 +282,19 @@ export const BlogPostView = ({
           )}
         </div>
       </div>
+
+      {/* Edit Article Modal */}
+      {isEditingModalOpen && (
+        <NewArticleModal
+          isOpen={isEditingModalOpen}
+          onClose={() => setIsEditingModalOpen(false)}
+          onSave={handleSaveEditedArticle}
+          cloudFiles={cloudFiles}
+          bookmarks={bookmarks}
+          initialData={post}
+        />
+      )}
     </div>
   );
 };
+export default BlogPostView;

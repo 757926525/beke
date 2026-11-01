@@ -20,18 +20,27 @@ export const Navbar = ({
   currentTheme,
   t
 }) => {
-  // Navigation tabs - all directly usable
-  const tabs = [
+  // Navigation tabs - all directly usable; adminPortal is inserted right next to media (visible only to admins)
+  const baseTabs = [
     { id: 'home', label: '博客文章', icon: BookOpen },
     { id: 'books', label: '书架', icon: Library },
     { id: 'cloud', label: '网盘与多云', icon: Cloud },
     { id: 'download', label: '云端下载', icon: Download },
     { id: 'gallery', label: '光影视界', icon: ImageIcon },
     { id: 'media', label: '媒体影音', icon: Music },
+  ];
+
+  if (currentUser?.role === 'admin') {
+    baseTabs.push({ id: 'admin-portal', label: '站长文件与登录', icon: Shield, badge: '专属' });
+  }
+
+  baseTabs.push(
     { id: 'bookmarks', label: '探索与收藏', icon: Compass },
     { id: 'guide', label: '部署指南', icon: Rocket },
-    { id: 'admin', label: '系统设置', icon: Shield },
-  ];
+    { id: 'admin', label: '系统设置', icon: Shield }
+  );
+
+  const tabs = baseTabs;
 
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all duration-300">
