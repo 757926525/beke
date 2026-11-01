@@ -132,18 +132,22 @@ export const initialCloudConfig = defaultCloudConfig;
 
 export const defaultBackendConfig = {
   dbType: 'cloudflare-d1',
-  dbHost: 'd1.cloudflare.com',
+  dbHost: '',
   dbPort: '3306',
-  dbName: 'whitefox_blog_db',
-  dbUser: 'fox_admin',
-  dbPassword: '••••••••••••',
+  dbName: '',
+  dbUser: '',
+  dbPassword: '',
+  dbToken: '',
+  dbAccountId: '',
+  dbConnected: false,
   storageType: 'cloudflare-r2',
-  storageEndpoint: 'https://r2.cloudflarestorage.com',
-  storageBucket: 'whitefox-assets',
-  storageAccessKeyId: 'cf_r2_key_demo_9823',
-  storageSecretAccessKey: 'cf_r2_secret_demo_7712',
-  status: 'connected',
-  lastConnectedAt: '2025-05-18 10:25:00'
+  storageEndpoint: '',
+  storageBucket: '',
+  storageAccessKeyId: '',
+  storageSecretAccessKey: '',
+  storageConnected: false,
+  status: 'disconnected',
+  lastConnectedAt: ''
 };
 
 export const initialCloudFiles = [

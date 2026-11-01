@@ -13,13 +13,7 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
   const defaultAdminUsername =
     (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_ADMIN_USERNAME || import.meta.env?.VITE_INITIAL_ADMIN_USERNAME)) || 'fox';
   const defaultAdminPassword =
-    (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_ADMIN_PASSWORD || import.meta.env?.VITE_INITIAL_ADMIN_PASSWORD)) || 'whitefox2025';
-
-  const fillAdminCredentials = () => {
-    setUsername(defaultAdminUsername);
-    setPassword(defaultAdminPassword);
-    setError('');
-  };
+    (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_ADMIN_PASSWORD || import.meta.env?.VITE_INITIAL_ADMIN_PASSWORD)) || '';
 
   if (!isOpen) return null;
 
@@ -100,7 +94,9 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
             onClick={() => {
               setMode('admin');
               setError('');
-              fillAdminCredentials();
+              // Do NOT pre-fill credentials for security; keep fields clean and empty
+              setUsername('');
+              setPassword('');
             }}
             className={`flex-1 py-1.5 text-xs font-bold transition-all border-b-2 flex items-center justify-center space-x-1 cursor-pointer ${
               mode === 'admin'
@@ -229,17 +225,8 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
           </button>
         </form>
 
-        <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400 text-center flex items-center justify-between">
-          <span>部署管理员: <code className="text-purple-700 font-mono font-bold">{defaultAdminUsername}</code></span>
-          {mode === 'admin' && (
-            <button
-              type="button"
-              onClick={fillAdminCredentials}
-              className="text-purple-600 hover:underline cursor-pointer font-semibold"
-            >
-              填充部署凭证
-            </button>
-          )}
+        <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400 text-center">
+          安全提示：请使用部署或 Cloudflare 后台设置的专属管理员凭据登录
         </div>
       </div>
     </div>
