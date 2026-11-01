@@ -81,20 +81,60 @@ export const AdminSettingsView = ({
     }, 1200);
   };
 
-  // Local file upload helpers
+  // Local file upload helpers with safe image compression to ensure localStorage persistency
   const handleLocalImageUpload = (field, e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setAppearance((prev) => ({
-          ...prev,
-          [field]: reader.result
-        }));
-        showToast('本地图片已成功加载并设为全站配置！');
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('请选择正确的图片格式 (PNG, JPG, WebP 等)！');
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        // Create an offscreen canvas to scale image reasonably
+        const canvas = document.createElement('canvas');
+        const maxDimension = field === 'bgImage' ? 1920 : field === 'heroImage' ? 1200 : 400;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Quality compression for web
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+        try {
+          setAppearance((prev) => ({
+            ...prev,
+            [field]: compressedDataUrl
+          }));
+          showToast('本地图片已成功加载并保存为全站配置！');
+        } catch (err) {
+          console.error('Storage error:', err);
+          showToast('图片尺寸过大，无法存入本地存储，请尝试更小文件！');
+        }
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+    // Reset file input value to allow re-uploading same file
+    e.target.value = '';
   };
 
   // User management state
@@ -541,10 +581,26 @@ export const AdminSettingsView = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  自定义全站背景照片 (本地上传或 URL)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-600">
+                    自定义全站背景照片 (本地上传或 URL)
+                  </label>
+                  {appearance.bgImage && (
+                    <button
+                      type="button"
+                      onClick={() => setAppearance({ ...appearance, bgImage: '' })}
+                      className="text-xs text-rose-500 hover:underline"
+                    >
+                      清空背景图
+                    </button>
+                  )}
+                </div>
                 <div className="flex items-center space-x-2">
+                  {appearance.bgImage && (
+                    <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shrink-0">
+                      <img src={appearance.bgImage} alt="Bg preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
                   <input
                     type="text"
                     value={appearance.bgImage || ''}
@@ -552,7 +608,7 @@ export const AdminSettingsView = ({
                     placeholder="https://... 或点击本地上传"
                     className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs"
                   />
-                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 text-xs font-semibold flex items-center space-x-1">
+                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 text-xs font-semibold flex items-center space-x-1 shrink-0">
                     <Upload className="w-3.5 h-3.5" />
                     <span>本地上传</span>
                     <input
@@ -569,9 +625,20 @@ export const AdminSettingsView = ({
             {/* 3. 头像与首页介绍区照片 (本地上传支持) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  自定义全站头像 (本地上传或 URL)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-600">
+                    自定义全站头像 (本地上传或 URL)
+                  </label>
+                  {appearance.avatarImage && (
+                    <button
+                      type="button"
+                      onClick={() => setAppearance({ ...appearance, avatarImage: '' })}
+                      className="text-xs text-rose-500 hover:underline"
+                    >
+                      恢复默认
+                    </button>
+                  )}
+                </div>
                 <div className="flex items-center space-x-2">
                   <img
                     src={appearance.avatarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=100&q=80'}
@@ -585,7 +652,7 @@ export const AdminSettingsView = ({
                     placeholder="https://... 头像地址"
                     className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs"
                   />
-                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 text-xs font-semibold flex items-center space-x-1">
+                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 text-xs font-semibold flex items-center space-x-1 shrink-0">
                     <Upload className="w-3.5 h-3.5" />
                     <span>本地上传</span>
                     <input
@@ -599,9 +666,20 @@ export const AdminSettingsView = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  首页介绍区照片 (Hero 封面 - 本地上传或 URL)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-600">
+                    首页介绍区照片 (Hero 封面 - 本地上传或 URL)
+                  </label>
+                  {appearance.heroImage && (
+                    <button
+                      type="button"
+                      onClick={() => setAppearance({ ...appearance, heroImage: '' })}
+                      className="text-xs text-rose-500 hover:underline"
+                    >
+                      恢复默认
+                    </button>
+                  )}
+                </div>
                 <div className="flex items-center space-x-2">
                   <img
                     src={appearance.heroImage || 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=100&q=80'}
@@ -615,7 +693,7 @@ export const AdminSettingsView = ({
                     placeholder="https://... Hero 照片地址"
                     className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs"
                   />
-                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 text-xs font-semibold flex items-center space-x-1">
+                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 text-xs font-semibold flex items-center space-x-1 shrink-0">
                     <Upload className="w-3.5 h-3.5" />
                     <span>本地上传</span>
                     <input

@@ -1,175 +1,381 @@
-import React, { useState } from 'react';
-import { Play, Pause, RotateCcw, Volume2, Maximize, Smartphone, Monitor, Film, Music } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import {
+  Play, Pause, RotateCcw, Volume2, Maximize, Smartphone, Monitor, Film, Music,
+  Upload, Trash2, Plus, Download, CheckCircle2, Video, Radio, Layers, Eye, RefreshCw
+} from 'lucide-react';
 
-export const MediaPlayerView = ({ t }) => {
+export const MediaPlayerView = ({ isAdmin, t }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [aspectRatio, setAspectRatio] = useState('16:9'); // '16:9', '9:16', '4:3', '1:1'
-  const [activeMedia, setActiveMedia] = useState({
-    title: '白狐博客宣传片 · 竖屏与横屏全适配演示',
-    type: 'video',
-    url: 'https://www.w3schools.com/html/mov_bbb.mp4',
-    poster: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80',
-    duration: '00:10'
-  });
+  const [aspectRatio, setAspectRatio] = useState('16:9'); // '16:9', '9:16', '4:3', '21:9', '1:1'
+  const videoRef = useRef(null);
+  const audioRef = useRef(null);
+  const [toastMessage, setToastMessage] = useState('');
 
-  const mediaList = [
+  // Media Library State
+  const [mediaList, setMediaList] = useState([
     {
-      id: 1,
-      title: '横屏展示片 (16:9 宽屏)',
+      id: 'm-promo-1',
+      title: '白狐博客宣传片 · 竖屏与横屏全适配演示',
+      desc: '东方美学设计，全平台响应式与边缘计算多云博客技术宣传片',
       type: 'video',
       aspect: '16:9',
-      url: 'https://www.w3schools.com/html/mov_bbb.mp4',
-      poster: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
-      duration: '00:10'
+      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+      poster: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
+      duration: '09:56',
+      size: '12.4 MB',
+      date: '2025-05-18'
     },
     {
-      id: 2,
-      title: '手机短视频 / 抖音竖屏 (9:16 沉浸)',
+      id: 'm-promo-2',
+      title: '极速边缘 · 手机短视频竖屏演示 (9:16 沉浸画幅)',
+      desc: '专为移动端小红书 / 抖音 / 视频号打造的 9:16 全屏沉浸体验',
       type: 'video',
       aspect: '9:16',
-      url: 'https://www.w3schools.com/html/mov_bbb.mp4',
-      poster: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=600&q=80',
-      duration: '00:10'
+      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+      poster: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80',
+      duration: '00:15',
+      size: '2.8 MB',
+      date: '2025-05-18'
     },
     {
-      id: 3,
-      title: '极客播客音频: 多云架构访谈',
+      id: 'm-promo-3',
+      title: '东方风韵 · 宽荧幕电影感演示 (21:9 超宽屏)',
+      desc: '青丘古峰与数字空间，21:9 影院级超宽视角',
+      type: 'video',
+      aspect: '21:9',
+      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+      poster: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80',
+      duration: '00:15',
+      size: '3.1 MB',
+      date: '2025-05-17'
+    },
+    {
+      id: 'm-audio-1',
+      title: '青丘幽引 · 东方禅意氛围原声曲',
+      desc: '高品质无损音频，古筝、初雪与山涧风声相伴研墨',
       type: 'audio',
       aspect: '1:1',
-      url: 'https://www.w3schools.com/html/horse.mp3',
+      url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+      poster: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
+      duration: '06:12',
+      size: '5.8 MB',
+      date: '2025-05-15'
+    },
+    {
+      id: 'm-audio-2',
+      title: '白狐技术电台: 从单体到多云全球边缘架构',
+      desc: '白狐博客开发者访谈播客第一期：Cloudflare + 腾讯云协同实践',
+      type: 'audio',
+      aspect: '1:1',
+      url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
       poster: 'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?auto=format&fit=crop&w=600&q=80',
-      duration: '01:25'
+      duration: '07:05',
+      size: '6.5 MB',
+      date: '2025-05-16'
     }
-  ];
+  ]);
+
+  const [activeMedia, setActiveMedia] = useState(mediaList[0]);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 3000);
+  };
+
+  // Switch media item
+  const handleSelectMedia = (m) => {
+    setActiveMedia(m);
+    if (m.aspect) {
+      setAspectRatio(m.aspect);
+    }
+    setIsPlaying(false);
+  };
+
+  // Local media file upload
+  const handleLocalMediaUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isVideo = file.type.startsWith('video');
+    const isAudio = file.type.startsWith('audio');
+
+    if (!isVideo && !isAudio) {
+      showToast('请选择有效的音视频文件（MP4、WebM、MP3、FLAC等）！');
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+
+    const newMediaItem = {
+      id: `media-${Date.now()}`,
+      title: file.name.replace(/\.[^/.]+$/, ''),
+      desc: `本地上传的${isVideo ? '视频' : '音频'}媒体文件 (${sizeStr})`,
+      type: isVideo ? 'video' : 'audio',
+      aspect: isVideo ? '16:9' : '1:1',
+      url: objectUrl,
+      poster: isVideo
+        ? 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80'
+        : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
+      duration: '本地流',
+      size: sizeStr,
+      date: new Date().toISOString().split('T')[0]
+    };
+
+    setMediaList([newMediaItem, ...mediaList]);
+    setActiveMedia(newMediaItem);
+    if (isVideo) setAspectRatio('16:9');
+    showToast(`本地媒体「${file.name}」载入就绪并已切换播放！`);
+  };
+
+  // Delete media item
+  const handleDeleteMedia = (id, title, e) => {
+    if (e) e.stopPropagation();
+    if (window.confirm(`确认删除媒体项目「${title}」吗？`)) {
+      const remaining = mediaList.filter((m) => m.id !== id);
+      setMediaList(remaining);
+      if (activeMedia.id === id && remaining.length > 0) {
+        setActiveMedia(remaining[0]);
+      }
+      showToast(`已成功移除「${title}」！`);
+    }
+  };
+
+  // Download media file
+  const handleDownloadMedia = (m, e) => {
+    if (e) e.stopPropagation();
+    const link = document.createElement('a');
+    link.href = m.url;
+    link.download = `${m.title}.${m.type === 'video' ? 'mp4' : 'mp3'}`;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`开始下载「${m.title}」！`);
+  };
 
   return (
     <div className="space-y-6">
+      {/* Toast Alert */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl bg-emerald-600 text-white text-xs font-semibold shadow-xl flex items-center space-x-2 animate-bounce">
+          <CheckCircle2 className="w-4 h-4" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold mb-2">
               <Film className="w-3.5 h-3.5" />
-              <span>全画幅播放器 · 竖屏短视频任意比例</span>
+              <span>全画幅多媒体影视厅 · 宣传片与本地音视频管理</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
-              多媒体影视与播客视听
+              白狐媒体影音中枢
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              原生支持 16:9 宽屏、9:16 手机短视频竖屏、4:3、1:1 等任意视频宽高比自适应播放。
+              原生适配 16:9 宽屏、9:16 手机短视频竖屏、21:9 影院超宽画幅与 4:3 复古比例；支持本地音视频上传、播放与完整管理。
             </p>
           </div>
 
-          {/* Aspect Ratio Switcher */}
-          <div className="flex items-center space-x-1.5 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
-            <button
-              onClick={() => setAspectRatio('16:9')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1 ${
-                aspectRatio === '16:9' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Monitor className="w-3.5 h-3.5" />
-              <span>16:9 宽屏</span>
-            </button>
-            <button
-              onClick={() => setAspectRatio('9:16')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1 ${
-                aspectRatio === '9:16' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>9:16 竖屏短视频</span>
-            </button>
-            <button
-              onClick={() => setAspectRatio('4:3')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                aspectRatio === '4:3' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              4:3
-            </button>
+          {/* Action Buttons & Local Upload */}
+          <div className="flex items-center space-x-3">
+            <label className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-2 shadow-xs cursor-pointer transition-colors">
+              <Upload className="w-3.5 h-3.5" />
+              <span>上传本地音视频</span>
+              <input
+                type="file"
+                accept="video/*,audio/*"
+                onChange={handleLocalMediaUpload}
+                className="hidden"
+              />
+            </label>
           </div>
         </div>
       </div>
 
-      {/* Main Player Display Area */}
+      {/* Main Player Display Cinema Showcase */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs flex flex-col items-center">
-        <div className="w-full flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <h2 className="text-sm font-bold text-slate-800">{activeMedia.title}</h2>
+        {/* Top Control Bar with Aspect Ratio Switcher */}
+        <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-100">
+          <div className="flex items-center space-x-3">
+            <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-slate-800">{activeMedia.title}</h2>
+              <p className="text-xs text-slate-400 mt-0.5">{activeMedia.desc}</p>
+            </div>
           </div>
-          <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-mono font-bold">
-            当前画幅: {aspectRatio}
+
+          {/* Aspect Ratio Switcher Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/80">
+            <span className="text-[10px] font-bold text-slate-400 px-2 uppercase">画幅调节:</span>
+            {[
+              { id: '16:9', label: '16:9 宽屏', icon: Monitor },
+              { id: '9:16', label: '9:16 竖屏短视频', icon: Smartphone },
+              { id: '21:9', label: '21:9 影院超宽', icon: Film },
+              { id: '4:3', label: '4:3 经典', icon: Layers },
+            ].map((ratio) => {
+              const Icon = ratio.icon;
+              const isActive = aspectRatio === ratio.id;
+              return (
+                <button
+                  key={ratio.id}
+                  onClick={() => setAspectRatio(ratio.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 ${
+                    isActive
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />
+                  <span>{ratio.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Video Canvas Container with elegant frame and responsive ratio */}
+        <div className="w-full flex justify-center py-2">
+          <div
+            className={`relative rounded-3xl overflow-hidden bg-slate-950 shadow-2xl transition-all duration-500 border border-slate-800 flex items-center justify-center ${
+              aspectRatio === '9:16'
+                ? 'w-full max-w-[360px] aspect-[9/16]'
+                : aspectRatio === '21:9'
+                ? 'w-full max-w-[960px] aspect-[21/9]'
+                : aspectRatio === '4:3'
+                ? 'w-full max-w-[680px] aspect-[4/3]'
+                : 'w-full max-w-[860px] aspect-[16/9]'
+            }`}
+          >
+            {activeMedia.type === 'video' ? (
+              <video
+                ref={videoRef}
+                key={activeMedia.url}
+                src={activeMedia.url}
+                poster={activeMedia.poster}
+                controls
+                playsInline
+                className="w-full h-full object-cover"
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center p-8 text-center text-white space-y-5">
+                <div className="relative w-32 h-32 rounded-3xl overflow-hidden shadow-xl border border-emerald-500/30">
+                  <img
+                    src={activeMedia.poster}
+                    alt={activeMedia.title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-emerald-950/40 backdrop-blur-xs flex items-center justify-center">
+                    <Music className="w-12 h-12 text-emerald-300 animate-pulse" />
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-emerald-100">{activeMedia.title}</h3>
+                  <p className="text-xs text-slate-300 mt-1 max-w-sm">{activeMedia.desc}</p>
+                </div>
+                <audio
+                  ref={audioRef}
+                  key={activeMedia.url}
+                  src={activeMedia.url}
+                  controls
+                  className="w-full max-w-md accent-emerald-500"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Media Playlist & File Management */}
+      <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">
+              白狐媒体节目库与文件管理 ({mediaList.length})
+            </h3>
+            <p className="text-xs text-slate-400">
+              包含白狐博客宣传片、竖屏全画幅短片、无损音乐与本地用户上传内容
+            </p>
+          </div>
+          <span className="text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full font-medium">
+            支持拖拽播放 / 本地多码率输出
           </span>
         </div>
 
-        {/* Video Canvas Container with dynamic aspect ratio */}
-        <div
-          className={`relative rounded-3xl overflow-hidden bg-black shadow-2xl transition-all duration-300 flex items-center justify-center ${
-            aspectRatio === '9:16'
-              ? 'w-full max-w-[340px] aspect-[9/16]'
-              : aspectRatio === '4:3'
-              ? 'w-full max-w-[640px] aspect-[4/3]'
-              : 'w-full max-w-[800px] aspect-[16/9]'
-          }`}
-        >
-          {activeMedia.type === 'video' ? (
-            <video
-              src={activeMedia.url}
-              poster={activeMedia.poster}
-              controls
-              className="w-full h-full object-cover"
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center p-8 text-center text-white space-y-4">
-              <div className="w-24 h-24 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-400/40">
-                <Music className="w-10 h-10 text-emerald-400" />
-              </div>
-              <div>
-                <p className="font-bold text-base">{activeMedia.title}</p>
-                <p className="text-xs text-slate-400 mt-1">音频广播播放流</p>
-              </div>
-              <audio src={activeMedia.url} controls className="mt-4 w-64" />
-            </div>
-          )}
-        </div>
-      </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {mediaList.map((m) => {
+            const isSelected = activeMedia.id === m.id;
+            return (
+              <div
+                key={m.id}
+                onClick={() => handleSelectMedia(m)}
+                className={`group cursor-pointer rounded-2xl border transition-all p-3.5 flex flex-col justify-between ${
+                  isSelected
+                    ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
+                    : 'bg-white/80 hover:bg-white border-slate-200 hover:shadow-md'
+                }`}
+              >
+                <div>
+                  <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-900 mb-3">
+                    <img
+                      src={m.poster}
+                      alt={m.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full bg-white/90 text-slate-900 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                        <Play className="w-5 h-5 ml-0.5 text-emerald-700" />
+                      </div>
+                    </div>
+                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-xs text-[10px] text-white font-mono uppercase">
+                      {m.type === 'video' ? '视频' : '音频'} · {m.aspect}
+                    </div>
+                    <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-xs text-[10px] text-emerald-300 font-mono">
+                      {m.duration}
+                    </div>
+                  </div>
 
-      {/* Media Playlist */}
-      <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-        <h3 className="text-sm font-bold text-slate-800">媒体节目单与短片库</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {mediaList.map((m) => (
-            <div
-              key={m.id}
-              onClick={() => {
-                setActiveMedia(m);
-                if (m.aspect) setAspectRatio(m.aspect);
-              }}
-              className="group cursor-pointer rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 hover:bg-white hover:border-emerald-400 transition-all p-3 flex space-x-3 items-center"
-            >
-              <div className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-slate-200">
-                <img src={m.poster} alt={m.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
-                <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-                  <Play className="w-5 h-5 text-white drop-shadow-md" />
+                  <h4 className="text-xs font-bold text-slate-800 line-clamp-1 group-hover:text-emerald-600 transition-colors">
+                    {m.title}
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                    {m.desc}
+                  </p>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between text-[11px] text-slate-400">
+                  <div className="flex items-center space-x-2">
+                    <span>{m.size}</span>
+                    <span>•</span>
+                    <span>{m.date}</span>
+                  </div>
+
+                  {/* Management Buttons */}
+                  <div className="flex items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={(e) => handleDownloadMedia(m, e)}
+                      className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-emerald-600"
+                      title="下载本地媒体"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteMedia(m.id, m.title, e)}
+                      className="p-1 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600"
+                      title="删除此媒体"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-slate-800 truncate group-hover:text-emerald-600 transition-colors">
-                  {m.title}
-                </p>
-                <div className="flex items-center space-x-2 mt-1">
-                  <span className="text-[10px] text-slate-400 font-mono">{m.duration}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold">
-                    {m.aspect}
-                  </span>
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

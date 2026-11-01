@@ -128,15 +128,29 @@ export const initialBooks = [
   {
     id: 'book-1',
     title: '道德经真义',
-    author: '老子 / 注解',
+    author: '老子 / 选注',
     category: '古典哲学',
     format: 'EPUB',
     size: '1.2 MB',
     progress: 42,
-    totalChapters: 81,
+    totalChapters: 3,
     cover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
-    desc: '道生一，一生二，二生三，三生万物。万物负阴而抱阳，冲气以为和。',
-    dateAdded: '2025-05-01'
+    description: '道生一，一生二，二生三，三生万物。万物负阴而抱阳，冲气以为和。天地不仁，以万物为刍狗；圣人不仁，以百姓为刍狗。',
+    dateAdded: '2025-05-01',
+    chapters: [
+      {
+        title: '第一章 · 体道',
+        content: `道可道，非常道；名可名，非常名。\n无名，天地之始；有名，万物之母。\n故常无欲，以观其妙；常有欲，以观其徼。\n此两者，同出而异名，同谓之玄。玄之又玄，众妙之门。`
+      },
+      {
+        title: '第二章 · 养身',
+        content: `天下皆知美之为美，斯恶已；皆知善之为善，斯不善已。\n故有无相生，难易相成，长短相形，高下相盈，音声相和，前后相随。\n是以圣人处无为之事，行不言之教；万物作而弗始，生而弗有，为而弗恃，功成而弗居。夫唯弗居，是以不去。`
+      },
+      {
+        title: '第三章 · 安民',
+        content: `不尚贤，使民不争；不贵难得之货，使民不为盗；不见可欲，使民心不乱。\n是以圣人之治，虚其心，实其腹，弱其志，强其骨。常使民无知无欲。使夫智者不敢为也。为无为，则无不治。`
+      }
+    ]
   },
   {
     id: 'book-2',
@@ -146,10 +160,20 @@ export const initialBooks = [
     format: 'PDF',
     size: '14.8 MB',
     progress: 80,
-    totalChapters: 24,
+    totalChapters: 2,
     cover: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80',
-    desc: '系统化讲解 Edge Computing、Serverless 架构设计以及全球多云容灾实践。',
-    dateAdded: '2025-05-05'
+    description: '系统化讲解 Edge Computing、Serverless 架构设计以及全球多云边缘容灾实践指南。',
+    dateAdded: '2025-05-05',
+    chapters: [
+      {
+        title: '第 1 章 · 边缘计算与全球多云统一编排',
+        content: `随着全球 Anycast 边缘网络的发展，传统单一数据中心架构正迅速向分布式边缘云迁移。\n通过 Cloudflare Pages 与腾讯云 EdgeOne 的协同调度，静态资源与动态 Worker 脚本可在靠近用户的 300+ 边缘节点毫秒级执行。\n本章将深入解析边缘缓存驱逐协议与多云 DNS 动态切换。`
+      },
+      {
+        title: '第 2 章 · 零出口流量费对象存储架构',
+        content: `在云架构中，网络出口带宽往往成为最昂贵的基础设施支出。\n借助 Cloudflare R2 与 S3 协议互通的特点，结合本地轻量网盘与 AList 代理中枢，开发者能够实现 0 出口带宽成本的全球多媒体流分发网络。`
+      }
+    ]
   },
   {
     id: 'book-3',
@@ -159,10 +183,20 @@ export const initialBooks = [
     format: 'TXT',
     size: '640 KB',
     progress: 100,
-    totalChapters: 12,
+    totalChapters: 2,
     cover: 'https://images.unsplash.com/photo-1476275466078-4007374efbbe?auto=format&fit=crop&w=600&q=80',
-    desc: '夜色苍茫，雪落无声。山斋有狐，聪颖如雪，与书生研墨论道。',
-    dateAdded: '2025-05-12'
+    description: '夜色苍茫，雪落无声。山斋有白狐，聪颖如雪，与书生研墨论道，风雪夜归，留香盈室。',
+    dateAdded: '2025-05-12',
+    chapters: [
+      {
+        title: '卷一 · 寒斋雪客',
+        content: `太原王生，早行遇一女子，抱袱独步，甚蹇于行。生见其容色绝丽，心动，遂问所往。\n女曰：“行道之人，不能解愁，何劳致诘？”生固诘之。女自陈为荒野白狐所化，因慕人间文墨，愿为书生研墨添香。`
+      },
+      {
+        title: '卷二 · 灵狐夜话',
+        content: `是夜，风雪骤紧，松涛怒号。狐女挑灯夜读，指点古今兴衰。\n生惊叹曰：“子虽为异类，识见乃过腐儒万倍！”\n女莞尔笑曰：“天地广阔，灵气所钟，何分人狐。但存仁心，皆成大道。”`
+      }
+    ]
   }
 ];
 

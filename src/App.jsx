@@ -195,7 +195,7 @@ export function App() {
         {/* Hero Section if on Home */}
         {activeTab === 'home' && !activePostId && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-2">
-            <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-emerald-800 to-teal-900 text-white p-6 sm:p-10 shadow-lg">
+            <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-900 text-white p-6 sm:p-10 shadow-lg border border-emerald-700/30">
               <div className="relative z-10 max-w-2xl">
                 <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-xs text-xs font-medium mb-3">
                   <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
@@ -223,12 +223,13 @@ export function App() {
                 </div>
               </div>
 
-              {/* Decorative Hero Image */}
-              <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-20 pointer-events-none hidden md:block">
+              {/* Decorative Hero Image with refined gradient overlay */}
+              <div className="absolute right-0 top-0 bottom-0 w-2/5 pointer-events-none hidden md:block">
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-900 via-transparent to-transparent z-10" />
                 <img
-                  src={appearance.heroImage || 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=600&q=80'}
+                  src={appearance.heroImage || 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=800&q=80'}
                   alt="Hero Decoration"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover opacity-60 mix-blend-luminosity hover:mix-blend-normal transition-all duration-700"
                 />
               </div>
             </div>
@@ -272,7 +273,12 @@ export function App() {
           )}
 
           {activeTab === 'books' && (
-            <BookshelfView books={books} setBooks={setBooks} t={t} />
+            <BookshelfView
+              books={books}
+              setBooks={setBooks}
+              isAdmin={currentUser?.role === 'admin'}
+              t={t}
+            />
           )}
 
           {activeTab === 'cloud' && (
@@ -294,7 +300,10 @@ export function App() {
           )}
 
           {activeTab === 'media' && (
-            <MediaPlayerView t={t} />
+            <MediaPlayerView
+              isAdmin={currentUser?.role === 'admin'}
+              t={t}
+            />
           )}
 
           {activeTab === 'bookmarks' && (
