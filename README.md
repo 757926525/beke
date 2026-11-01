@@ -90,7 +90,11 @@ Cloudflare Pages 与 Git 仓库无缝集成，全球 330+ Anycast 边缘节点�
    - **Framework preset (框架预设)**: `Vite`
    - **Build command (构建命令)**: `npm run build`
    - **Build output directory (输出目录)**: `dist`
-   - **Environment variables (环境变量)**: 添加 `NODE_VERSION` = `20`
+   - **Environment variables (环境变量)**:
+     - 添加 `NODE_VERSION` = `20`
+     - 添加 `VITE_ADMIN_USERNAME` = `fox` (可自定义设定唯一系统站长账号)
+     - 添加 `VITE_ADMIN_PASSWORD` = `your_strong_password` (设定站长密码)
+     - *提示：后续也可在 Cloudflare Pages 项目后台 `Settings` -> `Environment variables` 中随时修改变量，跨设备登录无缝自动同步！*
 5. 点击 **Save and Deploy**，即可在 1 分钟内完成全球自动化部署！后续向 `main` 分支提交代码均会自动触发增量更新。
 
 ---
@@ -193,6 +197,8 @@ npx wrangler d1 execute whitefox_blog_db --file=./deploy/cloudflare-d1-schema.sq
 
 | 变量名 | 说明 | 示例值 |
 | :--- | :--- | :--- |
+| `VITE_ADMIN_USERNAME` | 唯一系统站长管理员账号（部署时或CF后台环境变量修改） | `fox` |
+| `VITE_ADMIN_PASSWORD` | 唯一系统站长管理员密码（部署时或CF后台环境变量修改） | `whitefox2025` |
 | `VITE_SITE_NAME` | 博客系统默认名称 | `fox` |
 | `VITE_DEFAULT_LANG` | 默认语言 | `zh-CN` |
 | `VITE_CLOUDFLARE_D1_DATABASE_ID` | Cloudflare D1 边缘数据库 ID | `your-d1-db-uuid` |

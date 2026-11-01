@@ -342,18 +342,26 @@ export const AdminSettingsView = ({
 
   const handleAddUser = (e) => {
     e.preventDefault();
-    if (!newUsername.trim()) return;
+    const cleanUser = newUsername.trim();
+    if (!cleanUser) return;
+
+    // Enforce single-admin uniqueness: prevent creating users conflicting with master admin
+    if (users.some((u) => u.username.toLowerCase() === cleanUser.toLowerCase())) {
+      showToast('该用户名已存在，不能重复添加');
+      return;
+    }
+
     const newUser = {
       id: 'u-' + Date.now(),
-      username: newUsername.trim(),
-      email: newEmail.trim() || `${newUsername.trim()}@example.com`,
-      role: 'member',
+      username: cleanUser,
+      email: newEmail.trim() || `${cleanUser}@example.com`,
+      role: 'member', // Strictly standard member, project has only 1 master admin
       registeredAt: new Date().toISOString().split('T')[0]
     };
     setUsers([...users, newUser]);
     setNewUsername('');
     setNewEmail('');
-    showToast('新用户添加成功');
+    showToast('新普通成员添加成功 (系统保证唯一站长权限)');
   };
 
   const handleDeleteUser = (id) => {

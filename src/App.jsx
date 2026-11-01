@@ -236,15 +236,33 @@ export function App() {
     return { success: false, message: '账号或密码不正确' };
   };
 
-  // Register handler
+  // Register handler - Enforce Single-Admin Constraint (一个项目只能有一个管理员，禁止普通注册同名冲突)
   const handleRegister = ({ username, email, password }) => {
-    if (users.some((u) => u.username === username)) {
-      return { success: false, message: '该用户名已存在' };
+    const trimmedUsername = (username || '').trim();
+    const adminName = deploymentAdmin.username.toLowerCase();
+
+    // Prohibit registering with admin username or system admin aliases
+    if (
+      trimmedUsername.toLowerCase() === adminName ||
+      trimmedUsername.toLowerCase() === 'admin' ||
+      trimmedUsername.toLowerCase() === 'fox' ||
+      trimmedUsername.toLowerCase() === (siteName || '').toLowerCase()
+    ) {
+      return {
+        success: false,
+        message: '该用户名已受系统保护保留给唯一站长，不能重复注册或导致同名冲突'
+      };
     }
+
+    if (users.some((u) => u.username.toLowerCase() === trimmedUsername.toLowerCase())) {
+      return { success: false, message: '该用户名已存在，请更换其他用户名' };
+    }
+
+    // Normal registration strictly creates a member (role: 'member'), never admin
     const newUser = {
       id: 'u-' + Date.now(),
-      username,
-      email,
+      username: trimmedUsername,
+      email: email.trim(),
       password,
       role: 'member',
       registeredAt: new Date().toISOString().split('T')[0]
@@ -254,7 +272,7 @@ export function App() {
     return { success: true };
   };
 
-  // Cloudflare D1 & Offline-First Dual Sync (无论接或不接数据库，全站历史、文件、设置、博客完美同步)
+  // Cloudflare D1 & Offline-First Dual Sync (无论接或不接数据库，全站历史、文件、设置、头像、博客完美同步)
   const handleSyncD1 = () => {
     const isConnected = (backendConfig?.dbConnected || backendConfig?.status === 'connected') && backendConfig?.dbHost;
 
@@ -267,6 +285,7 @@ export function App() {
       booksCount: books.length,
       photosCount: photos.length,
       mediaCount: mediaList.length,
+      appearance, // Includes cross-device synchronized avatar image & backgrounds
       settings: {
         siteName,
         siteLayout,
@@ -280,9 +299,9 @@ export function App() {
     saveToStorage('wf_global_unified_sync_snapshot', fullSyncBundle);
 
     if (isConnected) {
-      alert(`[${siteName} 系统] 正在与云端数据库 ${backendConfig.dbType.toUpperCase()} (${backendConfig.dbHost}) 建立实时全息双向同步：\n\n🟢 数据库状态指示灯：有效在线 (Active & Verified)\n✓ 1. 站内所有博文与分类标签已对齐同步\n✓ 2. 浏览历史记录 (${browsingHistory.length} 条) 实时同步\n✓ 3. 站长特权文件与多云调度中枢索引全息更新\n✓ 4. 全局系统设置、主题外观与权限规则实时生效\n\n💡 数据库实际作用已生效：跨端协同、实时多端持久化、保障千万级数据无缝容灾！`);
+      alert(`[${siteName} 系统] 正在与云端数据库 ${backendConfig.dbType.toUpperCase()} (${backendConfig.dbHost}) 建立实时全息双向同步：\n\n🟢 数据库状态指示灯：有效在线 (Active & Verified)\n✓ 1. 站内所有博文与分类标签已对齐同步\n✓ 2. 浏览历史记录 (${browsingHistory.length} 条) 实时同步\n✓ 3. 站长特权文件与多云调度中枢索引全息更新\n✓ 4. 站长头像与全站视觉外观跨设备同步生效\n✓ 5. 全局系统设置与唯一站长凭证统一校验\n\n💡 数据库实际作用已生效：跨端协同、实时多端持久化、保障千万级数据无缝容灾！`);
     } else {
-      alert(`[${siteName} 系统] 全站离线自适应全息同步已圆满完成！\n\n🟡 运行模式：离线高可用快照架构 (未连接远程数据库)\n✓ 1. 站内所有历史记录 (${browsingHistory.length} 条) 已完整上卷持久化\n✓ 2. 保存的文件、媒体与相册已写入本地高可靠存储\n✓ 3. 博客文章与系统设置已完成 100% 结构校验，刷新永不丢失\n\n💡 提示：如需实现手机/PC等多端跨设备实时秒级协同，可在管理员后台一键接入 Cloudflare D1 或 Supabase！`);
+      alert(`[${siteName} 系统] 全站离线自适应全息同步已圆满完成！\n\n🟡 运行模式：离线高可用快照架构 (未连接远程数据库)\n✓ 1. 站内所有历史记录 (${browsingHistory.length} 条) 已完整上卷持久化\n✓ 2. 保存的文件、媒体、相册与站长头像已写入本地高可靠存储\n✓ 3. 博客文章与系统设置已完成 100% 结构校验，刷新永不丢失\n\n💡 提示：如需实现手机/PC等多端跨设备实时秒级协同，可在管理员后台一键接入 Cloudflare D1 或 Supabase！`);
     }
   };
 

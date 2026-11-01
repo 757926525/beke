@@ -25,7 +25,9 @@ export const BrowserAndBookmarksView = ({
   const [newCategory, setNewCategory] = useState('tech');
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [proxyMode, setProxyMode] = useState('auto'); // 'auto' | 'corsproxy' | 'allorigins' | 'direct'
+  const [proxyMode, setProxyMode] = useState('auto'); // 'auto' | 'custom' | 'corsproxy' | 'allorigins' | 'direct'
+  const [customProxyDomain, setCustomProxyDomain] = useState(() => searchProxy?.customDomain || '');
+  const [showProxyConfig, setShowProxyConfig] = useState(false);
 
   // Toggle in-app search proxy
   const toggleProxy = () => {
@@ -71,13 +73,23 @@ export const BrowserAndBookmarksView = ({
       return actualTarget.includes('?') ? `${actualTarget}&igu=1` : `${actualTarget}?igu=1`;
     }
 
-    // 2. Multi-tier Anycast / Edge proxies with domestic fallback (corsproxy, allorigins, cf-worker)
+    // 2. Custom Domain Proxy Gateway (自定义域名反代专线: 如 proxy.yourdomain.com/proxy?url=...)
+    if (mode === 'custom' || (customProxyDomain && customProxyDomain.trim())) {
+      let baseDomain = customProxyDomain.trim();
+      if (!baseDomain.startsWith('http://') && !baseDomain.startsWith('https://')) {
+        baseDomain = 'https://' + baseDomain;
+      }
+      baseDomain = baseDomain.replace(/\/+$/, '');
+      return `${baseDomain}/api/proxy?url=${encodeURIComponent(actualTarget)}`;
+    }
+
+    // 3. Multi-tier Anycast / Edge proxies with domestic fallback (corsproxy, allorigins, cf-worker)
     if (mode === 'corsproxy') {
       return `https://corsproxy.io/?${encodeURIComponent(actualTarget)}`;
     } else if (mode === 'allorigins') {
       return `https://api.allorigins.win/raw?url=${encodeURIComponent(actualTarget)}`;
     } else {
-      // Auto adaptive mode
+      // Auto adaptive mode: use corsproxy or direct Google frame
       return `https://corsproxy.io/?${encodeURIComponent(actualTarget)}`;
     }
   };
@@ -218,13 +230,19 @@ export const BrowserAndBookmarksView = ({
           </div>
         </div>
 
-        {/* 专线线路智能节点切换 */}
+        {/* 专线线路智能节点切换与自定义域名支持 */}
         <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center space-x-2 text-slate-600 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
             <span>当前专线节点：</span>
             <span className="font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-              {proxyMode === 'auto' ? '智能自动调度 (Anycast + 国内CDN极速)' : proxyMode === 'corsproxy' ? '全球 CORS 边缘镜像节点' : proxyMode === 'allorigins' ? 'AllOrigins 备用镜像通道' : '直连模式'}
+              {customProxyDomain
+                ? `自定义域名专线 (${customProxyDomain})`
+                : proxyMode === 'auto'
+                ? '智能自动调度 (Anycast + 国内CDN极速)'
+                : proxyMode === 'corsproxy'
+                ? '全球 CORS 边缘镜像节点'
+                : 'AllOrigins 备用镜像通道'}
             </span>
           </div>
 
@@ -265,8 +283,50 @@ export const BrowserAndBookmarksView = ({
             >
               节点B (AllOrigins)
             </button>
+            <button
+              onClick={() => setShowProxyConfig(!showProxyConfig)}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 transition-all cursor-pointer"
+            >
+              自定义域名设置
+            </button>
           </div>
         </div>
+
+        {/* 自定义域名专属专线配置区 */}
+        {showProxyConfig && (
+          <div className="mt-3 p-3.5 bg-emerald-50/70 rounded-2xl border border-emerald-200 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-emerald-900">自定义免翻墙反代专线域名 (Custom Domain Proxy)</span>
+              <span className="text-[10px] text-emerald-700">绑定自定义域名后依然秒级顺利直达访问</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                placeholder="例如: proxy.yourblog.com 或 cdn.yourdomain.cn"
+                value={customProxyDomain}
+                onChange={(e) => setCustomProxyDomain(e.target.value)}
+                className="flex-1 px-3 py-1.5 rounded-xl border border-emerald-300 bg-white font-mono text-xs"
+              />
+              <button
+                onClick={() => {
+                  if (setSearchProxy) {
+                    setSearchProxy((prev) => ({
+                      ...prev,
+                      customDomain: customProxyDomain.trim()
+                    }));
+                  }
+                  alert('自定义专线域名已保存生效！');
+                  setShowProxyConfig(false);
+                  const framed = buildProxyUrl(searchOrUrl, 'custom');
+                  setCurrentFrameUrl(framed);
+                }}
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold cursor-pointer"
+              >
+                保存并生效
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Prominent & Atmospheric Search Bar */}
