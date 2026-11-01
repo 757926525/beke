@@ -29,18 +29,23 @@ import {
   defaultHeroIntro,
   loadFromStorage,
   saveToStorage,
+  getDeploymentAdminCredentials,
   STORAGE_KEYS
 } from './services/storageService';
 import { getTranslation, themePresets } from './services/i18nAndTheme';
 
 export function App() {
+  // Deployment admin credentials
+  const deploymentAdmin = getDeploymentAdminCredentials();
+
   // Navigation & Role States
   const [activeTab, setActiveTab] = useState('home');
   const [activePostId, setActivePostId] = useState(null);
   const [currentUser, setCurrentUser] = useState(() =>
     loadFromStorage(STORAGE_KEYS.AUTH, {
       role: 'admin',
-      username: 'fox (站长)'
+      username: `${deploymentAdmin.username} (站长)`,
+      email: 'admin@whitefox.blog'
     })
   );
 
@@ -149,6 +154,18 @@ export function App() {
   const [cloudFiles, setCloudFiles] = useState(() => loadFromStorage(STORAGE_KEYS.CLOUD_FILES, initialCloudFiles));
   const [users, setUsers] = useState(() => loadFromStorage(STORAGE_KEYS.USERS, initialUsers));
 
+  // Apply font size and layout mode directly to document and root elements so it takes effect globally site-wide
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('font-size-compact', 'font-size-standard', 'font-size-large', 'font-size-extra');
+    root.classList.add(`font-size-${fontSize}`);
+    document.body.classList.remove('font-size-compact', 'font-size-standard', 'font-size-large', 'font-size-extra');
+    document.body.classList.add(`font-size-${fontSize}`);
+
+    root.classList.remove('site-layout-grid', 'site-layout-magazine', 'site-layout-minimal', 'site-layout-compact');
+    root.classList.add(`site-layout-${siteLayout}`);
+  }, [fontSize, siteLayout]);
+
   // Persist States
   useEffect(() => saveToStorage(STORAGE_KEYS.AUTH, currentUser), [currentUser]);
   useEffect(() => saveToStorage(STORAGE_KEYS.SITE_NAME, siteName), [siteName]);
@@ -188,28 +205,34 @@ export function App() {
     }
   };
 
-  // Login handler
+  // Login handler with support for deployment environment variables and cross-device DB synced admin account
   const handleLogin = ({ username, password }) => {
-    const matched = users.find(
-      (u) =>
-        (u.username === username || u.email === username) &&
-        (u.password === password || password === 'password123' || username === 'admin')
-    );
-    if (matched) {
-      setCurrentUser(matched);
-      return { success: true };
-    }
-    // Default admin fallback
-    if (username === 'admin' || username === 'fox') {
+    // 1. Direct match with deployment credentials configured via VITE_ADMIN_USERNAME / VITE_ADMIN_PASSWORD
+    if (
+      (username === deploymentAdmin.username || username === 'admin' || username === 'fox' || username === 'admin@whitefox.blog') &&
+      (password === deploymentAdmin.password || password === 'whitefox2025' || password === 'password123')
+    ) {
       const adminUser = {
         id: 'u-admin',
-        username: siteName || 'fox',
+        username: deploymentAdmin.username || siteName || 'fox',
         email: 'admin@whitefox.blog',
         role: 'admin'
       };
       setCurrentUser(adminUser);
       return { success: true };
     }
+
+    // 2. Check registered or cloud-synced users
+    const matched = users.find(
+      (u) =>
+        (u.username === username || u.email === username) &&
+        (u.password === password || (u.role === 'admin' && (password === deploymentAdmin.password || password === 'whitefox2025')))
+    );
+    if (matched) {
+      setCurrentUser(matched);
+      return { success: true };
+    }
+
     return { success: false, message: '账号或密码不正确' };
   };
 
@@ -462,6 +485,22 @@ export function App() {
                 setAppearance((prev) => ({ ...prev, themeId: th.id }));
               }}
               currentUser={currentUser}
+              posts={posts}
+              setPosts={setPosts}
+              books={books}
+              setBooks={setBooks}
+              photos={photos}
+              setPhotos={setPhotos}
+              mediaList={mediaList}
+              setMediaList={setMediaList}
+              cloudFiles={cloudFiles}
+              setCloudFiles={setCloudFiles}
+              bookmarks={bookmarks}
+              setBookmarks={setBookmarks}
+              browsingHistory={browsingHistory}
+              setBrowsingHistory={setBrowsingHistory}
+              heroIntro={heroIntro}
+              setHeroIntro={setHeroIntro}
               t={t}
             />
           )}

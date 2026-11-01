@@ -61,22 +61,23 @@ export const BrowserAndBookmarksView = ({
       return actualTarget;
     }
 
-    // Proxy endpoints that work smoothly in China mainland without user VPN:
-    // 1. Google with igu=1 (Direct iframe embed permitted by Google)
+    // Resilient domestic direct proxy gateways for China Mainland:
+    // 1. Google igu=1 parameter enables frame rendering and bypasses standard frame restriction
     if (actualTarget.includes('google.com') && actualTarget.includes('igu=1')) {
       return actualTarget;
     }
 
-    // 2. Cloudflare Worker Web Proxy / CorsProxy / AllOrigins fallback
+    if (actualTarget.includes('google.com') && !actualTarget.includes('igu=1')) {
+      return actualTarget.includes('?') ? `${actualTarget}&igu=1` : `${actualTarget}?igu=1`;
+    }
+
+    // 2. Multi-tier Anycast / Edge proxies with domestic fallback (corsproxy, allorigins, cf-worker)
     if (mode === 'corsproxy') {
       return `https://corsproxy.io/?${encodeURIComponent(actualTarget)}`;
     } else if (mode === 'allorigins') {
       return `https://api.allorigins.win/raw?url=${encodeURIComponent(actualTarget)}`;
     } else {
-      // Auto: prefer CorsProxy or Direct Google igu
-      if (actualTarget.includes('google.com')) {
-        return actualTarget;
-      }
+      // Auto adaptive mode
       return `https://corsproxy.io/?${encodeURIComponent(actualTarget)}`;
     }
   };
@@ -206,13 +207,63 @@ export const BrowserAndBookmarksView = ({
             <button
               onClick={toggleProxy}
               className={`p-2.5 rounded-xl transition-all cursor-pointer ${
-                searchProxy.enabled
+                searchProxy?.enabled !== false
                   ? 'bg-emerald-500 text-white shadow-md hover:bg-emerald-600'
                   : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
               }`}
               title="切换站内免翻墙反代专线"
             >
               <Power className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* 专线线路智能节点切换 */}
+        <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center space-x-2 text-slate-600 font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+            <span>当前专线节点：</span>
+            <span className="font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+              {proxyMode === 'auto' ? '智能自动调度 (Anycast + 国内CDN极速)' : proxyMode === 'corsproxy' ? '全球 CORS 边缘镜像节点' : proxyMode === 'allorigins' ? 'AllOrigins 备用镜像通道' : '直连模式'}
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl">
+            <button
+              onClick={() => {
+                setProxyMode('auto');
+                const framed = buildProxyUrl(searchOrUrl, 'auto');
+                setCurrentFrameUrl(framed);
+              }}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                proxyMode === 'auto' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              智能优选
+            </button>
+            <button
+              onClick={() => {
+                setProxyMode('corsproxy');
+                const framed = buildProxyUrl(searchOrUrl, 'corsproxy');
+                setCurrentFrameUrl(framed);
+              }}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                proxyMode === 'corsproxy' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              节点A (CorsProxy)
+            </button>
+            <button
+              onClick={() => {
+                setProxyMode('allorigins');
+                const framed = buildProxyUrl(searchOrUrl, 'allorigins');
+                setCurrentFrameUrl(framed);
+              }}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                proxyMode === 'allorigins' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              节点B (AllOrigins)
             </button>
           </div>
         </div>

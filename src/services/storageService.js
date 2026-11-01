@@ -185,12 +185,26 @@ export const initialCloudFiles = [
   }
 ];
 
+export const getDeploymentAdminCredentials = () => {
+  const username =
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_USERNAME) ||
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_INITIAL_ADMIN_USERNAME) ||
+    'fox';
+  const password =
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_PASSWORD) ||
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_INITIAL_ADMIN_PASSWORD) ||
+    'whitefox2025';
+  return { username, password };
+};
+
+const deploymentAdmin = getDeploymentAdminCredentials();
+
 export const initialUsers = [
   {
     id: 'u-1',
-    username: '白狐 (站长)',
+    username: deploymentAdmin.username,
     email: 'admin@whitefox.blog',
-    password: 'password123',
+    password: deploymentAdmin.password,
     role: 'admin',
     registeredAt: '2025-05-01'
   },
