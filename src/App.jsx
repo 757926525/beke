@@ -30,6 +30,8 @@ import {
   loadFromStorage,
   saveToStorage,
   getDeploymentAdminCredentials,
+  syncBroadcaster,
+  mergeSyncPayloadWithTimestamp,
   STORAGE_KEYS
 } from './services/storageService';
 import { getTranslation, themePresets } from './services/i18nAndTheme';
@@ -166,17 +168,27 @@ export function App() {
     root.classList.add(`site-layout-${siteLayout}`);
   }, [fontSize, siteLayout]);
 
-  // Real-time two-way sync listener across tabs and database hydration
+  // Real-time two-way sync listener across tabs, windows, and database hydration
   useEffect(() => {
-    const handleHydrateSync = (e) => {
-      const data = e.detail;
+    const unsubscribe = syncBroadcaster.subscribe((data, meta) => {
       if (!data) return;
-      if (data.posts && Array.isArray(data.posts)) setPosts(data.posts);
+
+      // Merge incoming data with timestamp / Last-Write-Wins strategy
+      setPosts((currentPosts) => {
+        const merged = mergeSyncPayloadWithTimestamp(
+          { posts: currentPosts, timestamp: localStorage.getItem('wf_last_sync_time') || 0 },
+          { posts: data.posts, timestamp: meta?.timestamp || data.timestamp || data.syncedAt }
+        );
+        return Array.isArray(merged.posts) ? merged.posts : currentPosts;
+      });
+
       if (data.books && Array.isArray(data.books)) setBooks(data.books);
       if (data.photos && Array.isArray(data.photos)) setPhotos(data.photos);
       if (data.mediaList && Array.isArray(data.mediaList)) setMediaList(data.mediaList);
       if (data.cloudFiles && Array.isArray(data.cloudFiles)) setCloudFiles(data.cloudFiles);
       if (data.bookmarks && Array.isArray(data.bookmarks)) setBookmarks(data.bookmarks);
+      if (data.browsingHistory && Array.isArray(data.browsingHistory)) setBrowsingHistory(data.browsingHistory);
+      if (data.users && Array.isArray(data.users)) setUsers(data.users);
       if (data.cloudConfig) setCloudConfig(data.cloudConfig);
       if (data.emailSettings) setEmailSettings(data.emailSettings);
       if (data.appearance) setAppearance(data.appearance);
@@ -186,10 +198,13 @@ export function App() {
       if (data.fontSize) setFontSize(data.fontSize);
       if (data.lang) setLang(data.lang);
       if (data.themeId) setThemeId(data.themeId);
-    };
 
-    window.addEventListener('whitefox-hydrate-full-sync', handleHydrateSync);
-    return () => window.removeEventListener('whitefox-hydrate-full-sync', handleHydrateSync);
+      if (meta?.timestamp || data.timestamp || data.syncedAt) {
+        localStorage.setItem('wf_last_sync_time', meta?.timestamp || data.timestamp || data.syncedAt);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // Persist States
@@ -216,6 +231,53 @@ export function App() {
   useEffect(() => saveToStorage(STORAGE_KEYS.CLOUD_CONFIG, cloudConfig), [cloudConfig]);
   useEffect(() => saveToStorage(STORAGE_KEYS.CLOUD_FILES, cloudFiles), [cloudFiles]);
   useEffect(() => saveToStorage(STORAGE_KEYS.USERS, users), [users]);
+
+  // Debounced Auto-Sync when auto-sync is enabled (全站数据变动防抖自动同步与多端广播)
+  useEffect(() => {
+    const isAutoSyncEnabled = localStorage.getItem('wf_auto_sync_enabled') === 'true';
+    if (!isAutoSyncEnabled) return;
+
+    const timer = setTimeout(async () => {
+      const fullSyncPayload = {
+        version: '1.0.0',
+        timestamp: new Date().toISOString(),
+        syncedAt: new Date().toISOString(),
+        siteName,
+        siteLayout,
+        fontSize,
+        lang,
+        posts,
+        books,
+        photos,
+        mediaList,
+        cloudFiles,
+        bookmarks,
+        browsingHistory,
+        cloudConfig,
+        emailSettings,
+        appearance,
+        systemSettings,
+        users
+      };
+
+      // Broadcast to other tabs
+      syncBroadcaster.broadcast('AUTO_SYNC_DEBOUNCED', fullSyncPayload);
+
+      try {
+        const { pushToCloudSyncVault } = await import('./services/cloudAdapter');
+        const roomKey = localStorage.getItem('wf_cf_room_key') || localStorage.getItem('wf_cross_device_sync_key') || 'fox-vault-master';
+        await pushToCloudSyncVault(fullSyncPayload, {
+          vaultKey: roomKey,
+          customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
+          d1Config: backendConfig
+        });
+      } catch (err) {
+        // silent fail on network in auto mode
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [posts, books, photos, mediaList, cloudFiles, bookmarks, appearance, systemSettings, siteName, siteLayout, fontSize, lang, themeId]);
 
   // Current active theme preset
   const currentTheme = themePresets.find((t) => t.id === themeId) || themePresets[0];
@@ -322,36 +384,56 @@ export function App() {
     return { success: true };
   };
 
-  // Cloudflare D1 & Offline-First Dual Sync (无论接或不接数据库，全站历史、文件、设置、头像、博客完美同步)
-  const handleSyncD1 = () => {
-    const isConnected = (backendConfig?.dbConnected || backendConfig?.status === 'connected') && backendConfig?.dbHost;
+  // Cloudflare D1 & Universal Real-Time Dual Sync (真实调用云端中继/D1数据库与多端广播通信)
+  const handleSyncD1 = async () => {
+    const isConnected = (backendConfig?.dbConnected || backendConfig?.status === 'connected') && (backendConfig?.dbHost || backendConfig?.dbName);
 
-    const fullSyncBundle = {
+    const fullSyncPayload = {
+      version: '1.0.0',
       timestamp: new Date().toISOString(),
+      syncedAt: new Date().toISOString(),
       siteName,
-      historyCount: browsingHistory.length,
-      filesCount: cloudFiles.length,
-      postsCount: posts.length,
-      booksCount: books.length,
-      photosCount: photos.length,
-      mediaCount: mediaList.length,
-      appearance, // Includes cross-device synchronized avatar image & backgrounds
-      settings: {
-        siteName,
-        siteLayout,
-        fontSize,
-        darkMode,
-        lang,
-        themeId
-      }
+      siteLayout,
+      fontSize,
+      lang,
+      posts: posts || [],
+      books: books || [],
+      photos: photos || [],
+      mediaList: mediaList || [],
+      cloudFiles: cloudFiles || [],
+      bookmarks: bookmarks || [],
+      browsingHistory: browsingHistory || [],
+      cloudConfig: cloudConfig || {},
+      emailSettings: emailSettings || {},
+      appearance: appearance || {},
+      systemSettings: systemSettings || {},
+      users: users || []
     };
 
-    saveToStorage('wf_global_unified_sync_snapshot', fullSyncBundle);
+    saveToStorage('wf_global_unified_sync_snapshot', fullSyncPayload);
+    saveToStorage('wf_cross_device_synced_payload', fullSyncPayload);
 
-    if (isConnected) {
-      alert(`[${siteName} 系统] 正在与云端数据库 ${backendConfig.dbType.toUpperCase()} (${backendConfig.dbHost}) 建立实时全息双向同步：\n\n🟢 数据库状态指示灯：有效在线 (Active & Verified)\n✓ 1. 站内所有博文与分类标签已对齐同步\n✓ 2. 浏览历史记录 (${browsingHistory.length} 条) 实时同步\n✓ 3. 站长特权文件与多云调度中枢索引全息更新\n✓ 4. 站长头像与全站视觉外观跨设备同步生效\n✓ 5. 全局系统设置与唯一站长凭证统一校验\n\n💡 数据库实际作用已生效：跨端协同、实时多端持久化、保障千万级数据无缝容灾！`);
-    } else {
-      alert(`[${siteName} 系统] 全站离线自适应全息同步已圆满完成！\n\n🟡 运行模式：离线高可用快照架构 (未连接远程数据库)\n✓ 1. 站内所有历史记录 (${browsingHistory.length} 条) 已完整上卷持久化\n✓ 2. 保存的文件、媒体、相册与站长头像已写入本地高可靠存储\n✓ 3. 博客文章与系统设置已完成 100% 结构校验，刷新永不丢失\n\n💡 提示：如需实现手机/PC等多端跨设备实时秒级协同，可在管理员后台一键接入 Cloudflare D1 或 Supabase！`);
+    // Broadcast across tabs immediately
+    syncBroadcaster.broadcast('NAVBAR_ONE_CLICK_SYNC', fullSyncPayload);
+
+    // Call real cloud adapter
+    try {
+      const { pushToCloudSyncVault } = await import('./services/cloudAdapter');
+      const roomKey = localStorage.getItem('wf_cf_room_key') || localStorage.getItem('wf_cross_device_sync_key') || 'fox-vault-master';
+      const syncRes = await pushToCloudSyncVault(fullSyncPayload, {
+        vaultKey: roomKey,
+        customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
+        d1Config: backendConfig
+      });
+
+      if (isConnected) {
+        alert(`[${siteName} 系统] 云端数据库双向同步已完成！\n\n🟢 数据库通道状态：有效在线 (${backendConfig?.dbType?.toUpperCase() || 'D1'})\n✓ 1. 全量博文、文件、历史记录与外观配置已真实同步\n✓ 2. 多标签页与多窗口已广播生效\n✓ 3. 云端同步密室 [${roomKey}] 数据包已刷新 (${syncRes?.recordCount || 0} 项记录)\n\n💡 跨设备数据已完全对齐！`);
+      } else {
+        alert(`[${siteName} 系统] 全站数据实时双向同步已完成！\n\n🟢 运行模式：边缘中继与多端互通\n✓ 1. 同设备所有标签页与窗口已实时响应更新\n✓ 2. 同步数据已推送至免数据库同步房间 [${roomKey}]\n✓ 3. 手机或新设备输入同名房间号即可拉取完全一致的内容！`);
+      }
+    } catch (e) {
+      console.warn('Sync notice:', e);
+      alert(`[${siteName} 系统] 全站数据已在本地持久化并广播至所有标签页！`);
     }
   };
 

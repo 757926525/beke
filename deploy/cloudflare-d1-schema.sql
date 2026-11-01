@@ -58,3 +58,12 @@ CREATE TABLE IF NOT EXISTS browse_history (
   type TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS site_sync (
+  sync_key TEXT PRIMARY KEY,
+  posts_data TEXT,
+  files_data TEXT,
+  settings_data TEXT,
+  full_payload TEXT,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

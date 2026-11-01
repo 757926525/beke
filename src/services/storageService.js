@@ -282,3 +282,130 @@ export const formatBytes = (bytes) => {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
+
+/**
+ * Universal Multi-Channel Broadcast Sync System
+ * Supports BroadcastChannel API + Storage Events + In-Memory CustomEvents
+ */
+const SYNC_BROADCAST_CHANNEL_NAME = 'whitefox_universal_sync_channel';
+
+class UniversalSyncBroadcaster {
+  constructor() {
+    this.channel = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        this.channel = new BroadcastChannel(SYNC_BROADCAST_CHANNEL_NAME);
+      } catch (e) {
+        console.warn('BroadcastChannel initialization fallback:', e);
+      }
+    }
+  }
+
+  broadcast(type, payload, meta = {}) {
+    if (typeof window === 'undefined') return;
+    const message = {
+      type,
+      payload,
+      timestamp: meta.timestamp || new Date().toISOString(),
+      senderId: meta.senderId || window.__whitefox_session_id || 'tab-' + Math.random().toString(36).substring(2, 9)
+    };
+
+    // 1. Post to BroadcastChannel (inter-tab)
+    if (this.channel) {
+      try {
+        this.channel.postMessage(message);
+      } catch (err) {
+        console.warn('BroadcastChannel post error:', err);
+      }
+    }
+
+    // 2. Dispatch in-window CustomEvent
+    try {
+      window.dispatchEvent(new CustomEvent('whitefox-hydrate-full-sync', { detail: payload }));
+    } catch (err) {
+      console.warn('Local CustomEvent dispatch error:', err);
+    }
+  }
+
+  subscribe(callback) {
+    if (typeof window === 'undefined') return () => {};
+
+    const handleBroadcastMessage = (event) => {
+      if (event && event.data && event.data.payload) {
+        callback(event.data.payload, event.data);
+      }
+    };
+
+    const handleStorageChange = (event) => {
+      if (event.key === 'wf_cross_device_synced_payload' && event.newValue) {
+        try {
+          const parsed = JSON.parse(event.newValue);
+          callback(parsed, { type: 'storage_event', timestamp: new Date().toISOString() });
+        } catch (e) {
+          // ignore
+        }
+      }
+    };
+
+    const handleCustomSyncEvent = (event) => {
+      if (event.detail) {
+        callback(event.detail, { type: 'custom_event', timestamp: new Date().toISOString() });
+      }
+    };
+
+    if (this.channel) {
+      this.channel.addEventListener('message', handleBroadcastMessage);
+    }
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('whitefox-hydrate-full-sync', handleCustomSyncEvent);
+
+    return () => {
+      if (this.channel) {
+        this.channel.removeEventListener('message', handleBroadcastMessage);
+      }
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('whitefox-hydrate-full-sync', handleCustomSyncEvent);
+    };
+  }
+}
+
+export const syncBroadcaster = new UniversalSyncBroadcaster();
+
+/**
+ * Last-Write-Wins (Timestamp) Resolution & Merge for Site Data
+ */
+export const mergeSyncPayloadWithTimestamp = (currentData, incomingData) => {
+  if (!incomingData) return currentData;
+  if (!currentData) return incomingData;
+
+  const currentTs = new Date(currentData.timestamp || currentData.syncedAt || 0).getTime();
+  const incomingTs = new Date(incomingData.timestamp || incomingData.syncedAt || 0).getTime();
+
+  // If incoming has newer timestamp or current has no timestamp, incoming wins
+  if (incomingTs >= currentTs) {
+    return {
+      ...currentData,
+      ...incomingData,
+      posts: incomingData.posts || currentData.posts || [],
+      books: incomingData.books || currentData.books || [],
+      photos: incomingData.photos || currentData.photos || [],
+      mediaList: incomingData.mediaList || currentData.mediaList || [],
+      cloudFiles: incomingData.cloudFiles || currentData.cloudFiles || [],
+      bookmarks: incomingData.bookmarks || currentData.bookmarks || [],
+      browsingHistory: incomingData.browsingHistory || currentData.browsingHistory || [],
+      cloudConfig: incomingData.cloudConfig || currentData.cloudConfig || {},
+      emailSettings: incomingData.emailSettings || currentData.emailSettings || {},
+      appearance: incomingData.appearance || currentData.appearance || {},
+      systemSettings: incomingData.systemSettings || currentData.systemSettings || {},
+      users: incomingData.users || currentData.users || [],
+      siteName: incomingData.siteName || currentData.siteName,
+      siteLayout: incomingData.siteLayout || currentData.siteLayout,
+      fontSize: incomingData.fontSize || currentData.fontSize,
+      lang: incomingData.lang || currentData.lang,
+      themeId: incomingData.themeId || currentData.themeId,
+      syncedAt: incomingData.syncedAt || new Date().toISOString()
+    };
+  }
+
+  return currentData;
+};

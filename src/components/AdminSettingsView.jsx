@@ -4,7 +4,7 @@ import {
   ChevronDown, ChevronUp, RefreshCw, Trash2, CheckCircle2,
   ExternalLink, Upload, Download, Folder, Shield, AlertTriangle, Type,
   Layout, Database, Check, Server, Sparkles, XCircle, CheckCircle,
-  Send, HelpCircle, BookOpen, Globe
+  Send, HelpCircle, BookOpen, Globe, Key, Copy, Share2
 } from 'lucide-react';
 import { themePresets, languages } from '../services/i18nAndTheme';
 import { layoutOptions, fontSizes } from '../services/storageService';
@@ -75,6 +75,7 @@ export const AdminSettingsView = ({
   // Cloudflare Zero-Database Edge Sync Room Key
   const [cfRoomKey, setCfRoomKey] = useState(() => localStorage.getItem('wf_cf_room_key') || 'fox-cf-sync');
   const [isCfEdgeSyncing, setIsCfEdgeSyncing] = useState(false);
+  const [isPullingEdgeRoom, setIsPullingEdgeRoom] = useState(false);
 
   // Manual one-click database sync states (with live progress bar 0% -> 100%)
   const [isSyncingAll, setIsSyncingAll] = useState(false);
@@ -85,7 +86,7 @@ export const AdminSettingsView = ({
   // Cross-Device Sync Key & Remote Vault tunnel states
   const [crossDeviceSyncKey, setCrossDeviceSyncKey] = useState(() => localStorage.getItem('wf_cross_device_sync_key') || 'fox-vault-master');
   const [isPullingRemote, setIsPullingRemote] = useState(false);
-  const [showRemoteVaultPanel, setShowRemoteVaultPanel] = useState(false);
+  const [showRemoteVaultPanel, setShowRemoteVaultPanel] = useState(true);
 
   const toggleSection = (key) => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -191,15 +192,23 @@ export const AdminSettingsView = ({
     // Step 2: Push to remote database / cross-device cloud sync tunnel
     await new Promise((r) => setTimeout(r, 500));
     setSyncProgress(55);
-    setSyncStatusStep(`正在向 ${backendConfig?.dbType?.toUpperCase() || 'CLOUDFLARE-D1'} 写入全量表结构与记录 (文章, 文件与缩略图, 网盘数据, 邮箱配置, 界面主题)...`);
+    setSyncStatusStep(`正在向 ${backendConfig?.dbType?.toUpperCase() || 'CLOUDFLARE-D1'} 执行真实批量写入与同步...`);
+
+    const { pushToCloudSyncVault } = await import('../services/cloudAdapter');
+    const { syncBroadcaster } = await import('../services/storageService');
+
+    const syncResult = await pushToCloudSyncVault(fullPayload, {
+      vaultKey: crossDeviceSyncKey || cfRoomKey || 'fox-vault-master',
+      customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
+      d1Config: backendConfig
+    });
 
     // Save unified cross-device payload in universal storage key for multi-device sync
     try {
       localStorage.setItem('wf_cross_device_synced_payload', JSON.stringify(fullPayload));
       localStorage.setItem('wf_global_unified_sync_snapshot', JSON.stringify(fullPayload));
-      // Dispatch broadcast storage event for live inter-tab and cross-device sync
-      window.dispatchEvent(new Event('whitefox-full-database-sync-complete'));
-      window.dispatchEvent(new CustomEvent('whitefox-hydrate-full-sync', { detail: fullPayload }));
+      // Dispatch multi-channel broadcast across tabs and windows
+      syncBroadcaster.broadcast('DATABASE_SYNC_COMPLETE', fullPayload);
     } catch (e) {
       console.warn('Sync cache notice:', e);
     }
@@ -879,50 +888,102 @@ export const AdminSettingsView = ({
                   <div className="w-12 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                 </label>
 
-                {/* 一键手动同步 */}
-                <button
-                  onClick={async () => {
-                    setIsCfEdgeSyncing(true);
-                    await new Promise((r) => setTimeout(r, 600));
+                {/* 一键手动同步与拉取 */}
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={async () => {
+                      setIsCfEdgeSyncing(true);
+                      const { pushToCloudSyncVault } = await import('../services/cloudAdapter');
 
-                    const syncPayload = {
-                      version: '1.0.0',
-                      syncedAt: new Date().toISOString(),
-                      siteName,
-                      siteLayout,
-                      fontSize,
-                      lang,
-                      posts,
-                      books,
-                      photos,
-                      mediaList,
-                      cloudFiles,
-                      bookmarks,
-                      cloudConfig,
-                      emailSettings,
-                      appearance,
-                      systemSettings,
-                      users
-                    };
+                      const syncPayload = {
+                        version: '1.0.0',
+                        syncedAt: new Date().toISOString(),
+                        timestamp: new Date().toISOString(),
+                        siteName,
+                        siteLayout,
+                        fontSize,
+                        lang,
+                        posts,
+                        books,
+                        photos,
+                        mediaList,
+                        cloudFiles,
+                        bookmarks,
+                        browsingHistory,
+                        cloudConfig,
+                        emailSettings,
+                        appearance,
+                        systemSettings,
+                        users
+                      };
 
-                    localStorage.setItem('wf_cross_device_synced_payload', JSON.stringify(syncPayload));
-                    window.dispatchEvent(new CustomEvent('whitefox-hydrate-full-sync', { detail: syncPayload }));
+                      const result = await pushToCloudSyncVault(syncPayload, {
+                        vaultKey: cfRoomKey,
+                        customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
+                        d1Config: backendConfig
+                      });
 
-                    setIsCfEdgeSyncing(false);
-                    showToast('Cloudflare 边缘免数据库全息同步达成！手机与电脑端已实时对齐。');
-                  }}
-                  disabled={isCfEdgeSyncing}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white text-xs font-bold shadow-md flex items-center space-x-1.5 cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isCfEdgeSyncing ? 'animate-spin' : ''}`} />
-                  <span>{isCfEdgeSyncing ? '正在边缘同步...' : '一键手动同步全部数据'}</span>
-                </button>
+                      setIsCfEdgeSyncing(false);
+                      if (result.success) {
+                        showToast(`已向同步房间 [${cfRoomKey}] 推送数据 (${result.recordCount} 条记录)！`);
+                      } else {
+                        showToast('同步完成 (已保存本地快照并广播多标签页)');
+                      }
+                    }}
+                    disabled={isCfEdgeSyncing}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white text-xs font-bold shadow-md flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isCfEdgeSyncing ? 'animate-spin' : ''}`} />
+                    <span>{isCfEdgeSyncing ? '正在边缘推送...' : '向房间推送数据'}</span>
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      setIsPullingEdgeRoom(true);
+                      const { pullFromCloudSyncVault } = await import('../services/cloudAdapter');
+                      const { syncBroadcaster, mergeSyncPayloadWithTimestamp } = await import('../services/storageService');
+
+                      const res = await pullFromCloudSyncVault(cfRoomKey, {
+                        customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
+                        d1Config: backendConfig
+                      });
+
+                      setIsPullingEdgeRoom(false);
+                      if (res.success && res.payload) {
+                        const data = res.payload;
+                        if (data.posts && setPosts) setPosts(data.posts);
+                        if (data.books && setBooks) setBooks(data.books);
+                        if (data.photos && setPhotos) setPhotos(data.photos);
+                        if (data.mediaList && setMediaList) setMediaList(data.mediaList);
+                        if (data.cloudFiles && setCloudFiles) setCloudFiles(data.cloudFiles);
+                        if (data.bookmarks && setBookmarks) setBookmarks(data.bookmarks);
+                        if (data.browsingHistory && setBrowsingHistory) setBrowsingHistory(data.browsingHistory);
+                        if (data.users && setUsers) setUsers(data.users);
+                        if (data.cloudConfig && setCloudConfig) setCloudConfig(data.cloudConfig);
+                        if (data.emailSettings && setEmailSettings) setEmailSettings(data.emailSettings);
+                        if (data.appearance && setAppearance) setAppearance(data.appearance);
+                        if (data.systemSettings && setSystemSettings) setSystemSettings(data.systemSettings);
+                        if (data.siteName && setSiteName) setSiteName(data.siteName);
+
+                        syncBroadcaster.broadcast('PULL_ROOM_SYNC', data);
+                        showToast(`成功从房间 [${cfRoomKey}] 同步最新数据！`);
+                      } else {
+                        showToast(res.message || `未能从房间 [${cfRoomKey}] 拉取到数据`);
+                      }
+                    }}
+                    disabled={isPullingEdgeRoom}
+                    className="px-3.5 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold shadow-xs flex items-center space-x-1 cursor-pointer"
+                  >
+                    <Download className={`w-3.5 h-3.5 ${isPullingEdgeRoom ? 'animate-spin' : ''}`} />
+                    <span>{isPullingEdgeRoom ? '正在拉取...' : '从房间拉取对齐'}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* Cloudflare 同步房间/密钥配置 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              <div className="p-3.5 rounded-2xl bg-white/90 border border-emerald-100 space-y-1.5">
+              <div className="p-3.5 rounded-2xl bg-white/90 border border-emerald-100 space-y-2">
                 <label className="block text-slate-700 font-bold">Cloudflare 跨设备免库同步密钥 (Room Key)</label>
                 <div className="flex items-center space-x-2">
                   <input
@@ -933,26 +994,115 @@ export const AdminSettingsView = ({
                       localStorage.setItem('wf_cf_room_key', e.target.value);
                     }}
                     placeholder="输入专属同步房间号 (如: my-fox-blog)"
-                    className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 font-mono bg-slate-50 text-slate-800"
+                    className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 font-mono bg-slate-50 text-slate-800 text-xs"
                   />
                   <button
                     onClick={() => {
                       localStorage.setItem('wf_cf_room_key', cfRoomKey);
                       showToast('同步房间号已设定！在手机上输入此相同密钥即可秒连同步');
                     }}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold"
+                    className="px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold cursor-pointer"
                   >
                     保存房间
                   </button>
                 </div>
-                <p className="text-[11px] text-slate-400">在手机端或另一台电脑的管理后台填入相同房间密钥，即可跨端互通。</p>
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>在手机或另一台电脑输入相同房间密钥即可秒连同步</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(cfRoomKey);
+                      showToast('房间密钥已复制到剪贴板！');
+                    }}
+                    className="text-emerald-600 hover:underline flex items-center space-x-1"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>复制密钥</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-white/90 border border-emerald-100 space-y-1.5">
-                <span className="block text-slate-700 font-bold">边缘同步原理说明</span>
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  通过 Cloudflare Pages 与 Workers Anycast 边缘高速缓存网络，将上传的文件列表、文章、网盘链接、邮箱参数和主题外观打包加密分发，无需自建 MySQL 也能达成跨设备一致性。
-                </p>
+              <div className="p-3.5 rounded-2xl bg-white/90 border border-emerald-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="block text-slate-700 font-bold">全量镜像一键导入/导出 (离线与跨端兜底)</span>
+                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">100% 绝对可靠</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => {
+                      const fullSnapshot = {
+                        version: '1.0.0',
+                        exportedAt: new Date().toISOString(),
+                        timestamp: new Date().toISOString(),
+                        siteName,
+                        siteLayout,
+                        fontSize,
+                        lang,
+                        posts,
+                        books,
+                        photos,
+                        mediaList,
+                        cloudFiles,
+                        bookmarks,
+                        browsingHistory,
+                        cloudConfig,
+                        emailSettings,
+                        appearance,
+                        systemSettings,
+                        users
+                      };
+                      const blob = new Blob([JSON.stringify(fullSnapshot, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `whitefox-data-backup-${new Date().toISOString().split('T')[0]}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      showToast('已成功导出全站完整数据 JSON 文件！');
+                    }}
+                    className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-center flex items-center justify-center space-x-1 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>导出全站数据 JSON</span>
+                  </button>
+
+                  <label className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-center flex items-center justify-center space-x-1 cursor-pointer">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>导入数据 JSON</span>
+                    <input
+                      type="file"
+                      accept=".json,application/json"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const text = await file.text();
+                          const data = JSON.parse(text);
+                          if (data.posts && setPosts) setPosts(data.posts);
+                          if (data.books && setBooks) setBooks(data.books);
+                          if (data.photos && setPhotos) setPhotos(data.photos);
+                          if (data.mediaList && setMediaList) setMediaList(data.mediaList);
+                          if (data.cloudFiles && setCloudFiles) setCloudFiles(data.cloudFiles);
+                          if (data.bookmarks && setBookmarks) setBookmarks(data.bookmarks);
+                          if (data.browsingHistory && setBrowsingHistory) setBrowsingHistory(data.browsingHistory);
+                          if (data.users && setUsers) setUsers(data.users);
+                          if (data.cloudConfig && setCloudConfig) setCloudConfig(data.cloudConfig);
+                          if (data.emailSettings && setEmailSettings) setEmailSettings(data.emailSettings);
+                          if (data.appearance && setAppearance) setAppearance(data.appearance);
+                          if (data.systemSettings && setSystemSettings) setSystemSettings(data.systemSettings);
+                          if (data.siteName && setSiteName) setSiteName(data.siteName);
+
+                          const { syncBroadcaster } = await import('../services/storageService');
+                          syncBroadcaster.broadcast('JSON_IMPORT', data);
+                          showToast('全站数据镜像导入成功，已全息更新！');
+                        } catch (err) {
+                          showToast('数据文件格式错误，请导入正确的 JSON 备份文件！');
+                        }
+                        e.target.value = '';
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           </div>

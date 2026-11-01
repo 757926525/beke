@@ -193,51 +193,91 @@ const EDGE_RELAY_GATEWAYS = [
 export async function pushToCloudSyncVault(payload, options = {}) {
   const { vaultKey, customEndpoint, d1Config } = options;
   const syncId = (vaultKey || 'fox-vault-master').trim();
+  const timestamp = payload.timestamp || payload.syncedAt || new Date().toISOString();
+  const normalizedPayload = {
+    ...payload,
+    timestamp,
+    syncedAt: timestamp
+  };
+
+  let d1Success = false;
+  let remoteSuccess = false;
+  let remoteEndpointUsed = '';
 
   // 1. If Cloudflare D1 is actively connected, write records directly into Cloudflare D1 tables
-  if (d1Config && d1Config.dbConnected && d1Config.dbName && d1Config.dbToken) {
+  if (d1Config && (d1Config.dbConnected || d1Config.status === 'connected') && d1Config.dbName && d1Config.dbToken) {
     try {
-      const postsJson = JSON.stringify(payload.posts || []).replace(/'/g, "''");
-      const filesJson = JSON.stringify(payload.cloudFiles || []).replace(/'/g, "''");
-      const settingsJson = JSON.stringify(payload.systemSettings || {}).replace(/'/g, "''");
-      const syncSql = `INSERT OR REPLACE INTO site_sync (sync_key, posts_data, files_data, settings_data, updated_at) VALUES ('${syncId}', '${postsJson}', '${filesJson}', '${settingsJson}', CURRENT_TIMESTAMP);`;
+      const postsJson = JSON.stringify(normalizedPayload.posts || []).replace(/'/g, "''");
+      const filesJson = JSON.stringify(normalizedPayload.cloudFiles || []).replace(/'/g, "''");
+      const settingsJson = JSON.stringify(normalizedPayload.systemSettings || {}).replace(/'/g, "''");
+      const fullJson = JSON.stringify(normalizedPayload).replace(/'/g, "''");
+
+      const syncSql = `INSERT OR REPLACE INTO site_sync (sync_key, posts_data, files_data, settings_data, full_payload, updated_at) VALUES ('${syncId}', '${postsJson}', '${filesJson}', '${settingsJson}', '${fullJson}', CURRENT_TIMESTAMP);`;
       await executeD1Query(d1Config, syncSql);
+      d1Success = true;
     } catch (e) {
       console.warn('Direct D1 push notice, proceeding with edge relay:', e.message);
     }
   }
 
-  // 2. Push to Custom Endpoint if configured
+  // 2. Push to Custom Endpoint or Public Edge Relay
+  const endpointsToTry = [];
   if (customEndpoint && customEndpoint.trim()) {
+    endpointsToTry.push(customEndpoint.replace(/\/+$/, '') + '/api/sync');
+  }
+  // Include global edge relays
+  EDGE_RELAY_GATEWAYS.forEach((gw) => {
+    if (!endpointsToTry.includes(gw)) endpointsToTry.push(gw);
+  });
+
+  for (const targetUrl of endpointsToTry) {
     try {
-      const targetUrl = customEndpoint.replace(/\/+$/, '') + '/api/sync';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
       const res = await fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Sync-Key': syncId
         },
-        body: JSON.stringify({ key: syncId, payload, timestamp: new Date().toISOString() })
+        body: JSON.stringify({ key: syncId, payload: normalizedPayload, timestamp }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+
       if (res.ok) {
-        return { success: true, vaultId: syncId, endpoint: targetUrl };
+        remoteSuccess = true;
+        remoteEndpointUsed = targetUrl;
+        break;
       }
     } catch (err) {
-      console.warn('Custom endpoint push failed:', err.message);
+      // Continue to next endpoint or fallback
     }
   }
 
-  // 3. Fallback: Edge KV Relay Network / Local Storage Persistence
+  // 3. Edge KV Relay & Local Storage / BroadcastChannel Persistence
   try {
-    localStorage.setItem(`wf_vault_${syncId}`, JSON.stringify(payload));
-    localStorage.setItem('wf_cross_device_synced_payload', JSON.stringify(payload));
-    window.dispatchEvent(new CustomEvent('whitefox-hydrate-full-sync', { detail: payload }));
+    localStorage.setItem(`wf_vault_${syncId}`, JSON.stringify(normalizedPayload));
+    localStorage.setItem('wf_cross_device_synced_payload', JSON.stringify(normalizedPayload));
+    localStorage.setItem('wf_global_unified_sync_snapshot', JSON.stringify(normalizedPayload));
+
+    // Universal multi-channel broadcast across tabs and components
+    try {
+      const { syncBroadcaster } = await import('./storageService');
+      syncBroadcaster.broadcast('FULL_SYNC', normalizedPayload, { timestamp, vaultKey: syncId });
+    } catch (e) {
+      window.dispatchEvent(new CustomEvent('whitefox-hydrate-full-sync', { detail: normalizedPayload }));
+    }
 
     return {
       success: true,
       vaultId: syncId,
-      timestamp: new Date().toISOString(),
-      recordCount: Object.keys(payload).reduce((acc, k) => acc + (Array.isArray(payload[k]) ? payload[k].length : 1), 0)
+      timestamp,
+      d1Synced: d1Success,
+      remoteSynced: remoteSuccess,
+      remoteEndpoint: remoteEndpointUsed,
+      recordCount: Object.keys(normalizedPayload).reduce((acc, k) => acc + (Array.isArray(normalizedPayload[k]) ? normalizedPayload[k].length : 1), 0)
     };
   } catch (e) {
     return { success: false, error: e.message };
@@ -252,36 +292,58 @@ export async function pullFromCloudSyncVault(vaultKey, options = {}) {
   const syncId = (vaultKey || 'fox-vault-master').trim();
 
   // 1. If Cloudflare D1 is actively connected, pull records directly from Cloudflare D1
-  if (d1Config && d1Config.dbConnected && d1Config.dbName && d1Config.dbToken) {
+  if (d1Config && (d1Config.dbConnected || d1Config.status === 'connected') && d1Config.dbName && d1Config.dbToken) {
     try {
-      const querySql = `SELECT * FROM site_sync WHERE sync_key = '${syncId}' LIMIT 1;`;
+      const querySql = `SELECT * FROM site_sync WHERE sync_key = '${syncId}' ORDER BY updated_at DESC LIMIT 1;`;
       const d1Res = await executeD1Query(d1Config, querySql);
       if (d1Res && d1Res.data && d1Res.data.length > 0) {
         const row = d1Res.data[0];
+        if (row.full_payload) {
+          try {
+            const parsedFull = JSON.parse(row.full_payload);
+            return { success: true, payload: parsedFull, source: 'cloudflare-d1' };
+          } catch (err) {}
+        }
         const posts = JSON.parse(row.posts_data || '[]');
         const cloudFiles = JSON.parse(row.files_data || '[]');
         const systemSettings = JSON.parse(row.settings_data || '{}');
-        const d1Payload = { posts, cloudFiles, systemSettings };
-        return { success: true, payload: d1Payload };
+        const d1Payload = { posts, cloudFiles, systemSettings, timestamp: row.updated_at };
+        return { success: true, payload: d1Payload, source: 'cloudflare-d1' };
       }
     } catch (e) {
       console.warn('D1 direct pull notice:', e.message);
     }
   }
 
-  // 2. Pull from custom endpoint
+  // 2. Pull from custom endpoint or edge relay
+  const endpointsToTry = [];
   if (customEndpoint && customEndpoint.trim()) {
+    endpointsToTry.push(customEndpoint.replace(/\/+$/, '') + `/api/sync?key=${encodeURIComponent(syncId)}`);
+  }
+  EDGE_RELAY_GATEWAYS.forEach((gw) => {
+    const url = `${gw}?key=${encodeURIComponent(syncId)}`;
+    if (!endpointsToTry.includes(url)) endpointsToTry.push(url);
+  });
+
+  for (const targetUrl of endpointsToTry) {
     try {
-      const targetUrl = customEndpoint.replace(/\/+$/, '') + `/api/sync?key=${encodeURIComponent(syncId)}`;
-      const res = await fetch(targetUrl, { headers: { 'Accept': 'application/json' } });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      const res = await fetch(targetUrl, {
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
       if (res.ok) {
         const data = await res.json();
         if (data && data.payload) {
-          return { success: true, payload: data.payload };
+          return { success: true, payload: data.payload, source: targetUrl };
         }
       }
     } catch (err) {
-      console.warn('Custom endpoint pull failed:', err.message);
+      // Continue to next endpoint
     }
   }
 
@@ -290,7 +352,7 @@ export async function pullFromCloudSyncVault(vaultKey, options = {}) {
     const rawVault = localStorage.getItem(`wf_vault_${syncId}`) || localStorage.getItem('wf_cross_device_synced_payload');
     if (rawVault) {
       const parsed = JSON.parse(rawVault);
-      return { success: true, payload: parsed };
+      return { success: true, payload: parsed, source: 'local-vault' };
     }
   } catch (err) {
     // ignore
