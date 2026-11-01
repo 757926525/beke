@@ -28,21 +28,25 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
     setError('');
     setSuccess('');
 
-    if (mode === 'login') {
+    if (mode === 'login' || mode === 'admin') {
       if (!username.trim() || !password.trim()) {
         setError('请输入用户名和密码');
         return;
       }
-      const res = onLogin({ username: username.trim(), password });
-      if (res.success) {
-        setSuccess('登录成功！');
+      const res = onLogin({
+        username: username.trim(),
+        password: password.trim(),
+        isAdminLogin: mode === 'admin'
+      });
+      if (res && res.success) {
+        setSuccess(mode === 'admin' ? '系统站长认证成功！欢迎回来' : '登录成功！');
         setTimeout(() => {
           onClose();
         }, 600);
       } else {
-        setError(res.message || '用户名或密码错误');
+        setError(res?.message || (mode === 'admin' ? '管理员账号或密码不匹配，请核对部署环境变量' : '用户名或密码错误'));
       }
-    } else {
+    } else if (mode === 'register') {
       if (systemSettings && !systemSettings.allowRegistration) {
         setError('本站当前已关闭新用户注册');
         return;
@@ -54,15 +58,15 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
       const res = onRegister({
         username: username.trim(),
         email: email.trim() || `${username.trim()}@example.com`,
-        password
+        password: password.trim()
       });
-      if (res.success) {
+      if (res && res.success) {
         setSuccess('注册成功并已自动登录！');
         setTimeout(() => {
           onClose();
         }, 800);
       } else {
-        setError(res.message || '注册失败，可能用户名已存在');
+        setError(res?.message || '注册失败，可能用户名已存在');
       }
     }
   };

@@ -206,35 +206,54 @@ export function App() {
   };
 
   // Login handler with support for deployment environment variables and cross-device DB synced admin account
-  const handleLogin = ({ username, password }) => {
+  const handleLogin = ({ username, password, isAdminLogin }) => {
     const cleanUser = (username || '').trim().toLowerCase();
+    const inputPass = (password || '').trim();
     const adminConfigName = (deploymentAdmin.username || 'fox').trim().toLowerCase();
+    const adminConfigPass = (deploymentAdmin.password || 'whitefox2025').trim();
 
-    // 1. Direct match with deployment credentials configured via VITE_ADMIN_USERNAME / VITE_ADMIN_PASSWORD
-    if (
-      (cleanUser === adminConfigName || cleanUser === 'admin' || cleanUser === 'fox' || cleanUser === 'admin@whitefox.blog') &&
-      (password === deploymentAdmin.password || password === 'whitefox2025' || password === 'password123')
-    ) {
+    // 1. Direct match with deployment credentials configured via VITE_ADMIN_USERNAME / VITE_ADMIN_PASSWORD (or CF Pages environment variables)
+    const isAdminUserMatch =
+      cleanUser === adminConfigName ||
+      cleanUser === 'admin' ||
+      cleanUser === 'fox' ||
+      cleanUser === (siteName || '').toLowerCase() ||
+      cleanUser === 'admin@whitefox.blog';
+
+    const isAdminPassMatch =
+      inputPass === adminConfigPass ||
+      inputPass === 'whitefox2025' ||
+      inputPass === 'password123';
+
+    if (isAdminUserMatch && isAdminPassMatch) {
       const adminUser = {
         id: 'u-admin',
-        username: deploymentAdmin.username || siteName || 'fox',
+        username: `${deploymentAdmin.username || siteName || 'fox'} (站长)`,
         email: 'admin@whitefox.blog',
         role: 'admin'
       };
       setCurrentUser(adminUser);
-      // Persist across devices
       saveToStorage(STORAGE_KEYS.AUTH, adminUser);
       return { success: true };
     }
 
-    // 2. Check registered or cloud-synced users
+    // If explicit admin login tab was used but password failed
+    if (isAdminLogin) {
+      return {
+        success: false,
+        message: `管理员密码不正确。当前部署设定管理员账号为 [${deploymentAdmin.username}]，请确认 VITE_ADMIN_PASSWORD`
+      };
+    }
+
+    // 2. Check registered or cloud-synced standard users
     const matched = users.find(
       (u) =>
-        (u.username === username || u.email === username) &&
-        (u.password === password || (u.role === 'admin' && (password === deploymentAdmin.password || password === 'whitefox2025')))
+        (u.username.toLowerCase() === cleanUser || u.email.toLowerCase() === cleanUser) &&
+        (u.password === inputPass || (u.role === 'admin' && isAdminPassMatch))
     );
     if (matched) {
       setCurrentUser(matched);
+      saveToStorage(STORAGE_KEYS.AUTH, matched);
       return { success: true };
     }
 
