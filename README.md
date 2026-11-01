@@ -1,205 +1,202 @@
-# 🦊 白狐博客系统 (fox / WhiteFox Blog)
+# 白狐 (WhiteFox) 博客系统
 
-> **极简、高质感、现代化的多云边缘计算个人博客系统**
-> 默认配色采用清雅怡人的 **翡翠绿与纯白（Emerald & White）** 东方美学质感。原生适配 **Cloudflare Pages / Workers、腾讯云 EdgeOne / COS、阿里云 ESA / OSS**，支持一键 Git 拉取部署、Pages 部署包上传、Docker 容器化与边缘数据库连接。
+> 🦊 东方美学设计 · 极简敏捷 · 翡翠绿与纯白质感 · 多云边缘计算知识空间
 
----
-
-## 🌟 核心特性概览
-
-1. **优雅界面与极简东方美学**
-   - 默认经典「翡翠竹韵」绿白主题，支持 5 套高质感预设配色。
-   - **自定义全站名称**：默认名称为 `fox`，站长可在设置面板实时修改全站名称并全域同步。
-   - **一键切换排版布局**：支持 4 种专业布局（经典卡片网格、沉浸杂志流瀑、极简流式信息条、高密度紧凑列表）。
-   - **一键调节站内字号**：紧凑 (14px)、标准 (16px)、舒适大字 (18px)、特大号 (20px) 极速自由切换。
-   - **极简极净页眉**：页眉仅保留品牌、头像用户信息、夜间模式切换与退出按钮，支持**一键收拢/展开**导航栏。
-   - **本地图片一键设定**：头像、全站背景、首页介绍区 Hero 封面均支持**本地图片上传**与 URL 链接设定。
-
-2. **多云边缘架构 & 后台连接能力**
-   - **Cloudflare Pages 一键优先部署**：极速 Anycast 边缘网络，0 秒冷启动。
-   - **Pages 上传包一键生成**：提供一键自动化打包脚本与现成 ZIP 包，直接拖拽到 Cloudflare、腾讯云、阿里云 Pages 控制台即刻上线。
-   - **腾讯云 EdgeOne / COS 与 阿里云 ESA / OSS**：原生支持国内主流云厂商边缘函数、静态站点托管与对象存储直传。
-   - **数据库与对象存储后台连接**：支持 Cloudflare D1、MySQL 8.0+、Supabase PostgreSQL，以及 Cloudflare R2、腾讯云 COS、阿里云 OSS，支持控制台在线连通性测试。
-
-3. **完整博文撰写与管理中枢**
-   - 支持全功能 Markdown 写作、分类专栏、自定义标签与封面图本地上传。
-   - 支持**一键复制全文 Markdown**、一键收藏、评论互动与文章安全删除。
-
-4. **沉浸式书架与电子书完整管理**
-   - **本地电子书上传解析**：支持 TXT / EPUB / PDF / MD 格式本地上传，自动提取标题与分章节结构。
-   - **离线电子书一键导出下载**：可随时打包并下载书架藏书到本地设备。
-   - **管理员完全管理功能**：站长管理员可自由上架新书、在线编辑章节内容或图书简介，以及下架删除藏书。
-   - **沉浸式阅读器**：自适应手机端刘海屏与屏幕安全区（`env(safe-area-inset-top)`），无遮挡沉浸式全屏畅读、字号切换与章节目录抽屉。
-
-5. **全画幅媒体影音与白狐宣传片**
-   - **白狐博客宣传片演示**：全新升级影院级观影画幅，支持 16:9 宽屏、9:16 手机短视频竖屏、21:9 超宽电影级与 4:3 经典比例自由切换。
-   - **本地音视频上传与播放**：支持拖拽或选择本地视频/音频文件即时载入播放器试听。
-   - **完整的影音文件管理**：支持媒体文件按类型归档、一键下载至本地设备、节目单点播与媒体条目删除。
-
-6. **网盘与多云调度中枢实战指南**
-   - 内置**详细图文实战指南**，涵盖 Cloudflare R2（0 出口流量费）、腾讯云 COS、阿里云 OSS 与 AList / WebDAV 挂载全流程步骤。
-   - 支持多云存储源密钥参数配置与连通性即时同步。
-
-7. **纯净云端下载中枢**
-   - 支持输入任意互联网文件或音视频网址进行多线程下载。
-   - 独家支持**多码率解析与提取**（4K 2160p、2K 1440p、1080p60 高帧率、1080p 全高清、720p 以及纯音频提取），配备实时动态下载进度条与速度监控。
-
-8. **登录注册与权限体系**
-   - 包含完整的用户登录与注册面板（支持站长开启/关闭公开注册）。
-   - 退出登录按钮功能正常，站长管理员与普通注册成员权限严格隔离。
+[![Vite](https://img.shields.io/badge/Vite-6.x-646CFF?logo=vite)](https://vitejs.dev/)
+[![React](https://img.shields.io/badge/React-19.x-61DAFB?logo=react)](https://react.dev/)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4.x-38B2AC?logo=tailwind-css)](https://tailwindcss.com/)
+[![Cloudflare Pages](https://img.shields.io/badge/Deploy-Cloudflare%20Pages-F38020?logo=cloudflare)](https://pages.cloudflare.com/)
+[![License](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
 
 ---
 
-## 🚀 部署指南 (Deployment Guide)
+## 🌟 项目介绍
 
-### 🥇 方式一：Cloudflare Pages 一键拉取部署 (首选推荐)
+**白狐博客 (WhiteFox Blog)** 是一套专为极客、学者与创作者打造的全功能多云边缘博客系统。以**翡翠竹韵（绿白美学）**为默认基调，支持暗黑模式与多套东方典雅配色，支持四种博文排版与全站字体调节。
 
-这是最推荐、最简便且具备全球 Anycast 自动 CI/CD 的部署方式。
+### ✨ 核心功能矩阵
 
-1. **Fork 或推送到 GitHub / GitLab** 仓库。
-2. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)，在左侧导航栏点击 **Workers & Pages**。
-3. 点击 **Create application** -> 选择 **Pages** -> 点击 **Connect to Git**。
-4. 选中本仓库，进入构建配置页面填写以下参数：
-   - **Project Name (项目名称)**: `fox` (或自定义)
-   - **Framework Preset (框架预设)**: `Vite`
-   - **Build Command (构建命令)**: `npm run build`
-   - **Build Output Directory (构建输出目录)**: `dist`
-   - **Node.js Version**: 在环境变量中添加 `NODE_VERSION = 20`
-5. 点击 **Save and Deploy**，Cloudflare 将在 1 分钟内完成全自动构建与全球边缘部署上线！
-
----
-
-### 📦 方式二：Pages 一键上传文件部署 (获取与使用上传包)
-
-如果您希望不连接 Git，直接将构建产物上传至 Cloudflare Pages、腾讯云 EdgeOne Pages 或阿里云 ESA：
-
-#### 1. 获取上传包的方式
-本仓库已经为您提供了自动化打包工具，您可通过以下任意一种方式获取部署包：
-- **方式 A (直接使用现成包)**：仓库根目录下已内置预编译好的 `whitefox-pages-deploy.zip`（内含所有静态编译文件与资源）。
-- **方式 B (自行命令行构建)**：在本地执行以下命令：
-  ```bash
-  # 1. 安装项目依赖
-  npm install
-
-  # 2. 一键打包生成 Pages 专用压缩包
-  npm run package:pages
-  ```
-  执行完毕后，控制台将在根目录生成 `whitefox-pages-deploy.zip`。
-
-#### 2. 上传部署流程
-1. 打开 **Cloudflare Dashboard** -> **Workers & Pages** -> **Create application** -> **Pages**。
-2. 选择 **Upload assets (上传静态资产)**。
-3. 输入项目名称（如 `fox-blog`）。
-4. **将 `whitefox-pages-deploy.zip` 内的文件或解压后的 `dist` 目录拖拽到上传框中**。
-5. 点击 **Deploy site**，秒级完成部署！
+1. **站内免代理浏览器 (国内直通 Google 搜索与海外网站)：**
+   - 真正实现在中国境内直接访问 Google 搜索与境外技术站点。
+   - 大气不遮挡的全局搜索框，支持直接输入关键词搜索或键入目标网址。
+   - 大尺寸手机界面沉浸视窗，完美贴合移动端触控体验，亦可一键切换桌面宽屏。
+2. **专属文件夹相册与双列全景 (光影视界)：**
+   - 支持自由创建相册文件夹进行分类归档。
+   - 支持上传照片直接保存至指定文件夹，Canvas 智能压缩与持久化存储。
+   - 照片界面严格采用**每排两张（双列瀑布网格）**，全面适应手机小屏与桌面端。
+3. **首页介绍区动态编辑与容量全景监测：**
+   - 首页介绍区主标题、微徽标、描述语均可在线修改并持久化保存。
+   - 介绍区封面照片可一键本地上传替换并实时生效。
+   - 动态监测并显示网站的**总容量与已用容量**（如 R2 免费额度 10 GB 与实时存储占用）。
+4. **左侧浏览历史记录专区：**
+   - 博客文章左侧常驻浏览历史记录选区。
+   - 记录访问时间、博文分类，支持**一键直达**与**逐条/批量清空记录**。
+5. **八国主流语言实时切换 (默认简体中文)：**
+   - 支持简体中文、繁體中文、English、日本語、한국어、Français、Español、Deutsch。
+   - 切换即时生效，持久化写入本地配置。
+6. **双模高可用同步机制 (接或不接数据库均有效)：**
+   - **离线/单机模式：** 即使未接入后端数据库，所有文章、书架进度、相册、配置均本地持久化，点击同步即可完成本地高可用镜像快照保存，数据 100% 不丢失。
+   - **数据库模式：** 支持在系统设置中一键接入 Cloudflare D1、MySQL、PostgreSQL 或 Supabase。
+7. **极简 TXT 藏书阁与纯云端下载中心：**
+   - 书架严格遵循纯 TXT 格式，支持单本/批量上传，专为手机刘海屏（Safe Area）适配。
+   - 纯云端下载中枢，支持多分辨率与音视频分离提取。
 
 ---
 
-### ☁️ 方式三：腾讯云 EdgeOne Pages / COS 静态网站托管
+## 📌 Cloudflare Pages 免费计划配额与存储说明
 
-1. **使用腾讯云 EdgeOne Pages**：
-   - 打开 [腾讯云 EdgeOne 控制台](https://console.cloud.tencent.com/edgeone)。
-   - 进入 **Pages 边缘页面托管** -> **新建项目**。
-   - 支持直接关联 GitHub 仓库（构建命令填 `npm run build`，输出目录填 `dist`），或者直接上传 `whitefox-pages-deploy.zip` 解压目录。
-2. **使用腾讯云 COS 对象存储静态站点**：
-   - 创建公有读权限存储桶（如 `whitefox-1250000000`）。
-   - 在 **静态网站** 功能中开启托管，索引文档填 `index.html`，错误文档填 `index.html`。
-   - 使用 COS Browser 或命令行工具将 `dist/` 目录中的全部文件上传至存储桶根路径。
+```text
+[Cloudflare Pages 免费计划 的话：不连数据库时，一个 Pages 项目最多能存 20,000 个文件。
 
----
+另外还有两个硬限制：
 
-### 🌐 方式四：阿里云 ESA Pages / OSS 静态托管
+单文件最大 25 MiB，超过这个大小不能直接放进 Pages 站点资源里。
 
-1. **使用阿里云 ESA (Edge Security Acceleration) Pages**：
-   - 登录 [阿里云 ESA 控制台](https://dcdn.console.aliyun.com/)。
-   - 进入 **边缘 Pages 托管** -> **创建站点** -> 导入 Git 代码库或拖拽上传构建包。
-2. **使用阿里云 OSS 静态托管**：
-   - 新建 Bucket（读写权限设为公共读）。
-   - 开启 **静态页面托管**，默认首页为 `index.html`，404 页面填 `index.html`（适配 SPA 单页路由）。
-   - 使用 `ossutil` 上传：
-     ```bash
-     ossutil cp -r ./dist/ oss://your-whitefox-bucket/
-     ```
+总文件数限制按项目算，不是按账号算；一个账号最多可以有 100 个 Pages 项目。
+R2 的文件数量没有明确上限，但受 10 GB 存储 限制；KV 虽然 key 数量不限，但总存储只有 1 GB。
 
----
-
-### 🐳 方式五：Docker 容器化部署
-
-本项目已预置生产环境 `Dockerfile`、`nginx.conf` 和 `docker-compose.yml`：
-
-```bash
-# 启动 Docker 容器 (默认映射宿主机 80 端口)
-docker-compose up -d --build
+所以如果你只是部署静态站点，20,000 个文件、每个不超过 25 MiB 就是 Pages 免费版的文件上限。超过的话，建议把大文件、图片、视频类资源挪到 R2。]
 ```
-启动后访问 `http://localhost` 即可体验。
 
 ---
 
-## 🗄️ 后台数据库与对象存储连接流程
+## 🚀 构建与部署指南
 
-### 1. Cloudflare D1 边缘数据库连接
-1. 在 Cloudflare 控制台创建 D1 数据库：
-   ```bash
-   npx wrangler d1 create whitefox-db
-   ```
-2. 执行建表脚本（位于仓库 `deploy/cloudflare-d1-schema.sql`）：
-   ```bash
-   npx wrangler d1 execute whitefox-db --file=./deploy/cloudflare-d1-schema.sql
-   ```
-3. 在站内「系统设置」->「数据库与对象存储后台连接」中，选择 `Cloudflare D1` 并填入 Account ID 与 Database ID，点击「测试数据库连接」即可完成握手。
-
-### 2. MySQL / Supabase 后台连接
-- **MySQL**: 填写数据库 IP/域名、端口 3306、数据库名 `whitefox_blog_db`、账号密码。
-- **Supabase**: 填写 Supabase 项目 URL 与 Service Role Key / 数据库连接串。
-
-### 3. 对象存储 (R2 / COS / OSS) 连接
-- **Cloudflare R2**: 登录 Cloudflare -> R2 -> 创建 Bucket -> 生成 S3 API Token，在站内填入 Bucket 名及 AccessKey。
-- **腾讯云 COS**: 在腾讯云访问管理 (CAM) 创建 API 密钥（SecretId / SecretKey），填入对应地域节点（如 `ap-guangzhou`）。
-- **阿里云 OSS**: 在阿里云 RAM 控制台获取 AccessKey ID / AccessKey Secret，填入 Endpoint（如 `oss-cn-hangzhou.aliyuncs.com`）。
-
----
-
-## 🛠️ 本地构建与开发说明
+### 本地构建与快速预览
 
 ```bash
-# 克隆代码
-git clone https://github.com/your-username/whitefox-blog.git
+# 1. 克隆代码并安装依赖
+git clone <repo-url>
 cd whitefox-blog
-
-# 安装依赖
 npm install
 
-# 启动本地实时热重载开发服务器
+# 2. 启动本地开发服务
 npm run dev
 
-# 构建生产版本 (输出至 dist/)
+# 3. 生产环境构建打包
 npm run build
+```
 
-# 一键打包生成 Cloudflare / 腾讯云 / 阿里云 Pages 上传压缩包
+---
+
+### 方案一：Cloudflare Pages 一键拉取自动部署 (首选推荐 ⭐⭐⭐⭐⭐)
+
+Cloudflare Pages 与 Git 仓库无缝集成，全球 330+ Anycast 边缘节点加速，具备零元建站、秒级构建与无限流量的优势。
+
+1. 打开 [Cloudflare 仪表盘](https://dash.cloudflare.com/)。
+2. 导航至 **Workers & Pages** -> 点击 **Create application** -> 选择 **Pages** -> **Connect to Git**。
+3. 选择托管白狐项目的 GitHub / GitLab 仓库。
+4. 在构建配置（Build settings）中填入：
+   - **Framework preset (框架预设)**: `Vite`
+   - **Build command (构建命令)**: `npm run build`
+   - **Build output directory (输出目录)**: `dist`
+   - **Environment variables (环境变量)**: 添加 `NODE_VERSION` = `20`
+5. 点击 **Save and Deploy**，即可在 1 分钟内完成全球自动化部署！后续向 `main` 分支提交代码均会自动触发增量更新。
+
+---
+
+### 方案二：Cloudflare Pages 一键上传压缩包部署 (免 Git 绑定)
+
+如果您希望直接上传预构建包而无需关联 Git 仓库：
+
+#### 📦 获取/生成上传部署包的方式
+
+在项目根目录下运行白狐定制打包指令：
+
+```bash
 npm run package:pages
 ```
 
+该命令会自动完成 Vite 生产构建，并将 `dist` 静态资源封装为标准的 **`whitefox-pages-deploy.zip`** 压缩包。
+
+#### 部署步骤：
+1. 登录 Cloudflare Dashboard -> **Workers & Pages** -> **Create application** -> **Pages**。
+2. 选择 **Upload assets (直接上传资产)** 选项卡。
+3. 输入您的项目名称（例如 `whitefox`）。
+4. 将生成的 **`whitefox-pages-deploy.zip`** 解压后直接拖入网页上传区域（或直接拖入 zip 内的全部文件）。
+5. 点击 **Deploy site**，秒级全球上线！
+
 ---
 
-## ⚙️ 环境变量说明 (Environment Variables)
+### 方案三：腾讯云 EdgeOne / COS 对象存储部署
 
-复制 `.env.example` 为 `.env.production` 或在 Pages 控制台的环境变量面板配置：
+适合对中国大陆境内访问速度有极致要求的备案域名站点：
+
+1. **构建静态产物：**
+   ```bash
+   npm run build
+   ```
+2. **上传到腾讯云 COS：**
+   使用腾讯云官方 `coscli` 命令行工具将 `dist/` 目录同步到目标存储桶：
+   ```bash
+   coscli sync ./dist/ cos://whitefox-bucket/ -r
+   ```
+3. **开启静态网站托管：**
+   在 COS 控制台中开启“静态网站”，索引文档与错误文档均填写 `index.html`。
+4. **绑定 EdgeOne 边缘加速：**
+   在腾讯云 EdgeOne 中添加已备案自定义域名，源站选择 COS 存储桶，开启全球 Anycast 边缘缓存与免费 SSL 证书。
+
+---
+
+### 方案四：阿里云 ESA / OSS 对象存储部署
+
+1. **构建静态产物：**
+   ```bash
+   npm run build
+   ```
+2. **上传到阿里云 OSS：**
+   使用 `ossutil` 命令行工具同步到 Bucket：
+   ```bash
+   ossutil sync ./dist/ oss://whitefox-bucket/ -u
+   ```
+3. **配置 OSS 静态页面：**
+   将默认首页与 404 错误页均设为 `index.html`。
+4. **配置 ESA (边缘安全加速平台)：**
+   在阿里云 ESA 中绑定域名，加速源站指向 OSS，享受企业级 WAF、DDoS 防护与国内 CDN 极速加速。
+
+---
+
+### 方案五：Docker & Nginx 私有化部署
+
+针对独立 VPS / 云服务器环境：
+
+```bash
+# 启动容器
+docker compose up -d --build
+
+# 访问博客
+http://<服务器IP>:80
+```
+
+---
+
+## 🗄️ 数据库接入指南 (接库与不接库双模支持)
+
+白狐博客原生支持**离线优先**与**独立数据库接入**双模式：
+- **不接数据库时：** 所有博文、阅读进度、照片、系统设置均由本地安全持久化引擎管理，支持生成离线快照，轻量且完全可用。
+- **接入数据库时：** 支持 Cloudflare D1、MySQL、PostgreSQL 或 Supabase。
+
+### 初始化 Cloudflare D1 数据库：
+```bash
+# 1. 创建 D1 数据库
+npx wrangler d1 create whitefox_blog_db
+
+# 2. 执行建表 SQL (位于 deploy/cloudflare-d1-schema.sql)
+npx wrangler d1 execute whitefox_blog_db --file=./deploy/cloudflare-d1-schema.sql
+```
+
+进入站点右上角 **系统设置** -> **独立数据库与存储桶接入** 填入连接信息即可。
+
+---
+
+## ⚙️ 环境变量说明 (`.env.example`)
 
 | 变量名 | 说明 | 示例值 |
 | :--- | :--- | :--- |
-| `VITE_SITE_NAME` | 网站系统名称 (默认 fox) | `fox` |
-| `VITE_ADMIN_PASSWORD` | 管理员后台初始登录密码 | `password123` |
-| `VITE_CF_ACCOUNT_ID` | Cloudflare 账户 ID | `cf_account_demo_888` |
-| `VITE_CF_D1_DATABASE_ID`| Cloudflare D1 边缘数据库名称 | `whitefox-d1-db` |
-| `VITE_R2_BUCKET_NAME` | Cloudflare R2 存储桶名 | `whitefox-assets` |
-| `VITE_TENCENT_COS_BUCKET`| 腾讯云 COS 存储桶名称 | `whitefox-1250000000` |
-| `VITE_TENCENT_COS_REGION`| 腾讯云 COS 所在地域 | `ap-guangzhou` |
-| `VITE_ALIYUN_OSS_BUCKET` | 阿里云 OSS 存储桶名称 | `whitefox-oss-bucket` |
-| `VITE_ALIYUN_OSS_REGION` | 阿里云 OSS 地域节点 | `oss-cn-hangzhou.aliyuncs.com`|
-| `VITE_ALIST_ENDPOINT` | AList / WebDAV 挂载网盘地址 | `https://pan.whitefox.blog` |
-
----
-
-## 📄 开源许可
-
-本项目遵循 MIT 协议开源。
+| `VITE_SITE_NAME` | 博客系统默认名称 | `fox` |
+| `VITE_DEFAULT_LANG` | 默认语言 | `zh-CN` |
+| `VITE_CLOUDFLARE_D1_DATABASE_ID` | Cloudflare D1 边缘数据库 ID | `your-d1-db-uuid` |
+| `VITE_CLOUDFLARE_R2_BUCKET` | Cloudflare R2 存储桶名称 | `whitefox-assets` |
+| `VITE_SEARCH_PROXY_URL` | 国内免代理直连海外反代接口 | `https://proxy.whitefox.blog/api` |
+| `VITE_TENCENT_COS_BUCKET` | 腾讯云 COS 存储桶 | `whitefox-cos-125000` |
+| `VITE_ALIYUN_OSS_BUCKET` | 阿里云 OSS 存储桶 | `whitefox-oss` |

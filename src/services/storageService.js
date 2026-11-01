@@ -49,7 +49,17 @@ export const STORAGE_KEYS = {
   USERS: 'wf_users',
   PHOTOS: 'wf_photos',
   MEDIA_LIST: 'wf_media_list',
-  EMAIL_SETTINGS: 'wf_email_settings'
+  EMAIL_SETTINGS: 'wf_email_settings',
+  BROWSING_HISTORY: 'wf_browsing_history',
+  HERO_INTRO: 'wf_hero_intro'
+};
+
+export const defaultHeroIntro = {
+  badge: '灵狐踏雪 · 随心而述 · 云端无界',
+  title: '极简敏捷与多云边缘博客',
+  desc: '原生适配多云边缘 Pages（Cloudflare / 腾讯云 / 阿里云），一键拉取与构建，集成 D1 边缘数据库与全功能媒体中枢。',
+  heroImage: 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=800&q=80',
+  totalCapacityBytes: 10 * 1024 * 1024 * 1024 // 10 GB
 };
 
 export const initialPosts = initialArticles;
@@ -57,7 +67,7 @@ export { initialBooks, initialPhotos, initialMedia };
 
 export const defaultEmailSettings = {
   enabled: true,
-  provider: 'smtp', // 'smtp' | 'resend' | 'tencent-ses' | 'aliyun-dm' | 'sendgrid'
+  provider: 'smtp',
   smtpHost: 'smtp.whitefox.blog',
   smtpPort: 465,
   smtpUser: 'service@whitefox.blog',
@@ -121,13 +131,13 @@ export const initialBookmarks = [
 export const initialCloudConfig = defaultCloudConfig;
 
 export const defaultBackendConfig = {
-  dbType: 'cloudflare-d1', // 'cloudflare-d1' | 'mysql' | 'supabase'
+  dbType: 'cloudflare-d1',
   dbHost: 'd1.cloudflare.com',
   dbPort: '3306',
   dbName: 'whitefox_blog_db',
   dbUser: 'fox_admin',
   dbPassword: '••••••••••••',
-  storageType: 'cloudflare-r2', // 'cloudflare-r2' | 'tencent-cos' | 'aliyun-oss'
+  storageType: 'cloudflare-r2',
   storageEndpoint: 'https://r2.cloudflarestorage.com',
   storageBucket: 'whitefox-assets',
   storageAccessKeyId: 'cf_r2_key_demo_9823',
@@ -232,15 +242,25 @@ export const fontSizes = [
   { id: 'extra', name: '特大号清晰 (20px)', class: 'text-xl' }
 ];
 
-export const StorageService = {
-  getArticles: () => loadFromStorage(STORAGE_KEYS.POSTS, initialArticles),
-  saveArticles: (articles) => saveToStorage(STORAGE_KEYS.POSTS, articles),
-  getBooks: () => loadFromStorage(STORAGE_KEYS.BOOKS, initialBooks),
-  saveBooks: (books) => saveToStorage(STORAGE_KEYS.BOOKS, books),
-  getPhotos: () => loadFromStorage('wf_photos', initialPhotos),
-  savePhotos: (photos) => saveToStorage('wf_photos', photos),
-  getCloudFiles: () => loadFromStorage(STORAGE_KEYS.CLOUD_FILES, initialCloudFiles),
-  saveCloudFiles: (files) => saveToStorage(STORAGE_KEYS.CLOUD_FILES, files),
-  getAppearance: () => loadFromStorage(STORAGE_KEYS.APPEARANCE, defaultAppearance),
-  saveAppearance: (appr) => saveToStorage(STORAGE_KEYS.APPEARANCE, appr)
+// Helper to calculate total local & storage usage in bytes
+export const calculateUsedStorageBytes = () => {
+  let bytes = 81.6 * 1024 * 1024; // baseline cloud media assets
+  try {
+    for (let key in localStorage) {
+      if (localStorage.hasOwnProperty(key)) {
+        bytes += (localStorage[key].length * 2);
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return bytes;
+};
+
+export const formatBytes = (bytes) => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
