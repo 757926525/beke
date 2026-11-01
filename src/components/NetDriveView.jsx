@@ -63,13 +63,23 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
     const newEntries = [];
     for (const file of files) {
       const sizeStr = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+      const isImg = !!file.name.match(/\.(jpg|jpeg|png|webp|gif|svg)$/i);
+      const isVid = !!file.name.match(/\.(mp4|webm)$/i);
+      const isAud = !!file.name.match(/\.(mp3|wav|flac)$/i);
+      const fileType = isVid ? 'video' : isAud ? 'audio' : isImg ? 'image' : 'document';
+
       let fileUrl = '';
-      if (file.size < 5 * 1024 * 1024) {
+      let thumbnail = '';
+
+      if (file.size < 6 * 1024 * 1024) {
         fileUrl = await new Promise((resolve) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
           reader.readAsDataURL(file);
         });
+        if (isImg) {
+          thumbnail = fileUrl;
+        }
       } else {
         fileUrl = URL.createObjectURL(file);
       }
@@ -78,10 +88,11 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
         id: 'cf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
         name: file.name,
         url: fileUrl,
+        thumbnail: thumbnail || '',
         provider: providerNames[activeDriver] || 'Cloudflare R2',
         bucketKey: activeDriver,
         size: sizeStr,
-        type: file.name.match(/\.(mp4|webm)$/i) ? 'video' : file.name.match(/\.(mp3|wav|flac)$/i) ? 'audio' : file.name.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? 'image' : 'document',
+        type: fileType,
         uploadedAt: new Date().toISOString().split('T')[0],
         owner: currentUser?.username || 'admin'
       });
@@ -352,7 +363,23 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                 {filteredFiles.map((file) => (
                   <tr key={file.id} className="hover:bg-slate-50/50">
                     <td className="py-3 px-3 font-semibold text-slate-800 flex items-center space-x-2">
-                      <Folder className="w-4 h-4 text-emerald-600 shrink-0" />
+                      {file.thumbnail || (file.type === 'image' && file.url) ? (
+                        <img
+                          src={file.thumbnail || file.url}
+                          alt="Thumb"
+                          className="w-7 h-7 object-cover rounded-lg border border-slate-200 shrink-0"
+                        />
+                      ) : file.type === 'video' ? (
+                        <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                          <Play className="w-3.5 h-3.5" />
+                        </div>
+                      ) : file.type === 'audio' ? (
+                        <div className="w-7 h-7 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center shrink-0">
+                          <Music className="w-3.5 h-3.5" />
+                        </div>
+                      ) : (
+                        <Folder className="w-4 h-4 text-emerald-600 shrink-0" />
+                      )}
                       <span className="truncate max-w-[240px]">{file.name}</span>
                     </td>
                     <td className="py-3 px-3">

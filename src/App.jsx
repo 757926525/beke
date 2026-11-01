@@ -166,6 +166,32 @@ export function App() {
     root.classList.add(`site-layout-${siteLayout}`);
   }, [fontSize, siteLayout]);
 
+  // Real-time two-way sync listener across tabs and database hydration
+  useEffect(() => {
+    const handleHydrateSync = (e) => {
+      const data = e.detail;
+      if (!data) return;
+      if (data.posts && Array.isArray(data.posts)) setPosts(data.posts);
+      if (data.books && Array.isArray(data.books)) setBooks(data.books);
+      if (data.photos && Array.isArray(data.photos)) setPhotos(data.photos);
+      if (data.mediaList && Array.isArray(data.mediaList)) setMediaList(data.mediaList);
+      if (data.cloudFiles && Array.isArray(data.cloudFiles)) setCloudFiles(data.cloudFiles);
+      if (data.bookmarks && Array.isArray(data.bookmarks)) setBookmarks(data.bookmarks);
+      if (data.cloudConfig) setCloudConfig(data.cloudConfig);
+      if (data.emailSettings) setEmailSettings(data.emailSettings);
+      if (data.appearance) setAppearance(data.appearance);
+      if (data.systemSettings) setSystemSettings(data.systemSettings);
+      if (data.siteName) setSiteName(data.siteName);
+      if (data.siteLayout) setSiteLayout(data.siteLayout);
+      if (data.fontSize) setFontSize(data.fontSize);
+      if (data.lang) setLang(data.lang);
+      if (data.themeId) setThemeId(data.themeId);
+    };
+
+    window.addEventListener('whitefox-hydrate-full-sync', handleHydrateSync);
+    return () => window.removeEventListener('whitefox-hydrate-full-sync', handleHydrateSync);
+  }, []);
+
   // Persist States
   useEffect(() => saveToStorage(STORAGE_KEYS.AUTH, currentUser), [currentUser]);
   useEffect(() => saveToStorage(STORAGE_KEYS.SITE_NAME, siteName), [siteName]);

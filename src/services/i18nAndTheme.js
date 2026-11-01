@@ -49,7 +49,14 @@ export const translations = {
     freeQuota: '免费额度',
     editHero: '修改介绍区',
     saveHero: '保存介绍',
-    uploadPhoto: '更换封面图'
+    uploadPhoto: '更换封面图',
+    systemSettingsTitle: '系统管理与个性化控制台',
+    adminLoginPrompt: '管理员登录',
+    memberLoginPrompt: '普通登录',
+    registerPrompt: '注册账号',
+    exportBackup: '导出同步备份',
+    importBackup: '导入全库数据',
+    oneClickSync: '手动一键全量数据库同步'
   },
   'zh-TW': {
     appName: '白狐博客',
@@ -89,7 +96,14 @@ export const translations = {
     freeQuota: '免費額度',
     editHero: '修改介紹區',
     saveHero: '保存介紹',
-    uploadPhoto: '更換封面圖'
+    uploadPhoto: '更換封面圖',
+    systemSettingsTitle: '系統管理與個性化控制台',
+    adminLoginPrompt: '管理員登入',
+    memberLoginPrompt: '普通登入',
+    registerPrompt: '註冊帳號',
+    exportBackup: '導出同步備份',
+    importBackup: '導入全庫數據',
+    oneClickSync: '手動一鍵全量數據庫同步'
   },
   'en-US': {
     appName: 'WhiteFox Blog',
@@ -129,7 +143,14 @@ export const translations = {
     freeQuota: 'Free Tier',
     editHero: 'Edit Intro Banner',
     saveHero: 'Save Intro',
-    uploadPhoto: 'Change Cover Photo'
+    uploadPhoto: 'Change Cover Photo',
+    systemSettingsTitle: 'System Settings & Console',
+    adminLoginPrompt: 'Admin Sign In',
+    memberLoginPrompt: 'Member Sign In',
+    registerPrompt: 'Create Account',
+    exportBackup: 'Export Backup',
+    importBackup: 'Import Database',
+    oneClickSync: 'Full Database Sync'
   },
   'ja-JP': {
     appName: '白狐ブログ',
@@ -169,7 +190,14 @@ export const translations = {
     freeQuota: '無料枠',
     editHero: '概要編集',
     saveHero: '保存',
-    uploadPhoto: '写真変更'
+    uploadPhoto: '写真変更',
+    systemSettingsTitle: 'システム管理コンソール',
+    adminLoginPrompt: '管理者ログイン',
+    memberLoginPrompt: '通常ログイン',
+    registerPrompt: '新規登録',
+    exportBackup: 'バックアップ出力',
+    importBackup: 'DB復元',
+    oneClickSync: '一括データベース同期'
   },
   'fr-FR': {
     appName: 'Blog WhiteFox',
@@ -209,7 +237,14 @@ export const translations = {
     freeQuota: 'Quota gratuit',
     editHero: 'Modifier la bannière',
     saveHero: 'Enregistrer',
-    uploadPhoto: 'Changer la photo'
+    uploadPhoto: 'Changer la photo',
+    systemSettingsTitle: 'Panneau de Configuration',
+    adminLoginPrompt: 'Connexion Admin',
+    memberLoginPrompt: 'Connexion Membre',
+    registerPrompt: 'Créer un compte',
+    exportBackup: 'Exporter la sauvegarde',
+    importBackup: 'Importer la base',
+    oneClickSync: 'Synchronisation globale'
   },
   'es-ES': {
     appName: 'Blog WhiteFox',
@@ -249,7 +284,14 @@ export const translations = {
     freeQuota: 'Cuota gratis',
     editHero: 'Editar introducción',
     saveHero: 'Guardar',
-    uploadPhoto: 'Cambiar portada'
+    uploadPhoto: 'Cambiar portada',
+    systemSettingsTitle: 'Panel de Control',
+    adminLoginPrompt: 'Acceso Admin',
+    memberLoginPrompt: 'Acceso Miembro',
+    registerPrompt: 'Registrarse',
+    exportBackup: 'Exportar copia',
+    importBackup: 'Importar datos',
+    oneClickSync: 'Sincronización Total'
   },
   'de-DE': {
     appName: 'WhiteFox Blog',
@@ -289,7 +331,14 @@ export const translations = {
     freeQuota: 'Freies Kontingent',
     editHero: 'Banner bearbeiten',
     saveHero: 'Speichern',
-    uploadPhoto: 'Cover ändern'
+    uploadPhoto: 'Cover ändern',
+    systemSettingsTitle: 'Systemsteuerung',
+    adminLoginPrompt: 'Admin-Anmeldung',
+    memberLoginPrompt: 'Mitglieder-Anmeldung',
+    registerPrompt: 'Konto erstellen',
+    exportBackup: 'Backup exportieren',
+    importBackup: 'Daten importieren',
+    oneClickSync: 'Datenbank-Vollsynchronisation'
   },
   'ko-KR': {
     appName: '화이트폭스 블로그',
@@ -329,7 +378,14 @@ export const translations = {
     freeQuota: '무료 용량',
     editHero: '소개 영역 수정',
     saveHero: '저장',
-    uploadPhoto: '커버 사진 변경'
+    uploadPhoto: '커버 사진 변경',
+    systemSettingsTitle: '시스템 관리 콘솔',
+    adminLoginPrompt: '관리자 로그인',
+    memberLoginPrompt: '일반 로그인',
+    registerPrompt: '회원 가입',
+    exportBackup: '백업 내보내기',
+    importBackup: '데이터 가져오기',
+    oneClickSync: '전체 데이터베이스 동기화'
   }
 };
 

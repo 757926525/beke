@@ -147,6 +147,7 @@ export const AdminSettingsView = ({
       siteName,
       siteLayout,
       fontSize,
+      lang,
       posts: posts || [],
       books: books || [],
       photos: photos || [],
@@ -154,16 +155,18 @@ export const AdminSettingsView = ({
       cloudFiles: cloudFiles || [],
       bookmarks: bookmarks || [],
       browsingHistory: browsingHistory || [],
-      users: users || [],
-      systemSettings: systemSettings || {},
+      cloudConfig: cloudConfig || {},
+      emailSettings: emailSettings || {},
       appearance: appearance || {},
+      systemSettings: systemSettings || {},
+      users: users || [],
       dbEndpoint: backendConfig?.dbHost || 'cloudflare-d1'
     };
 
     // Step 2: Push to remote database / cross-device cloud sync tunnel
     await new Promise((r) => setTimeout(r, 500));
     setSyncProgress(55);
-    setSyncStatusStep(`正在向 ${backendConfig?.dbType?.toUpperCase() || 'CLOUDFLARE-D1'} 写入全量表结构与记录 (文章, 文件, 网盘, 邮箱, 界面设置)...`);
+    setSyncStatusStep(`正在向 ${backendConfig?.dbType?.toUpperCase() || 'CLOUDFLARE-D1'} 写入全量表结构与记录 (文章, 文件与缩略图, 网盘数据, 邮箱配置, 界面主题)...`);
 
     // Save unified cross-device payload in universal storage key for multi-device sync
     try {
@@ -171,6 +174,7 @@ export const AdminSettingsView = ({
       localStorage.setItem('wf_global_unified_sync_snapshot', JSON.stringify(fullPayload));
       // Dispatch broadcast storage event for live inter-tab and cross-device sync
       window.dispatchEvent(new Event('whitefox-full-database-sync-complete'));
+      window.dispatchEvent(new CustomEvent('whitefox-hydrate-full-sync', { detail: fullPayload }));
     } catch (e) {
       console.warn('Sync cache notice:', e);
     }
@@ -382,7 +386,7 @@ export const AdminSettingsView = ({
               <span>全能管理中枢 · 站长专属控制台</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
-              系统管理与个性化控制台
+              {t('systemSettingsTitle')}
             </h1>
             <p className="text-sm text-slate-500 mt-1">
               修改网站名称、主流语言实时切换、全站排版布局与字号、自动回复验证码邮箱管理、多数据库后台接入。
