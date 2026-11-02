@@ -180,7 +180,11 @@ export function App() {
   const [bookmarks, setBookmarks] = useState(() => loadFromStorage(STORAGE_KEYS.BOOKMARKS, initialBookmarks));
   const [cloudConfig, setCloudConfig] = useState(() => loadFromStorage(STORAGE_KEYS.CLOUD_CONFIG, initialCloudConfig));
   const [cloudFiles, setCloudFiles] = useState(() => loadFromStorage(STORAGE_KEYS.CLOUD_FILES, initialCloudFiles));
-  const [users, setUsers] = useState(() => loadFromStorage(STORAGE_KEYS.USERS, initialUsers));
+  // 严格单一管理员约束：users 数据表中仅保留普通 member 用户，过滤任何企图伪造 admin 的条目
+  const [users, setUsers] = useState(() => {
+    const raw = loadFromStorage(STORAGE_KEYS.USERS, initialUsers);
+    return (raw || []).filter((u) => u.role !== 'admin' && u.id !== 'u-admin');
+  });
 
   // --- 关键同步状态管理 ---
   // 1. 首次加载与 hydration 标志：在首次 pull 并 merge 完成前，严格禁止触发任何 push，防止空白新设备覆盖云端

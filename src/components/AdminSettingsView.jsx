@@ -7,7 +7,7 @@ import {
   Send, HelpCircle, BookOpen, Globe
 } from 'lucide-react';
 import { themePresets, languages } from '../services/i18nAndTheme';
-import { layoutOptions, fontSizes } from '../services/storageService';
+import { layoutOptions, fontSizes, getDeploymentAdminCredentials } from '../services/storageService';
 
 export const AdminSettingsView = ({
   siteName,
@@ -52,6 +52,7 @@ export const AdminSettingsView = ({
   t
 }) => {
   const isAdmin = currentUser?.role === 'admin';
+  const deploymentAdmin = getDeploymentAdminCredentials();
 
   // Accordion collapsed state for each section
   const [openSections, setOpenSections] = useState({
@@ -383,6 +384,17 @@ export const AdminSettingsView = ({
     if (!cleanUser) return;
 
     // Enforce single-admin uniqueness: prevent creating users conflicting with master admin
+    const adminName = (deploymentAdmin?.username || 'fox').toLowerCase();
+    if (
+      cleanUser.toLowerCase() === adminName ||
+      cleanUser.toLowerCase() === 'admin' ||
+      cleanUser.toLowerCase() === 'fox' ||
+      cleanUser.toLowerCase() === (siteName || '').toLowerCase()
+    ) {
+      showToast('此用户名已受系统保护保留给唯一站长，不可创建同名账号！');
+      return;
+    }
+
     if (users.some((u) => u.username.toLowerCase() === cleanUser.toLowerCase())) {
       showToast('该用户名已存在，不能重复添加');
       return;
@@ -1450,25 +1462,19 @@ export const AdminSettingsView = ({
                         </td>
                         <td className="py-3 px-3 font-mono">{u.email}</td>
                         <td className="py-3 px-3">
-                          <span className={`px-2 py-0.5 rounded-full font-medium text-[10px] ${
-                            u.role === 'admin'
-                              ? 'bg-rose-100 text-rose-700 font-bold'
-                              : 'bg-emerald-100 text-emerald-700'
-                          }`}>
-                            {u.role === 'admin' ? '系统站长' : '普通注册成员'}
+                          <span className="px-2 py-0.5 rounded-full font-medium text-[10px] bg-emerald-100 text-emerald-700">
+                            注册成员
                           </span>
                         </td>
                         <td className="py-3 px-3 text-slate-400">{u.registeredAt || '2025-05-18'}</td>
                         <td className="py-3 px-3 text-right">
-                          {u.role !== 'admin' && (
-                            <button
-                              onClick={() => handleDeleteUser(u.id)}
-                              className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
-                              title="删除用户"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleDeleteUser(u.id)}
+                            className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
+                            title="删除用户"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </td>
                       </tr>
                     ))}
