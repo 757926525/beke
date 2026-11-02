@@ -49,6 +49,12 @@ export const AdminSettingsView = ({
   setBrowsingHistory,
   heroIntro,
   setHeroIntro,
+  autoSyncEnabled,
+  setAutoSyncEnabled,
+  syncStatus,
+  syncRoomKey,
+  setSyncRoomKey,
+  onTriggerPush,
   t
 }) => {
   const isAdmin = currentUser?.role === 'admin';
@@ -67,13 +73,12 @@ export const AdminSettingsView = ({
     authRules: false
   });
 
-  // Auto-sync switch state
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
-    return localStorage.getItem('wf_auto_sync_enabled') === 'true';
-  });
-
   // Cloudflare Zero-Database Edge Sync Room Key
-  const [cfRoomKey, setCfRoomKey] = useState(() => localStorage.getItem('wf_cf_room_key') || 'fox-cf-sync');
+  const cfRoomKey = syncRoomKey || localStorage.getItem('wf_cf_room_key') || 'fox-cf-sync';
+  const setCfRoomKey = (k) => {
+    if (setSyncRoomKey) setSyncRoomKey(k);
+    localStorage.setItem('wf_cf_room_key', k);
+  };
   const [isCfEdgeSyncing, setIsCfEdgeSyncing] = useState(false);
   const [isPullingEdgeRoom, setIsPullingEdgeRoom] = useState(false);
 
@@ -893,41 +898,17 @@ export const AdminSettingsView = ({
                   <button
                     onClick={async () => {
                       setIsCfEdgeSyncing(true);
-                      const { pushToCloudSyncVault } = await import('../services/cloudAdapter');
-
-                      const syncPayload = {
-                        version: '1.0.0',
-                        syncedAt: new Date().toISOString(),
-                        timestamp: new Date().toISOString(),
-                        siteName,
-                        siteLayout,
-                        fontSize,
-                        lang,
-                        posts,
-                        books,
-                        photos,
-                        mediaList,
-                        cloudFiles,
-                        bookmarks,
-                        browsingHistory,
-                        cloudConfig,
-                        emailSettings,
-                        appearance,
-                        systemSettings,
-                        users
-                      };
-
-                      const result = await pushToCloudSyncVault(syncPayload, {
-                        vaultKey: cfRoomKey,
-                        customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
-                        d1Config: backendConfig
-                      });
-
-                      setIsCfEdgeSyncing(false);
-                      if (result.success) {
-                        showToast(`已向同步房间 [${cfRoomKey}] 推送数据 (${result.recordCount} 条记录)！`);
+                      if (onTriggerPush) {
+                        const res = await onTriggerPush();
+                        setIsCfEdgeSyncing(false);
+                        if (res && res.success) {
+                          showToast(`已成功向同步房间 [${cfRoomKey}] 推送数据！`);
+                        } else {
+                          showToast(`同步受限: ${res?.error || '请确认后端服务状态'}`);
+                        }
                       } else {
-                        showToast('同步完成 (已保存本地快照并广播多标签页)');
+                        setIsCfEdgeSyncing(false);
+                        showToast('已保存本地快照');
                       }
                     }}
                     disabled={isCfEdgeSyncing}
@@ -950,22 +931,29 @@ export const AdminSettingsView = ({
 
                       setIsPullingEdgeRoom(false);
                       if (res.success && res.payload) {
+                        const { mergeSyncPayloadWithTimestamp } = await import('../services/storageService');
+                        const currentData = {
+                          posts, books, photos, mediaList, cloudFiles, bookmarks, browsingHistory,
+                          appearance, systemSettings, siteName
+                        };
+                        const merged = mergeSyncPayloadWithTimestamp(currentData, res.payload);
+                        if (merged.posts && setPosts) setPosts(merged.posts);
+                        if (merged.books && setBooks) setBooks(merged.books);
+                        if (merged.photos && setPhotos) setPhotos(merged.photos);
+                        if (merged.mediaList && setMediaList) setMediaList(merged.mediaList);
+                        if (merged.cloudFiles && setCloudFiles) setCloudFiles(merged.cloudFiles);
+                        if (merged.bookmarks && setBookmarks) setBookmarks(merged.bookmarks);
+                        if (merged.browsingHistory && setBrowsingHistory) setBrowsingHistory(merged.browsingHistory);
+                        if (merged.appearance && setAppearance) setAppearance(merged.appearance);
+                        if (merged.systemSettings && setSystemSettings) setSystemSettings(merged.systemSettings);
+                        if (merged.siteName && setSiteName) setSiteName(merged.siteName);
+
                         const data = res.payload;
-                        if (data.posts && setPosts) setPosts(data.posts);
-                        if (data.books && setBooks) setBooks(data.books);
-                        if (data.photos && setPhotos) setPhotos(data.photos);
-                        if (data.mediaList && setMediaList) setMediaList(data.mediaList);
-                        if (data.cloudFiles && setCloudFiles) setCloudFiles(data.cloudFiles);
-                        if (data.bookmarks && setBookmarks) setBookmarks(data.bookmarks);
-                        if (data.browsingHistory && setBrowsingHistory) setBrowsingHistory(data.browsingHistory);
                         if (data.users && setUsers) setUsers(data.users);
                         if (data.cloudConfig && setCloudConfig) setCloudConfig(data.cloudConfig);
                         if (data.emailSettings && setEmailSettings) setEmailSettings(data.emailSettings);
-                        if (data.appearance && setAppearance) setAppearance(data.appearance);
-                        if (data.systemSettings && setSystemSettings) setSystemSettings(data.systemSettings);
-                        if (data.siteName && setSiteName) setSiteName(data.siteName);
 
-                        syncBroadcaster.broadcast('PULL_ROOM_SYNC', data);
+                        syncBroadcaster.broadcast('PULL_ROOM_SYNC', merged);
                         showToast(`成功从房间 [${cfRoomKey}] 同步最新数据！`);
                       } else {
                         showToast(res.message || `未能从房间 [${cfRoomKey}] 拉取到数据`);
@@ -1004,6 +992,18 @@ export const AdminSettingsView = ({
                     className="px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold cursor-pointer"
                   >
                     保存房间
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const { generateSecureSyncKey } = await import('../services/storageService');
+                      const newKey = generateSecureSyncKey();
+                      setCfRoomKey(newKey);
+                      showToast('已重新生成高安全 128 位独立随机同步房间密钥！');
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer"
+                    title="重新生成高安全随机密钥"
+                  >
+                    重新生成
                   </button>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-slate-400">

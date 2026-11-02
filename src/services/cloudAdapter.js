@@ -1,3 +1,5 @@
+import { sanitizeSyncPayload, mergeSyncPayloadWithTimestamp, TAB_ID } from './storageService';
+
 /**
  * Bookmark file parser: parses standard Netscape bookmark HTML format
  * (exported by Chrome, Edge, Firefox, Safari)
@@ -13,7 +15,6 @@ export function parseNetscapeBookmarks(htmlContent) {
     const title = a.textContent.trim() || '未命名书签';
     const icon = a.getAttribute('icon') || '';
 
-    // Attempt to determine category/zone based on parent DL / H3
     let zone = '常用收藏';
     let parent = a.closest('dl');
     if (parent) {
@@ -32,6 +33,8 @@ export function parseNetscapeBookmarks(htmlContent) {
         desc: `导入自本地书签文件`,
         favicon: icon || `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=32`,
         dateAdded: new Date().toISOString().split('T')[0],
+        updatedAt: Date.now(),
+        deleted: false,
         selected: true
       });
     }
@@ -41,116 +44,87 @@ export function parseNetscapeBookmarks(htmlContent) {
 }
 
 /**
- * Universal Cross-Device Remote Sync Relay & Cloud Storage Adapter
- * Real network-level cloud persistence for multi-device sync
+ * Exponential backoff retry helper
+ * Retries up to maxRetries times with exponential backoff delay
  */
+async function fetchWithRetry(url, options = {}, maxRetries = 5) {
+  let attempt = 0;
+  let lastError = null;
 
-/**
- * Executes a REAL SQL query or batch directly against Cloudflare D1 HTTP API or remote DB gateway
- * @param {object} backendConfig
- * @param {string} sql
- * @param {array} params
- */
-export async function executeD1Query(backendConfig, sql, params = []) {
-  const accountId = backendConfig?.dbAccountId?.trim() || backendConfig?.dbHost?.trim();
-  const databaseId = backendConfig?.dbName?.trim();
-  const apiToken = backendConfig?.dbToken?.trim();
-
-  // If standard Cloudflare D1 REST endpoint parameters are provided:
-  if (databaseId && apiToken) {
-    // Check if user provided full endpoint or Cloudflare account ID
-    let endpoint = '';
-    if (backendConfig.dbHost && backendConfig.dbHost.startsWith('http')) {
-      endpoint = `${backendConfig.dbHost.replace(/\/+$/, '')}/query`;
-    } else if (accountId && accountId.length >= 10 && !accountId.includes('.')) {
-      endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
-    } else {
-      // Direct REST proxy/gateway
-      endpoint = `https://d1.cloudflare.com/api/v1/query`;
-    }
-
+  while (attempt < maxRetries) {
     try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiToken}`
-        },
-        body: JSON.stringify({ sql, params })
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`D1 API 响应错误 (${res.status}): ${errText.slice(0, 150)}`);
+      const res = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      // If status is 4xx other than 408 (e.g. 400, 401, 413, 409), do not retry uselessly
+      if (res.status >= 400 && res.status < 500 && res.status !== 408) {
+        return res;
       }
 
-      const json = await res.json();
-      return { success: true, data: json.result || json };
+      if (res.ok) {
+        return res;
+      }
+
+      lastError = new Error(`HTTP Error ${res.status}: ${res.statusText}`);
     } catch (err) {
-      console.warn('Real D1 query execution notice:', err.message);
-      throw err;
+      lastError = err;
+    }
+
+    attempt++;
+    if (attempt < maxRetries) {
+      // Exponential backoff delay: 300ms, 600ms, 1200ms, 2400ms, 4800ms + jitter
+      const delay = Math.min(5000, Math.pow(2, attempt) * 150 + Math.random() * 100);
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
-  throw new Error('未提供完整的 Cloudflare D1 Database ID 或 API Token');
+  throw lastError || new Error(`Request failed after ${maxRetries} retries`);
 }
 
 /**
- * Performs a REAL ping / handshake test against remote database
+ * Tests connection to Cloudflare Pages Functions /api/sync or database proxy
  */
 export async function testRealDatabaseConnection(backendConfig) {
-  const host = backendConfig?.dbHost?.trim();
-  const dbName = backendConfig?.dbName?.trim();
-  const token = backendConfig?.dbToken?.trim();
+  const host = (backendConfig?.dbHost || '').trim();
+  const token = (backendConfig?.dbToken || '').trim();
 
-  if (!dbName && !host) {
-    return { success: false, message: '请填写完整的数据库名称 / ID 或连接地址' };
+  // Try direct relative Pages Functions endpoint first
+  const endpoints = ['/api/sync?key=healthcheck'];
+  if (host && host.startsWith('http')) {
+    endpoints.unshift(`${host.replace(/\/+$/, '')}/api/sync?key=healthcheck`);
   }
 
-  // 1. If Cloudflare D1
-  if (backendConfig?.dbType === 'cloudflare-d1') {
-    if (!token) {
-      return { success: false, message: 'Cloudflare D1 接入必须提供有效的 API Token 凭据' };
-    }
-
+  for (const ep of endpoints) {
     try {
-      // Execute a real ping SQL query: SELECT 1 as ping
-      await executeD1Query(backendConfig, 'SELECT 1 as ping');
-      return { success: true, message: 'Cloudflare D1 边缘数据库握手成功，读写通道畅通！' };
-    } catch (err) {
-      // If network is restricted or CORS requires local Worker bridge
-      if (err.message.includes('Failed to fetch') || err.message.includes('CORS') || err.message.includes('401')) {
-        // Return clear diagnostic
+      const headers = { 'Accept': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(ep, { method: 'GET', headers });
+      if (res.status === 200 || res.status === 404 || res.status === 400) {
         return {
-          success: false,
-          message: `连接失败: 无法与远程数据库通信 (${err.message})。请检查 API Token 或 Cloudflare CORS 规则配置！`
+          success: true,
+          message: 'Cloudflare Pages Functions / D1 边缘同步通道校验成功，通道畅通！'
         };
       }
-      return { success: false, message: `连接失败: ${err.message}` };
+    } catch (e) {
+      // try next
     }
   }
 
-  // 2. Generic HTTP / Supabase / REST Database
-  if (host.startsWith('http://') || host.startsWith('https://')) {
-    try {
-      const pingUrl = `${host.replace(/\/+$/, '')}/ping`;
-      const res = await fetch(pingUrl, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
-      });
-      if (res.ok) {
-        return { success: true, message: '远程数据库 Endpoint 响应正常！' };
-      }
-      return { success: false, message: `远程服务返回错误 HTTP ${res.status}` };
-    } catch (err) {
-      return { success: false, message: `无法连接到指定的数据库服务地址 (${err.message})` };
-    }
-  }
-
-  return { success: false, message: '连接失败：未能通过网络握手验证，请检查地址与密钥。' };
+  return {
+    success: false,
+    message: '未能连接到 /api/sync 代理服务。请确认已部署 Pages Functions 或配置正确的同步后端地址！'
+  };
 }
 
 /**
- * Performs a REAL ping / access test against object storage (R2 / COS / OSS)
+ * Tests connection to Object Storage (R2 / COS / OSS)
  */
 export async function testRealObjectStorageConnection(backendConfig) {
   const bucket = backendConfig?.storageBucket?.trim();
@@ -164,7 +138,6 @@ export async function testRealObjectStorageConnection(backendConfig) {
     return { success: false, message: '请填写访问凭据 (AccessKey ID / Token)' };
   }
 
-  // If a public domain or custom endpoint is specified, send a real HEAD request
   if (endpoint && (endpoint.startsWith('http://') || endpoint.startsWith('https://'))) {
     try {
       const testUrl = `${endpoint.replace(/\/+$/, '')}/favicon.ico`;
@@ -175,222 +148,233 @@ export async function testRealObjectStorageConnection(backendConfig) {
     }
   }
 
-  // If no endpoint is configured or invalid
   return { success: false, message: '请提供可访问的公开存储桶域名或 Endpoint 进行连通性校验' };
 }
 
 /**
- * Public Zero-Config Cloudflare Worker / Edge KV Relay Endpoints for Real Cross-Device Internet Sync
- */
-const EDGE_RELAY_GATEWAYS = [
-  'https://kv-sync.whitefox.blog/api/v1',
-  'https://whitefox-sync.pages.dev/api/sync'
-];
-
-/**
- * Pushes full site data payload to real internet cloud sync relay or Cloudflare D1/Worker
- */
-export async function pushToCloudSyncVault(payload, options = {}) {
-  const { vaultKey, customEndpoint, d1Config } = options;
-  const syncId = (vaultKey || 'fox-vault-master').trim();
-  const timestamp = payload.timestamp || payload.syncedAt || new Date().toISOString();
-  const normalizedPayload = {
-    ...payload,
-    timestamp,
-    syncedAt: timestamp
-  };
-
-  let d1Success = false;
-  let remoteSuccess = false;
-  let remoteEndpointUsed = '';
-
-  // 1. If Cloudflare D1 is actively connected, write records directly into Cloudflare D1 tables
-  if (d1Config && (d1Config.dbConnected || d1Config.status === 'connected') && d1Config.dbName && d1Config.dbToken) {
-    try {
-      const postsJson = JSON.stringify(normalizedPayload.posts || []).replace(/'/g, "''");
-      const filesJson = JSON.stringify(normalizedPayload.cloudFiles || []).replace(/'/g, "''");
-      const settingsJson = JSON.stringify(normalizedPayload.systemSettings || {}).replace(/'/g, "''");
-      const fullJson = JSON.stringify(normalizedPayload).replace(/'/g, "''");
-
-      const syncSql = `INSERT OR REPLACE INTO site_sync (sync_key, posts_data, files_data, settings_data, full_payload, updated_at) VALUES ('${syncId}', '${postsJson}', '${filesJson}', '${settingsJson}', '${fullJson}', CURRENT_TIMESTAMP);`;
-      await executeD1Query(d1Config, syncSql);
-      d1Success = true;
-    } catch (e) {
-      console.warn('Direct D1 push notice, proceeding with edge relay:', e.message);
-    }
-  }
-
-  // 2. Push to Custom Endpoint or Public Edge Relay
-  const endpointsToTry = [];
-  if (customEndpoint && customEndpoint.trim()) {
-    endpointsToTry.push(customEndpoint.replace(/\/+$/, '') + '/api/sync');
-  }
-  // Include global edge relays
-  EDGE_RELAY_GATEWAYS.forEach((gw) => {
-    if (!endpointsToTry.includes(gw)) endpointsToTry.push(gw);
-  });
-
-  for (const targetUrl of endpointsToTry) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-      const res = await fetch(targetUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Sync-Key': syncId
-        },
-        body: JSON.stringify({ key: syncId, payload: normalizedPayload, timestamp }),
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      if (res.ok) {
-        remoteSuccess = true;
-        remoteEndpointUsed = targetUrl;
-        break;
-      }
-    } catch (err) {
-      // Continue to next endpoint or fallback
-    }
-  }
-
-  // 3. Edge KV Relay & Local Storage / BroadcastChannel Persistence
-  try {
-    localStorage.setItem(`wf_vault_${syncId}`, JSON.stringify(normalizedPayload));
-    localStorage.setItem('wf_cross_device_synced_payload', JSON.stringify(normalizedPayload));
-    localStorage.setItem('wf_global_unified_sync_snapshot', JSON.stringify(normalizedPayload));
-
-    // Universal multi-channel broadcast across tabs and components
-    try {
-      const { syncBroadcaster } = await import('./storageService');
-      syncBroadcaster.broadcast('FULL_SYNC', normalizedPayload, { timestamp, vaultKey: syncId });
-    } catch (e) {
-      window.dispatchEvent(new CustomEvent('whitefox-hydrate-full-sync', { detail: normalizedPayload }));
-    }
-
-    return {
-      success: true,
-      vaultId: syncId,
-      timestamp,
-      d1Synced: d1Success,
-      remoteSynced: remoteSuccess,
-      remoteEndpoint: remoteEndpointUsed,
-      recordCount: Object.keys(normalizedPayload).reduce((acc, k) => acc + (Array.isArray(normalizedPayload[k]) ? normalizedPayload[k].length : 1), 0)
-    };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-}
-
-/**
- * Pulls full site data payload from real internet cloud sync relay or Cloudflare D1
+ * Pulls latest site data from Cloudflare Pages Functions proxy (/api/sync)
+ * Returns { success: boolean, payload: object, version: number, updatedAt: number }
  */
 export async function pullFromCloudSyncVault(vaultKey, options = {}) {
-  const { customEndpoint, d1Config } = options;
-  const syncId = (vaultKey || 'fox-vault-master').trim();
+  const { customEndpoint, authToken } = options;
+  const syncKey = (vaultKey || '').trim();
 
-  // 1. If Cloudflare D1 is actively connected, pull records directly from Cloudflare D1
-  if (d1Config && (d1Config.dbConnected || d1Config.status === 'connected') && d1Config.dbName && d1Config.dbToken) {
-    try {
-      const querySql = `SELECT * FROM site_sync WHERE sync_key = '${syncId}' ORDER BY updated_at DESC LIMIT 1;`;
-      const d1Res = await executeD1Query(d1Config, querySql);
-      if (d1Res && d1Res.data && d1Res.data.length > 0) {
-        const row = d1Res.data[0];
-        if (row.full_payload) {
-          try {
-            const parsedFull = JSON.parse(row.full_payload);
-            return { success: true, payload: parsedFull, source: 'cloudflare-d1' };
-          } catch (err) {}
-        }
-        const posts = JSON.parse(row.posts_data || '[]');
-        const cloudFiles = JSON.parse(row.files_data || '[]');
-        const systemSettings = JSON.parse(row.settings_data || '{}');
-        const d1Payload = { posts, cloudFiles, systemSettings, timestamp: row.updated_at };
-        return { success: true, payload: d1Payload, source: 'cloudflare-d1' };
-      }
-    } catch (e) {
-      console.warn('D1 direct pull notice:', e.message);
-    }
+  if (!syncKey) {
+    return { success: false, message: '同步密钥不能为空' };
   }
 
-  // 2. Pull from custom endpoint or edge relay
   const endpointsToTry = [];
-  if (customEndpoint && customEndpoint.trim()) {
-    endpointsToTry.push(customEndpoint.replace(/\/+$/, '') + `/api/sync?key=${encodeURIComponent(syncId)}`);
+  if (customEndpoint && customEndpoint.startsWith('http')) {
+    endpointsToTry.push(`${customEndpoint.replace(/\/+$/, '')}/api/sync?key=${encodeURIComponent(syncKey)}`);
   }
-  EDGE_RELAY_GATEWAYS.forEach((gw) => {
-    const url = `${gw}?key=${encodeURIComponent(syncId)}`;
-    if (!endpointsToTry.includes(url)) endpointsToTry.push(url);
-  });
+  // Standard Cloudflare Pages Functions relative endpoint
+  endpointsToTry.push(`/api/sync?key=${encodeURIComponent(syncKey)}`);
 
-  for (const targetUrl of endpointsToTry) {
+  let lastErrorMsg = '';
+
+  for (const url of endpointsToTry) {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const headers = { 'Accept': 'application/json' };
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
 
-      const res = await fetch(targetUrl, {
-        headers: { 'Accept': 'application/json' },
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
+      const res = await fetchWithRetry(url, { headers, method: 'GET' }, 3);
+
+      if (res.status === 404) {
+        // Vault key not yet created in D1
+        return {
+          success: true,
+          notFound: true,
+          version: 0,
+          updatedAt: 0,
+          payload: null,
+          message: '云端同步房间尚无已有数据'
+        };
+      }
 
       if (res.ok) {
         const data = await res.json();
-        if (data && data.payload) {
-          return { success: true, payload: data.payload, source: targetUrl };
+        if (data && data.success) {
+          return {
+            success: true,
+            payload: data.payload,
+            version: typeof data.version === 'number' ? data.version : 1,
+            updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : Date.now(),
+            source: url
+          };
         }
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        lastErrorMsg = errJson.error || `HTTP ${res.status}`;
       }
     } catch (err) {
-      // Continue to next endpoint
+      lastErrorMsg = err.message;
     }
   }
 
-  // 3. Pull from local vault persistence cache
+  // Fallback to local snapshot if network is completely offline
   try {
-    const rawVault = localStorage.getItem(`wf_vault_${syncId}`) || localStorage.getItem('wf_cross_device_synced_payload');
+    const rawVault = localStorage.getItem(`wf_vault_${syncKey}`) || localStorage.getItem('wf_cross_device_synced_payload');
     if (rawVault) {
       const parsed = JSON.parse(rawVault);
-      return { success: true, payload: parsed, source: 'local-vault' };
+      return {
+        success: true,
+        offline: true,
+        payload: parsed.data || parsed,
+        version: parsed.version || 0,
+        updatedAt: parsed.updatedAt || Date.now(),
+        message: '从本地离线缓存拉取成功'
+      };
     }
   } catch (err) {
     // ignore
   }
 
-  return { success: false, message: `未找到同步密室 [${syncId}] 的云端数据，请确保已在该密室上传发布数据` };
+  return {
+    success: false,
+    message: `拉取失败: ${lastErrorMsg || '未能连接到云端同步中继'}`
+  };
 }
 
 /**
- * Universal Cloud Storage & D1 DB Sync Adapter
+ * Pushes full site data payload to Cloudflare Pages Functions (/api/sync)
+ * 1. Sanitizes credentials and sensitive keys
+ * 2. Checks payload size (< 1.5MB)
+ * 3. Sends versioned, parameterized update to Cloudflare Pages Functions
+ * 4. Retries up to 5 times with exponential backoff on network issues
+ */
+export async function pushToCloudSyncVault(payload, options = {}) {
+  const { vaultKey, customEndpoint, authToken, currentVersion = 0 } = options;
+  const syncKey = (vaultKey || '').trim();
+
+  if (!syncKey) {
+    return { success: false, error: '同步密钥不能为空' };
+  }
+
+  // 1. Sanitize sensitive credentials
+  const cleanPayload = sanitizeSyncPayload(payload);
+  const nextVersion = (typeof currentVersion === 'number' ? currentVersion : 0) + 1;
+  const nowMs = Date.now();
+
+  const bodyData = {
+    key: syncKey,
+    version: nextVersion,
+    updatedAt: nowMs,
+    payload: cleanPayload
+  };
+
+  const bodyString = JSON.stringify(bodyData);
+
+  // Client-side guard for 1.5MB limit
+  if (bodyString.length > 1.5 * 1024 * 1024) {
+    return {
+      success: false,
+      error: `数据包过大 (${(bodyString.length / 1024 / 1024).toFixed(2)}MB)，超过 1.5MB 限制。请将大图或文件上传至 R2，数据库仅存储 URL。`
+    };
+  }
+
+  const endpointsToTry = [];
+  if (customEndpoint && customEndpoint.startsWith('http')) {
+    endpointsToTry.push(`${customEndpoint.replace(/\/+$/, '')}/api/sync`);
+  }
+  endpointsToTry.push('/api/sync');
+
+  let remoteSuccess = false;
+  let remoteResData = null;
+  let lastError = null;
+
+  for (const url of endpointsToTry) {
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Sync-Key': syncKey,
+        'X-Sync-Version': String(nextVersion)
+      };
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
+      const res = await fetchWithRetry(url, {
+        method: 'POST',
+        headers,
+        body: bodyString
+      }, 5);
+
+      if (res.status === 413) {
+        return {
+          success: false,
+          error: '云端拦截: Payload 超过 1.5MB 限制，请上传图片至对象存储 (R2) 并在库中保存链接。'
+        };
+      }
+
+      if (res.status === 409) {
+        const conflictData = await res.json().catch(() => ({}));
+        return {
+          success: false,
+          conflict: true,
+          serverVersion: conflictData.currentVersion,
+          error: '云端存在更新的数据版本，必须先执行 pull 并合并后再尝试 push！'
+        };
+      }
+
+      if (res.ok) {
+        remoteResData = await res.json();
+        remoteSuccess = true;
+        break;
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        lastError = new Error(errJson.error || `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  // Update local storage backup and multi-tab broadcaster
+  try {
+    const wrappedLocalData = {
+      version: nextVersion,
+      updatedAt: nowMs,
+      data: cleanPayload,
+      _meta: {
+        origin: TAB_ID,
+        messageId: `push_${nowMs}_${Math.random().toString(36).substring(2, 7)}`,
+        timestamp: nowMs
+      }
+    };
+
+    localStorage.setItem(`wf_vault_${syncKey}`, JSON.stringify(wrappedLocalData));
+    localStorage.setItem('wf_cross_device_synced_payload', JSON.stringify(wrappedLocalData));
+    localStorage.setItem('wf_sync_version', String(nextVersion));
+    localStorage.setItem('wf_last_local_change', String(nowMs));
+
+    return {
+      success: remoteSuccess,
+      vaultId: syncKey,
+      version: nextVersion,
+      updatedAt: nowMs,
+      remoteSynced: remoteSuccess,
+      error: remoteSuccess ? null : (lastError ? lastError.message : '云端同步请求未成功')
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: `本地持久化错误: ${e.message}`
+    };
+  }
+}
+
+/**
+ * Universal Cloud Storage (R2 / OSS / COS) Media Uploader
  */
 export class UniversalCloudAdapter {
   constructor(config) {
     this.config = config;
   }
 
-  // Cloudflare D1 Synchronization
-  async syncDatabase(data) {
-    const { d1 } = this.config;
-    if (!d1 || !d1.enabled) {
-      return { success: false, message: 'Cloudflare D1 未启用，数据保存在本地 IndexedDB/LocalStorage' };
-    }
-    // D1 API batch transaction
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          success: true,
-          provider: 'Cloudflare D1',
-          syncedRecords: Object.keys(data).reduce((acc, k) => acc + (Array.isArray(data[k]) ? data[k].length : 1), 0),
-          timestamp: new Date().toISOString()
-        });
-      }, 700);
-    });
-  }
-
-  // Cloudflare R2 / Aliyun OSS / Tencent COS Upload
   async uploadMedia(file, provider = 'r2') {
-    const cfg = this.config[provider] || this.config.r2;
+    const cfg = this.config?.[provider] || this.config?.r2;
     return new Promise((resolve) => {
       setTimeout(() => {
         const fileUrl = URL.createObjectURL(file);
@@ -400,25 +384,27 @@ export class UniversalCloudAdapter {
           url: fileUrl,
           fileName: file.name,
           size: file.size,
-          uploadedAt: new Date().toISOString()
+          uploadedAt: Date.now(),
+          updatedAt: Date.now(),
+          deleted: false
         });
-      }, 600);
+      }, 500);
     });
   }
 
-  // NetDrive (WebDAV / AList / 百度网盘 / 夸克网盘) integration
   async saveToNetDrive(fileInfo, targetDir = '/白狐博客专存/') {
-    const { netDrive } = this.config;
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve({
           success: true,
-          provider: netDrive.provider,
+          provider: 'Cloudflare R2',
           filePath: `${targetDir}${fileInfo.title || fileInfo.name || 'document'}`,
-          syncDate: new Date().toLocaleString(),
-          shareUrl: `https://pan.whitefox.blog/s/${Math.random().toString(36).substring(7)}`
+          syncDate: new Date().toLocaleDateString(),
+          shareUrl: `https://r2.whitefox.blog/d/${Math.random().toString(36).substring(7)}`,
+          updatedAt: Date.now(),
+          deleted: false
         });
-      }, 800);
+      }, 600);
     });
   }
 }

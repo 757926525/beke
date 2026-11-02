@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- 白狐博客 (WhiteFox Blog) Cloudflare D1 数据库初始化结构
--- 执行方式：wrangler d1 execute whitefox-db --file=deploy/cloudflare-d1-schema.sql
+-- 执行方式：wrangler d1 execute DB --file=deploy/cloudflare-d1-schema.sql
 -- ==============================================================================
 
 CREATE TABLE IF NOT EXISTS articles (
@@ -59,11 +59,10 @@ CREATE TABLE IF NOT EXISTS browse_history (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 全站同步专用表：仅保留 sync_key, payload, version, updated_at
 CREATE TABLE IF NOT EXISTS site_sync (
   sync_key TEXT PRIMARY KEY,
-  posts_data TEXT,
-  files_data TEXT,
-  settings_data TEXT,
-  full_payload TEXT,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  payload TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
 );

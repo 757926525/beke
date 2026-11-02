@@ -1,8 +1,8 @@
 import {
   initialArticles,
-  initialBooks,
-  initialPhotos,
-  initialMedia,
+  initialBooks as rawInitialBooks,
+  initialPhotos as rawInitialPhotos,
+  initialMedia as rawInitialMedia,
   initialWebBookmarks,
   initialBookmarkZones,
   defaultCloudConfig,
@@ -51,7 +51,37 @@ export const STORAGE_KEYS = {
   MEDIA_LIST: 'wf_media_list',
   EMAIL_SETTINGS: 'wf_email_settings',
   BROWSING_HISTORY: 'wf_browsing_history',
-  HERO_INTRO: 'wf_hero_intro'
+  HERO_INTRO: 'wf_hero_intro',
+  SYNC_VERSION: 'wf_sync_version',
+  LAST_LOCAL_CHANGE: 'wf_last_local_change',
+  CF_ROOM_KEY: 'wf_cf_room_key'
+};
+
+/**
+ * Generate cryptographically secure random sync key (>= 128 bits)
+ * No static or shared default keys
+ */
+export const generateSecureSyncKey = () => {
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const array = new Uint8Array(16); // 128 bits
+    crypto.getRandomValues(array);
+    const hex = Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return `wf-${hex}`;
+  }
+  return `wf-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
+};
+
+/**
+ * Gets or initializes a secure unique sync room key
+ */
+export const getOrInitSecureSyncKey = () => {
+  let key = localStorage.getItem(STORAGE_KEYS.CF_ROOM_KEY) || localStorage.getItem('wf_cross_device_sync_key');
+  if (!key || key === 'fox-cf-sync' || key === 'fox-vault-master') {
+    key = generateSecureSyncKey();
+    localStorage.setItem(STORAGE_KEYS.CF_ROOM_KEY, key);
+    localStorage.setItem('wf_cross_device_sync_key', key);
+  }
+  return key;
 };
 
 export const defaultHeroIntro = {
@@ -62,8 +92,32 @@ export const defaultHeroIntro = {
   totalCapacityBytes: 10 * 1024 * 1024 * 1024 // 10 GB
 };
 
-export const initialPosts = initialArticles;
-export { initialBooks, initialPhotos, initialMedia };
+// Seed initial items with millisecond timestamps Date.now() and deleted: false
+const seedTimestamp = Date.now();
+
+export const initialPosts = (initialArticles || []).map((p) => ({
+  ...p,
+  updatedAt: typeof p.updatedAt === 'number' ? p.updatedAt : seedTimestamp,
+  deleted: Boolean(p.deleted)
+}));
+
+export const initialBooks = (rawInitialBooks || []).map((b) => ({
+  ...b,
+  updatedAt: typeof b.updatedAt === 'number' ? b.updatedAt : seedTimestamp,
+  deleted: Boolean(b.deleted)
+}));
+
+export const initialPhotos = (rawInitialPhotos || []).map((ph) => ({
+  ...ph,
+  updatedAt: typeof ph.updatedAt === 'number' ? ph.updatedAt : seedTimestamp,
+  deleted: Boolean(ph.deleted)
+}));
+
+export const initialMedia = (rawInitialMedia || []).map((m) => ({
+  ...m,
+  updatedAt: typeof m.updatedAt === 'number' ? m.updatedAt : seedTimestamp,
+  deleted: Boolean(m.deleted)
+}));
 
 export const defaultEmailSettings = {
   enabled: true,
@@ -89,42 +143,54 @@ export const initialBookmarks = [
     title: 'Cloudflare Pages & Workers',
     url: 'https://dash.cloudflare.com',
     category: 'cloud',
-    desc: '全球 Anycast 边缘计算与静态托管中枢'
+    desc: '全球 Anycast 边缘计算与静态托管中枢',
+    updatedAt: seedTimestamp,
+    deleted: false
   },
   {
     id: 'bm-2',
     title: '腾讯云 EdgeOne / COS',
     url: 'https://console.cloud.tencent.com/cos',
     category: 'cloud',
-    desc: '极速国内 CDN 与对象存储服务'
+    desc: '极速国内 CDN 与对象存储服务',
+    updatedAt: seedTimestamp,
+    deleted: false
   },
   {
     id: 'bm-3',
     title: '阿里云 ESA / OSS',
     url: 'https://oss.console.aliyun.com',
     category: 'cloud',
-    desc: '高可用分布式对象存储控制台'
+    desc: '高可用分布式对象存储控制台',
+    updatedAt: seedTimestamp,
+    deleted: false
   },
   {
     id: 'bm-4',
     title: 'MDN Web Docs',
     url: 'https://developer.mozilla.org',
     category: 'tech',
-    desc: '权威 Web 开发技术标准文档与参考'
+    desc: '权威 Web 开发技术标准文档与参考',
+    updatedAt: seedTimestamp,
+    deleted: false
   },
   {
     id: 'bm-5',
     title: 'GitHub 开源社区',
     url: 'https://github.com',
     category: 'tech',
-    desc: '代码托管与 CI/CD 自动化流水线'
+    desc: '代码托管与 CI/CD 自动化流水线',
+    updatedAt: seedTimestamp,
+    deleted: false
   },
   {
     id: 'bm-6',
     title: 'DeepSeek / OpenAI AI 智识',
     url: 'https://chat.deepseek.com',
     category: 'ai',
-    desc: '新一代推理与代码大语言模型'
+    desc: '新一代推理与代码大语言模型',
+    updatedAt: seedTimestamp,
+    deleted: false
   }
 ];
 
@@ -158,7 +224,9 @@ export const initialCloudFiles = [
     type: 'document',
     provider: 'Cloudflare R2',
     url: 'https://r2.whitefox.blog/whitefox-v1.pdf',
-    uploadedAt: '2025-05-18'
+    uploadedAt: '2025-05-18',
+    updatedAt: seedTimestamp,
+    deleted: false
   },
   {
     id: 'cf-2',
@@ -167,7 +235,9 @@ export const initialCloudFiles = [
     type: 'video',
     provider: 'Tencent COS',
     url: 'https://cos.whitefox.blog/snow_fox.mp4',
-    uploadedAt: '2025-05-17'
+    uploadedAt: '2025-05-17',
+    updatedAt: seedTimestamp,
+    deleted: false
   },
   {
     id: 'cf-3',
@@ -176,7 +246,9 @@ export const initialCloudFiles = [
     type: 'audio',
     provider: 'Alibaba OSS',
     url: 'https://oss.whitefox.blog/guqin.mp3',
-    uploadedAt: '2025-05-16'
+    uploadedAt: '2025-05-16',
+    updatedAt: seedTimestamp,
+    deleted: false
   },
   {
     id: 'cf-4',
@@ -185,7 +257,9 @@ export const initialCloudFiles = [
     type: 'archive',
     provider: 'AList / WebDAV',
     url: 'https://pan.whitefox.blog/d/whitefox_art.zip',
-    uploadedAt: '2025-05-15'
+    uploadedAt: '2025-05-15',
+    updatedAt: seedTimestamp,
+    deleted: false
   }
 ];
 
@@ -235,7 +309,8 @@ export const defaultAppearance = {
   bgColor: '#f8fafc',
   bgImage: '',
   heroImage: 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=800&q=80',
-  avatarImage: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80'
+  avatarImage: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80',
+  updatedAt: seedTimestamp
 };
 
 export { defaultSystemSettings };
@@ -284,14 +359,19 @@ export const formatBytes = (bytes) => {
 };
 
 /**
- * Universal Multi-Channel Broadcast Sync System
- * Supports BroadcastChannel API + Storage Events + In-Memory CustomEvents
+ * Universal Multi-Channel Broadcast Sync System with tabId, origin & message deduplication
  */
 const SYNC_BROADCAST_CHANNEL_NAME = 'whitefox_universal_sync_channel';
+
+// Unique Tab ID per browser tab session
+export const TAB_ID = typeof window !== 'undefined'
+  ? (window.__whitefox_tab_id || (window.__whitefox_tab_id = 'tab_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now()))
+  : 'server_tab';
 
 class UniversalSyncBroadcaster {
   constructor() {
     this.channel = null;
+    this.processedMessageIds = new Set();
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
         this.channel = new BroadcastChannel(SYNC_BROADCAST_CHANNEL_NAME);
@@ -301,13 +381,31 @@ class UniversalSyncBroadcaster {
     }
   }
 
+  isProcessed(messageId) {
+    if (!messageId) return false;
+    if (this.processedMessageIds.has(messageId)) {
+      return true;
+    }
+    this.processedMessageIds.add(messageId);
+    // Keep max 200 items in deduplication cache
+    if (this.processedMessageIds.size > 200) {
+      const first = this.processedMessageIds.values().next().value;
+      this.processedMessageIds.delete(first);
+    }
+    return false;
+  }
+
   broadcast(type, payload, meta = {}) {
     if (typeof window === 'undefined') return;
+    const messageId = meta.messageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    this.processedMessageIds.add(messageId);
+
     const message = {
       type,
       payload,
-      timestamp: meta.timestamp || new Date().toISOString(),
-      senderId: meta.senderId || window.__whitefox_session_id || 'tab-' + Math.random().toString(36).substring(2, 9)
+      origin: TAB_ID,
+      messageId,
+      timestamp: typeof meta.timestamp === 'number' ? meta.timestamp : Date.now()
     };
 
     // 1. Post to BroadcastChannel (inter-tab)
@@ -319,9 +417,9 @@ class UniversalSyncBroadcaster {
       }
     }
 
-    // 2. Dispatch in-window CustomEvent
+    // 2. Dispatch in-window CustomEvent with meta
     try {
-      window.dispatchEvent(new CustomEvent('whitefox-hydrate-full-sync', { detail: payload }));
+      window.dispatchEvent(new CustomEvent('whitefox-hydrate-full-sync', { detail: { payload, meta: message } }));
     } catch (err) {
       console.warn('Local CustomEvent dispatch error:', err);
     }
@@ -332,7 +430,13 @@ class UniversalSyncBroadcaster {
 
     const handleBroadcastMessage = (event) => {
       if (event && event.data && event.data.payload) {
-        callback(event.data.payload, event.data);
+        const { origin, messageId, payload } = event.data;
+        // Ignore messages sent by own tab
+        if (origin === TAB_ID) return;
+        // Ignore duplicate messages
+        if (messageId && this.isProcessed(messageId)) return;
+
+        callback(payload, event.data);
       }
     };
 
@@ -340,7 +444,16 @@ class UniversalSyncBroadcaster {
       if (event.key === 'wf_cross_device_synced_payload' && event.newValue) {
         try {
           const parsed = JSON.parse(event.newValue);
-          callback(parsed, { type: 'storage_event', timestamp: new Date().toISOString() });
+          const meta = parsed._meta || {};
+          if (meta.origin === TAB_ID) return;
+          if (meta.messageId && this.isProcessed(meta.messageId)) return;
+
+          callback(parsed.data || parsed, {
+            type: 'storage_event',
+            origin: meta.origin || 'storage',
+            messageId: meta.messageId,
+            timestamp: typeof meta.timestamp === 'number' ? meta.timestamp : Date.now()
+          });
         } catch (e) {
           // ignore
         }
@@ -348,8 +461,11 @@ class UniversalSyncBroadcaster {
     };
 
     const handleCustomSyncEvent = (event) => {
-      if (event.detail) {
-        callback(event.detail, { type: 'custom_event', timestamp: new Date().toISOString() });
+      if (event.detail && event.detail.payload) {
+        const meta = event.detail.meta || {};
+        if (meta.origin === TAB_ID) return;
+        if (meta.messageId && this.isProcessed(meta.messageId)) return;
+        callback(event.detail.payload, meta);
       }
     };
 
@@ -372,40 +488,160 @@ class UniversalSyncBroadcaster {
 export const syncBroadcaster = new UniversalSyncBroadcaster();
 
 /**
- * Last-Write-Wins (Timestamp) Resolution & Merge for Site Data
+ * Universal Item-level Conflict Merge for any entity collection (posts, books, photos, bookmarks, cloudFiles, etc.)
+ * - Matches by item id
+ * - Compares millisecond updatedAt (Date.now())
+ * - Takes newer version; respects tombstone (deleted: true)
+ * - Returns array of active non-deleted items + retains internal tombstones for sync propagation
  */
-export const mergeSyncPayloadWithTimestamp = (currentData, incomingData) => {
-  if (!incomingData) return currentData;
-  if (!currentData) return incomingData;
+export const mergeEntityCollection = (localList = [], remoteList = [], keepTombstones = true) => {
+  const map = new Map();
 
-  const currentTs = new Date(currentData.timestamp || currentData.syncedAt || 0).getTime();
-  const incomingTs = new Date(incomingData.timestamp || incomingData.syncedAt || 0).getTime();
+  // Index local items
+  (localList || []).forEach((item) => {
+    if (!item || !item.id) return;
+    map.set(item.id, {
+      ...item,
+      updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : 0,
+      deleted: Boolean(item.deleted)
+    });
+  });
 
-  // If incoming has newer timestamp or current has no timestamp, incoming wins
-  if (incomingTs >= currentTs) {
-    return {
-      ...currentData,
-      ...incomingData,
-      posts: incomingData.posts || currentData.posts || [],
-      books: incomingData.books || currentData.books || [],
-      photos: incomingData.photos || currentData.photos || [],
-      mediaList: incomingData.mediaList || currentData.mediaList || [],
-      cloudFiles: incomingData.cloudFiles || currentData.cloudFiles || [],
-      bookmarks: incomingData.bookmarks || currentData.bookmarks || [],
-      browsingHistory: incomingData.browsingHistory || currentData.browsingHistory || [],
-      cloudConfig: incomingData.cloudConfig || currentData.cloudConfig || {},
-      emailSettings: incomingData.emailSettings || currentData.emailSettings || {},
-      appearance: incomingData.appearance || currentData.appearance || {},
-      systemSettings: incomingData.systemSettings || currentData.systemSettings || {},
-      users: incomingData.users || currentData.users || [],
-      siteName: incomingData.siteName || currentData.siteName,
-      siteLayout: incomingData.siteLayout || currentData.siteLayout,
-      fontSize: incomingData.fontSize || currentData.fontSize,
-      lang: incomingData.lang || currentData.lang,
-      themeId: incomingData.themeId || currentData.themeId,
-      syncedAt: incomingData.syncedAt || new Date().toISOString()
+  // Merge remote items
+  (remoteList || []).forEach((remoteItem) => {
+    if (!remoteItem || !remoteItem.id) return;
+    const remoteUpdated = typeof remoteItem.updatedAt === 'number' ? remoteItem.updatedAt : 0;
+    const existing = map.get(remoteItem.id);
+
+    if (!existing) {
+      map.set(remoteItem.id, {
+        ...remoteItem,
+        updatedAt: remoteUpdated,
+        deleted: Boolean(remoteItem.deleted)
+      });
+    } else {
+      // Compare millisecond updatedAt
+      if (remoteUpdated >= existing.updatedAt) {
+        map.set(remoteItem.id, {
+          ...existing,
+          ...remoteItem,
+          updatedAt: remoteUpdated,
+          deleted: Boolean(remoteItem.deleted)
+        });
+      }
+    }
+  });
+
+  const merged = Array.from(map.values());
+  return keepTombstones ? merged : merged.filter((item) => !item.deleted);
+};
+
+/**
+ * Sanitizes sync payload to strictly exclude sensitive credentials:
+ * - Excludes `users` collection completely (passwords, emails, roles)
+ * - Strips sensitive credentials from emailSettings (smtpPass)
+ * - Strips sensitive secrets from cloudConfig (storageSecretAccessKey, dbToken, dbPassword)
+ */
+export const sanitizeSyncPayload = (payload) => {
+  if (!payload || typeof payload !== 'object') return {};
+
+  const clean = { ...payload };
+
+  // Exclude users completely from cloud sync payload
+  delete clean.users;
+
+  // Sanitize emailSettings
+  if (clean.emailSettings) {
+    clean.emailSettings = {
+      ...clean.emailSettings,
+      smtpPass: undefined,
+      authSecret: undefined
     };
+    delete clean.emailSettings.smtpPass;
+    delete clean.emailSettings.authSecret;
   }
 
-  return currentData;
+  // Sanitize cloudConfig
+  if (clean.cloudConfig) {
+    clean.cloudConfig = {
+      ...clean.cloudConfig,
+      r2SecretKey: undefined,
+      cosSecretKey: undefined,
+      ossSecretKey: undefined,
+      token: undefined
+    };
+    delete clean.cloudConfig.r2SecretKey;
+    delete clean.cloudConfig.cosSecretKey;
+    delete clean.cloudConfig.ossSecretKey;
+    delete clean.cloudConfig.token;
+  }
+
+  // Sanitize backendConfig
+  if (clean.backendConfig) {
+    clean.backendConfig = {
+      ...clean.backendConfig,
+      dbPassword: undefined,
+      dbToken: undefined,
+      storageSecretAccessKey: undefined
+    };
+    delete clean.backendConfig.dbPassword;
+    delete clean.backendConfig.dbToken;
+    delete clean.backendConfig.storageSecretAccessKey;
+  }
+
+  return clean;
+};
+
+/**
+ * Universal Site-Wide Sync Merge Strategy
+ * Applies mergeEntityCollection across all collections and resolves scalar settings with millisecond timestamps
+ */
+export const mergeSyncPayloadWithTimestamp = (currentData, incomingData) => {
+  if (!incomingData) return currentData || {};
+  if (!currentData) return incomingData;
+
+  const currentTs = typeof currentData.updatedAt === 'number'
+    ? currentData.updatedAt
+    : (typeof currentData.timestamp === 'number' ? currentData.timestamp : 0);
+
+  const incomingTs = typeof incomingData.updatedAt === 'number'
+    ? incomingData.updatedAt
+    : (typeof incomingData.timestamp === 'number' ? incomingData.timestamp : (incomingData.updatedAt || 0));
+
+  // Merge all entity collections using the unified tombstone & ID-based merge function
+  const mergedPosts = mergeEntityCollection(currentData.posts, incomingData.posts, true);
+  const mergedBooks = mergeEntityCollection(currentData.books, incomingData.books, true);
+  const mergedPhotos = mergeEntityCollection(currentData.photos, incomingData.photos, true);
+  const mergedMediaList = mergeEntityCollection(currentData.mediaList, incomingData.mediaList, true);
+  const mergedCloudFiles = mergeEntityCollection(currentData.cloudFiles, incomingData.cloudFiles, true);
+  const mergedBookmarks = mergeEntityCollection(currentData.bookmarks, incomingData.bookmarks, true);
+  const mergedBrowsingHistory = mergeEntityCollection(currentData.browsingHistory, incomingData.browsingHistory, true);
+
+  // Settings & appearance: take newer by payload timestamp
+  const isIncomingNewer = incomingTs >= currentTs;
+
+  return {
+    ...currentData,
+    ...incomingData,
+    posts: mergedPosts,
+    books: mergedBooks,
+    photos: mergedPhotos,
+    mediaList: mergedMediaList,
+    cloudFiles: mergedCloudFiles,
+    bookmarks: mergedBookmarks,
+    browsingHistory: mergedBrowsingHistory,
+    // Sensitive configurations are retained locally and not blindly overwritten by stripped data
+    emailSettings: currentData.emailSettings || incomingData.emailSettings || {},
+    cloudConfig: currentData.cloudConfig || incomingData.cloudConfig || {},
+    users: currentData.users || [],
+    appearance: isIncomingNewer ? (incomingData.appearance || currentData.appearance) : currentData.appearance,
+    systemSettings: isIncomingNewer ? (incomingData.systemSettings || currentData.systemSettings) : currentData.systemSettings,
+    siteName: isIncomingNewer ? (incomingData.siteName || currentData.siteName) : currentData.siteName,
+    siteLayout: isIncomingNewer ? (incomingData.siteLayout || currentData.siteLayout) : currentData.siteLayout,
+    fontSize: isIncomingNewer ? (incomingData.fontSize || currentData.fontSize) : currentData.fontSize,
+    lang: isIncomingNewer ? (incomingData.lang || currentData.lang) : currentData.lang,
+    themeId: isIncomingNewer ? (incomingData.themeId || currentData.themeId) : currentData.themeId,
+    version: Math.max(currentData.version || 0, incomingData.version || 0),
+    updatedAt: Math.max(currentTs, incomingTs, Date.now())
+  };
 };
