@@ -68,9 +68,10 @@ export async function onRequestGet(context) {
   if (!db) {
     return new Response(JSON.stringify({
       success: false,
-      error: 'D1 Database binding "DB" is not configured in Cloudflare Pages'
+      notConfigured: true,
+      error: 'D1 Database binding "DB" is not configured in Cloudflare Pages. Please bind "DB" in Cloudflare Pages Settings -> Functions or wrangler.toml.'
     }), {
-      status: 500,
+      status: 503,
       headers: CORS_HEADERS
     });
   }
@@ -133,9 +134,10 @@ export async function onRequestPost(context) {
   if (!db) {
     return new Response(JSON.stringify({
       success: false,
-      error: 'D1 Database binding "DB" is not configured in Cloudflare Pages'
+      notConfigured: true,
+      error: 'D1 Database binding "DB" is not configured in Cloudflare Pages. Please bind "DB" in Cloudflare Pages Settings -> Functions or wrangler.toml.'
     }), {
-      status: 500,
+      status: 503,
       headers: CORS_HEADERS
     });
   }

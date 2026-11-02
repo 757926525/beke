@@ -93,7 +93,7 @@ export const defaultHeroIntro = {
 };
 
 // Seed initial items with millisecond timestamps Date.now() and deleted: false
-const seedTimestamp = Date.now();
+const seedTimestamp = 1700000000000; // 固定基线时间戳，确保多端合并时远程或本地的真实用户修改始终优先覆盖种子初始数据
 
 export const initialPosts = (initialArticles || []).map((p) => ({
   ...p,

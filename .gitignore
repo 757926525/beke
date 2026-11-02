@@ -10,3 +10,5 @@ whitefox-pages-deploy.zip
 .env.*.local
 *.log
 .DS_Store
+_worker.bundle
+.wrangler
