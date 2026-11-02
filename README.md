@@ -160,7 +160,17 @@ npm run package:pages
 
 ---
 
-### 方案五：Docker & Nginx 私有化部署
+### 方案五：Vercel / Netlify / Railway 多平台云托管部署
+
+白狐博客基于标准 React 19 + Vite 构建，可无缝部署至全球主流静态与 Serverless 云托管平台：
+
+- **Vercel**：在 [vercel.com](https://vercel.com) 导入项目，构建命令填写 `npm run build`，输出目录填写 `dist`。
+- **Netlify**：在 [netlify.com](https://app.netlify.com) 选择 Import from Git，构建命令 `npm run build`，发布目录 `dist`。
+- **Railway**：直接连接 GitHub 仓库，Railway 将自动读取仓库根目录的 `Dockerfile` 进行容器化秒级发布。
+
+---
+
+### 方案六：Docker & Nginx 私有化部署
 
 针对独立 VPS / 云服务器环境：
 
@@ -171,6 +181,38 @@ docker compose up -d --build
 # 访问博客
 http://<服务器IP>:80
 ```
+
+---
+
+## 🗄️ 数据库接入与 Cloudflare 原生直绑指南
+
+白狐博客支持**Cloudflare Pages 后台原生直接绑定**与**各大外部数据库/对象存储直接接入**：
+
+### 1. Cloudflare Dashboard 原生直绑（首选推荐 · 零硬编码配置）
+
+无需在代码或 `wrangler.toml` 中填写敏感 UUID 或访问密钥，直接在 Cloudflare 控制台添加绑定：
+
+1. **创建 D1 数据库与 R2 存储桶**：
+   - 打开 Cloudflare Dashboard -> **Storage & Databases** -> **D1 SQL Database** -> 创建名为 `whitefox-db` 的数据库。
+   - 在其 **Console** 中执行 `deploy/cloudflare-d1-schema.sql` 完成表结构初始化。
+   - （可选）在 **R2 Object Storage** 中创建名为 `whitefox-assets` 的存储桶。
+2. **在 Pages 项目后台添加原生绑定**：
+   - 打开 Pages 项目 -> **Settings** -> **Functions**。
+   - 在 **D1 database bindings** 点击添加：变量名称填 **`DB`**，选择刚创建的 `whitefox-db`。
+   - 在 **R2 bucket bindings** 点击添加：变量名称填 **`BUCKET`**，选择刚创建的 `whitefox-assets`。
+   - 保存并重新部署，站内后台状态指示灯将自动识别为 **绿色已接入 (Connected)**，全站数据实现毫秒级持久化与多端极速自动同步！
+
+### 2. 外部数据库与对象存储接入（腾讯云 / 阿里云 / Supabase / MySQL / AWS S3）
+
+在博客右上角 **系统设置** -> **全能数据库后台与管理界面接入** 中：
+- 下拉选择数据库类型（Cloudflare D1、Supabase / PostgreSQL、MySQL、腾讯云 TDSQL、阿里云 PolarDB、MongoDB Atlas、Redis）。
+- 填入 Endpoint 与访问凭证，点击 **测试并激活数据库接入**，状态指示灯将实时反映真实通信连通性。
+- 同理可接入 Cloudflare R2、腾讯云 COS、阿里云 OSS、Amazon S3 或七牛云 Kodo。
+
+### 3. 无遮挡透明背景与主题定制
+
+- 在 **系统设置** -> **主题调色与本地图片设定** 中提供了 **通透亚克力** 与 **纯净冰晶** 两套半透明玻璃主题预设。
+- 开启 **无遮挡透明区块模式 (Transparent Glass)** 后，卡片容器与页面区块将呈现通透的高级亚克力磨砂玻璃质感，自定义背景大图将尽收眼底、通透无遮挡。
 
 ---
 

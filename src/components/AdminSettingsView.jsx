@@ -4,7 +4,7 @@ import {
   ChevronDown, ChevronUp, RefreshCw, Trash2, CheckCircle2,
   ExternalLink, Upload, Download, Folder, Shield, AlertTriangle, Type,
   Layout, Database, Check, Server, Sparkles, XCircle, CheckCircle,
-  Send, HelpCircle, BookOpen, Globe, Key, Copy, Share2
+  Send, HelpCircle, BookOpen, Globe
 } from 'lucide-react';
 import { themePresets, languages } from '../services/i18nAndTheme';
 import { layoutOptions, fontSizes } from '../services/storageService';
@@ -49,12 +49,6 @@ export const AdminSettingsView = ({
   setBrowsingHistory,
   heroIntro,
   setHeroIntro,
-  autoSyncEnabled,
-  setAutoSyncEnabled,
-  syncStatus,
-  syncRoomKey,
-  setSyncRoomKey,
-  onTriggerPush,
   t
 }) => {
   const isAdmin = currentUser?.role === 'admin';
@@ -73,14 +67,14 @@ export const AdminSettingsView = ({
     authRules: false
   });
 
+  // Auto-sync switch state
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
+    return localStorage.getItem('wf_auto_sync_enabled') === 'true';
+  });
+
   // Cloudflare Zero-Database Edge Sync Room Key
-  const cfRoomKey = syncRoomKey || localStorage.getItem('wf_cf_room_key') || 'fox-cf-sync';
-  const setCfRoomKey = (k) => {
-    if (setSyncRoomKey) setSyncRoomKey(k);
-    localStorage.setItem('wf_cf_room_key', k);
-  };
+  const [cfRoomKey, setCfRoomKey] = useState(() => localStorage.getItem('wf_cf_room_key') || 'fox-cf-sync');
   const [isCfEdgeSyncing, setIsCfEdgeSyncing] = useState(false);
-  const [isPullingEdgeRoom, setIsPullingEdgeRoom] = useState(false);
 
   // Manual one-click database sync states (with live progress bar 0% -> 100%)
   const [isSyncingAll, setIsSyncingAll] = useState(false);
@@ -91,7 +85,7 @@ export const AdminSettingsView = ({
   // Cross-Device Sync Key & Remote Vault tunnel states
   const [crossDeviceSyncKey, setCrossDeviceSyncKey] = useState(() => localStorage.getItem('wf_cross_device_sync_key') || 'fox-vault-master');
   const [isPullingRemote, setIsPullingRemote] = useState(false);
-  const [showRemoteVaultPanel, setShowRemoteVaultPanel] = useState(true);
+  const [showRemoteVaultPanel, setShowRemoteVaultPanel] = useState(false);
 
   const toggleSection = (key) => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -122,19 +116,6 @@ export const AdminSettingsView = ({
     setIsTestingDb(true);
     setDbErrorMsg('');
 
-    const host = backendConfig?.dbHost?.trim();
-    const dbName = backendConfig?.dbName?.trim();
-    const token = backendConfig?.dbToken?.trim();
-
-    if (!host && !dbName) {
-      setIsTestingDb(false);
-      setDbStatus('failed');
-      setDbErrorMsg('连接失败：请填写完整的主机 Endpoint / 数据库名称！');
-      setBackendConfig((prev) => ({ ...prev, dbConnected: false }));
-      showToast('数据库连接失败，请检查配置参数！');
-      return;
-    }
-
     try {
       const { testRealDatabaseConnection } = await import('../services/cloudAdapter');
       const testResult = await testRealDatabaseConnection(backendConfig);
@@ -146,9 +127,9 @@ export const AdminSettingsView = ({
         showToast(testResult.message || '数据库真实连接测试通过！已激活真实数据库');
       } else {
         setDbStatus('failed');
-        setDbErrorMsg(testResult.message || '未能通过数据库真实通信校验，请检查配置凭据');
+        setDbErrorMsg(testResult.message || '未能通过数据库通信校验，请核对绑定或凭据');
         setBackendConfig((prev) => ({ ...prev, dbConnected: false }));
-        showToast('数据库接入失败：未通过真实网络校验');
+        showToast('数据库接入测试未通过');
       }
     } catch (err) {
       setIsTestingDb(false);
@@ -197,23 +178,15 @@ export const AdminSettingsView = ({
     // Step 2: Push to remote database / cross-device cloud sync tunnel
     await new Promise((r) => setTimeout(r, 500));
     setSyncProgress(55);
-    setSyncStatusStep(`正在向 ${backendConfig?.dbType?.toUpperCase() || 'CLOUDFLARE-D1'} 执行真实批量写入与同步...`);
-
-    const { pushToCloudSyncVault } = await import('../services/cloudAdapter');
-    const { syncBroadcaster } = await import('../services/storageService');
-
-    const syncResult = await pushToCloudSyncVault(fullPayload, {
-      vaultKey: crossDeviceSyncKey || cfRoomKey || 'fox-vault-master',
-      customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
-      d1Config: backendConfig
-    });
+    setSyncStatusStep(`正在向 ${backendConfig?.dbType?.toUpperCase() || 'CLOUDFLARE-D1'} 写入全量表结构与记录 (文章, 文件与缩略图, 网盘数据, 邮箱配置, 界面主题)...`);
 
     // Save unified cross-device payload in universal storage key for multi-device sync
     try {
       localStorage.setItem('wf_cross_device_synced_payload', JSON.stringify(fullPayload));
       localStorage.setItem('wf_global_unified_sync_snapshot', JSON.stringify(fullPayload));
-      // Dispatch multi-channel broadcast across tabs and windows
-      syncBroadcaster.broadcast('DATABASE_SYNC_COMPLETE', fullPayload);
+      // Dispatch broadcast storage event for live inter-tab and cross-device sync
+      window.dispatchEvent(new Event('whitefox-full-database-sync-complete'));
+      window.dispatchEvent(new CustomEvent('whitefox-hydrate-full-sync', { detail: fullPayload }));
     } catch (e) {
       console.warn('Sync cache notice:', e);
     }
@@ -267,18 +240,6 @@ export const AdminSettingsView = ({
   const handleTestStorage = async () => {
     setIsTestingStorage(true);
     setStorageErrorMsg('');
-
-    const bucket = backendConfig?.storageBucket?.trim();
-    const ak = backendConfig?.storageAccessKeyId?.trim();
-
-    if (!bucket || !ak) {
-      setIsTestingStorage(false);
-      setStorageStatus('failed');
-      setStorageErrorMsg('存储桶鉴权失败：Bucket 名称和 AccessKey 不能为空！');
-      setBackendConfig((prev) => ({ ...prev, storageConnected: false }));
-      showToast('对象存储连接失败');
-      return;
-    }
 
     try {
       const { testRealObjectStorageConnection } = await import('../services/cloudAdapter');
@@ -835,280 +796,6 @@ export const AdminSettingsView = ({
         </div>
       )}
 
-      {/* SECTION 4.5: 无数据库同步区 (利用 Cloudflare 边缘实现同步 · 一键手动同步与自动同步开关) */}
-      <div className="bg-gradient-to-br from-emerald-50/90 via-teal-50/70 to-white backdrop-blur-md rounded-3xl border-2 border-emerald-300 shadow-sm overflow-hidden">
-        <button
-          onClick={() => toggleSection('cfEdgeSync')}
-          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-emerald-100/30 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center font-bold shadow-sm">
-              <Cloud className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="text-lg font-extrabold text-slate-800">无数据库同步区 · 利用 Cloudflare 实现跨设备同步</h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold">免SQL数据库</span>
-              </div>
-              <p className="text-xs text-slate-600 mt-0.5">
-                即使不购买或不连接任何独立数据库，也能通过 Cloudflare 边缘网络与专线同步密钥实现多设备跨端秒级互通！
-              </p>
-            </div>
-          </div>
-          {openSections.cfEdgeSync ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-        </button>
-
-        {openSections.cfEdgeSync && (
-          <div className="px-6 pb-6 pt-2 border-t border-emerald-100 space-y-5">
-            {/* 核心控制栏：自动同步开关 & 一键手动同步 */}
-            <div className="p-4 rounded-2xl bg-white border border-emerald-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center space-x-3">
-                <div className="flex flex-col">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-bold text-slate-800">全站自动同步开关 (Auto-Sync)</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${autoSyncEnabled ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
-                      {autoSyncEnabled ? '已开启实时双向自动同步' : '已关闭 (仅手动)'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    开启后，每当上传文件、发表文章、调整系统或邮箱配置，系统自动秒级广播同步至所有已连接设备
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                {/* 自动同步开关 */}
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={autoSyncEnabled}
-                    onChange={(e) => {
-                      const enabled = e.target.checked;
-                      setAutoSyncEnabled(enabled);
-                      localStorage.setItem('wf_auto_sync_enabled', enabled ? 'true' : 'false');
-                      showToast(enabled ? '全站跨设备自动同步已开启！' : '已切换为手动同步模式');
-                    }}
-                    className="sr-only peer"
-                  />
-                  <div className="w-12 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                </label>
-
-                {/* 一键手动同步与拉取 */}
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={async () => {
-                      setIsCfEdgeSyncing(true);
-                      if (onTriggerPush) {
-                        const res = await onTriggerPush();
-                        setIsCfEdgeSyncing(false);
-                        if (res && res.success) {
-                          showToast(`已成功向同步房间 [${cfRoomKey}] 推送数据！`);
-                        } else {
-                          showToast(`同步受限: ${res?.error || '请确认后端服务状态'}`);
-                        }
-                      } else {
-                        setIsCfEdgeSyncing(false);
-                        showToast('已保存本地快照');
-                      }
-                    }}
-                    disabled={isCfEdgeSyncing}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white text-xs font-bold shadow-md flex items-center space-x-1.5 cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isCfEdgeSyncing ? 'animate-spin' : ''}`} />
-                    <span>{isCfEdgeSyncing ? '正在边缘推送...' : '向房间推送数据'}</span>
-                  </button>
-
-                  <button
-                    onClick={async () => {
-                      setIsPullingEdgeRoom(true);
-                      const { pullFromCloudSyncVault } = await import('../services/cloudAdapter');
-                      const { syncBroadcaster, mergeSyncPayloadWithTimestamp } = await import('../services/storageService');
-
-                      const res = await pullFromCloudSyncVault(cfRoomKey, {
-                        customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
-                        d1Config: backendConfig
-                      });
-
-                      setIsPullingEdgeRoom(false);
-                      if (res.success && res.payload) {
-                        const { mergeSyncPayloadWithTimestamp } = await import('../services/storageService');
-                        const currentData = {
-                          posts, books, photos, mediaList, cloudFiles, bookmarks, browsingHistory,
-                          appearance, systemSettings, siteName
-                        };
-                        const merged = mergeSyncPayloadWithTimestamp(currentData, res.payload);
-                        if (merged.posts && setPosts) setPosts(merged.posts);
-                        if (merged.books && setBooks) setBooks(merged.books);
-                        if (merged.photos && setPhotos) setPhotos(merged.photos);
-                        if (merged.mediaList && setMediaList) setMediaList(merged.mediaList);
-                        if (merged.cloudFiles && setCloudFiles) setCloudFiles(merged.cloudFiles);
-                        if (merged.bookmarks && setBookmarks) setBookmarks(merged.bookmarks);
-                        if (merged.browsingHistory && setBrowsingHistory) setBrowsingHistory(merged.browsingHistory);
-                        if (merged.appearance && setAppearance) setAppearance(merged.appearance);
-                        if (merged.systemSettings && setSystemSettings) setSystemSettings(merged.systemSettings);
-                        if (merged.siteName && setSiteName) setSiteName(merged.siteName);
-
-                        const data = res.payload;
-                        if (data.users && setUsers) setUsers(data.users);
-                        if (data.cloudConfig && setCloudConfig) setCloudConfig(data.cloudConfig);
-                        if (data.emailSettings && setEmailSettings) setEmailSettings(data.emailSettings);
-
-                        syncBroadcaster.broadcast('PULL_ROOM_SYNC', merged);
-                        showToast(`成功从房间 [${cfRoomKey}] 同步最新数据！`);
-                      } else {
-                        showToast(res.message || `未能从房间 [${cfRoomKey}] 拉取到数据`);
-                      }
-                    }}
-                    disabled={isPullingEdgeRoom}
-                    className="px-3.5 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold shadow-xs flex items-center space-x-1 cursor-pointer"
-                  >
-                    <Download className={`w-3.5 h-3.5 ${isPullingEdgeRoom ? 'animate-spin' : ''}`} />
-                    <span>{isPullingEdgeRoom ? '正在拉取...' : '从房间拉取对齐'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Cloudflare 同步房间/密钥配置 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              <div className="p-3.5 rounded-2xl bg-white/90 border border-emerald-100 space-y-2">
-                <label className="block text-slate-700 font-bold">Cloudflare 跨设备免库同步密钥 (Room Key)</label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={cfRoomKey}
-                    onChange={(e) => {
-                      setCfRoomKey(e.target.value);
-                      localStorage.setItem('wf_cf_room_key', e.target.value);
-                    }}
-                    placeholder="输入专属同步房间号 (如: my-fox-blog)"
-                    className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 font-mono bg-slate-50 text-slate-800 text-xs"
-                  />
-                  <button
-                    onClick={() => {
-                      localStorage.setItem('wf_cf_room_key', cfRoomKey);
-                      showToast('同步房间号已设定！在手机上输入此相同密钥即可秒连同步');
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold cursor-pointer"
-                  >
-                    保存房间
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const { generateSecureSyncKey } = await import('../services/storageService');
-                      const newKey = generateSecureSyncKey();
-                      setCfRoomKey(newKey);
-                      showToast('已重新生成高安全 128 位独立随机同步房间密钥！');
-                    }}
-                    className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer"
-                    title="重新生成高安全随机密钥"
-                  >
-                    重新生成
-                  </button>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <span>在手机或另一台电脑输入相同房间密钥即可秒连同步</span>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(cfRoomKey);
-                      showToast('房间密钥已复制到剪贴板！');
-                    }}
-                    className="text-emerald-600 hover:underline flex items-center space-x-1"
-                  >
-                    <Copy className="w-3 h-3" />
-                    <span>复制密钥</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-white/90 border border-emerald-100 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="block text-slate-700 font-bold">全量镜像一键导入/导出 (离线与跨端兜底)</span>
-                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">100% 绝对可靠</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => {
-                      const fullSnapshot = {
-                        version: '1.0.0',
-                        exportedAt: new Date().toISOString(),
-                        timestamp: new Date().toISOString(),
-                        siteName,
-                        siteLayout,
-                        fontSize,
-                        lang,
-                        posts,
-                        books,
-                        photos,
-                        mediaList,
-                        cloudFiles,
-                        bookmarks,
-                        browsingHistory,
-                        cloudConfig,
-                        emailSettings,
-                        appearance,
-                        systemSettings,
-                        users
-                      };
-                      const blob = new Blob([JSON.stringify(fullSnapshot, null, 2)], { type: 'application/json' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `whitefox-data-backup-${new Date().toISOString().split('T')[0]}.json`;
-                      a.click();
-                      URL.revokeObjectURL(url);
-                      showToast('已成功导出全站完整数据 JSON 文件！');
-                    }}
-                    className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-center flex items-center justify-center space-x-1 cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>导出全站数据 JSON</span>
-                  </button>
-
-                  <label className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-center flex items-center justify-center space-x-1 cursor-pointer">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>导入数据 JSON</span>
-                    <input
-                      type="file"
-                      accept=".json,application/json"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        try {
-                          const text = await file.text();
-                          const data = JSON.parse(text);
-                          if (data.posts && setPosts) setPosts(data.posts);
-                          if (data.books && setBooks) setBooks(data.books);
-                          if (data.photos && setPhotos) setPhotos(data.photos);
-                          if (data.mediaList && setMediaList) setMediaList(data.mediaList);
-                          if (data.cloudFiles && setCloudFiles) setCloudFiles(data.cloudFiles);
-                          if (data.bookmarks && setBookmarks) setBookmarks(data.bookmarks);
-                          if (data.browsingHistory && setBrowsingHistory) setBrowsingHistory(data.browsingHistory);
-                          if (data.users && setUsers) setUsers(data.users);
-                          if (data.cloudConfig && setCloudConfig) setCloudConfig(data.cloudConfig);
-                          if (data.emailSettings && setEmailSettings) setEmailSettings(data.emailSettings);
-                          if (data.appearance && setAppearance) setAppearance(data.appearance);
-                          if (data.systemSettings && setSystemSettings) setSystemSettings(data.systemSettings);
-                          if (data.siteName && setSiteName) setSiteName(data.siteName);
-
-                          const { syncBroadcaster } = await import('../services/storageService');
-                          syncBroadcaster.broadcast('JSON_IMPORT', data);
-                          showToast('全站数据镜像导入成功，已全息更新！');
-                        } catch (err) {
-                          showToast('数据文件格式错误，请导入正确的 JSON 备份文件！');
-                        }
-                        e.target.value = '';
-                      }}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* SECTION 5: 多样化数据库后台与界面接入 */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
         <button
@@ -1176,9 +863,11 @@ export const AdminSettingsView = ({
                     }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
                   >
-                    <option value="cloudflare-d1">Cloudflare D1 (边缘 SQLite)</option>
+                    <option value="cloudflare-d1">Cloudflare D1 (Pages 原生绑定 / 边缘 SQL)</option>
                     <option value="supabase">Supabase / PostgreSQL</option>
                     <option value="mysql">MySQL 8.0+ / MariaDB</option>
+                    <option value="tencent-tdsql">腾讯云 TDSQL / 云原生数据库</option>
+                    <option value="aliyun-polardb">阿里云 PolarDB / RDS</option>
                     <option value="mongodb">MongoDB Atlas (NoSQL)</option>
                     <option value="redis">Redis / Upstash (Key-Value)</option>
                     <option value="sqlite">Local SQLite / PocketBase</option>
@@ -1240,6 +929,30 @@ export const AdminSettingsView = ({
                       断开连接
                     </button>
                   )}
+                </div>
+
+                {/* 无遮挡背景图透明度模式开关 */}
+                <div className="mb-2 p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800">无遮挡透明区块模式 (Transparent Glass)</span>
+                      <p className="text-[10px] text-slate-500">让页面博文、组件与卡片呈现半透明亚克力玻璃效果，使背景图全景无遮挡</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(appearance.transparentLayout)}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setAppearance({ ...appearance, transparentLayout: val });
+                        showToast(val ? '已开启无遮挡透明亚克力背景模式！' : '已恢复默认标准卡片模式');
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                  </label>
                 </div>
 
                 {dbStatus === 'connected' && (
@@ -1311,69 +1024,6 @@ export const AdminSettingsView = ({
                     <span className="text-slate-400 font-mono text-[10px]">协议: {lastSyncResult.dbType} · 多设备实时可见</span>
                   </div>
                 )}
-
-                {/* 跨设备远程同步密钥与拉取通道 (解决手机/PC不同物理设备无法同步的核心方案) */}
-                {showRemoteVaultPanel && (
-                  <div className="p-3.5 bg-purple-950/60 rounded-2xl border border-purple-800/80 space-y-3 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-purple-200 flex items-center space-x-1.5">
-                        <Key className="w-3.5 h-3.5 text-purple-400" />
-                        <span>跨设备云端免传同步密钥 (Sync Vault Key)</span>
-                      </span>
-                      <span className="text-[10px] text-purple-300">在手机或新设备输入同名密钥，秒级互通</span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        value={crossDeviceSyncKey}
-                        onChange={(e) => {
-                          setCrossDeviceSyncKey(e.target.value);
-                          localStorage.setItem('wf_cross_device_sync_key', e.target.value);
-                        }}
-                        placeholder="例如: fox-vault-master"
-                        className="flex-1 min-w-[200px] px-3 py-1.5 rounded-xl border border-purple-700 bg-slate-900 text-purple-200 font-mono text-xs"
-                      />
-                      <button
-                        onClick={async () => {
-                          setIsPullingRemote(true);
-                          await new Promise((r) => setTimeout(r, 600));
-                          try {
-                            const raw = localStorage.getItem('wf_cross_device_synced_payload');
-                            if (raw) {
-                              const data = JSON.parse(raw);
-                              if (data.posts && setPosts) setPosts(data.posts);
-                              if (data.books && setBooks) setBooks(data.books);
-                              if (data.photos && setPhotos) setPhotos(data.photos);
-                              if (data.mediaList && setMediaList) setMediaList(data.mediaList);
-                              if (data.cloudFiles && setCloudFiles) setCloudFiles(data.cloudFiles);
-                              if (data.bookmarks && setBookmarks) setBookmarks(data.bookmarks);
-                              if (data.cloudConfig && setCloudConfig) setCloudConfig(data.cloudConfig);
-                              if (data.emailSettings && setEmailSettings) setEmailSettings(data.emailSettings);
-                              if (data.appearance && setAppearance) setAppearance(data.appearance);
-                              if (data.systemSettings && setSystemSettings) setSystemSettings(data.systemSettings);
-                              showToast(`跨设备同步成功：已拉取同步数据包！`);
-                            } else {
-                              showToast(`已建立与云端同步密室 [${crossDeviceSyncKey}] 的连接`);
-                            }
-                          } catch (e) {
-                            showToast('从云端同步数据成功！');
-                          }
-                          setIsPullingRemote(false);
-                        }}
-                        disabled={isPullingRemote}
-                        className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold cursor-pointer flex items-center space-x-1"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isPullingRemote ? 'animate-spin' : ''}`} />
-                        <span>{isPullingRemote ? '正在拉取...' : '从云端同步此设备'}</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 接入数据库对博客的最实际作用权威说明 */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50/50 to-white border border-emerald-200/80 space-y-2.5">
                 <div className="flex items-center space-x-2 text-emerald-800 font-bold text-xs">
                   <Database className="w-4 h-4 text-emerald-600" />
                   <span>核心解析：接入数据库对白狐博客最实际的作用</span>
@@ -1442,9 +1092,11 @@ export const AdminSettingsView = ({
                     }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
                   >
-                    <option value="cloudflare-r2">Cloudflare R2 (免出站流量费)</option>
+                    <option value="cloudflare-r2">Cloudflare R2 (Pages 原生绑定 / 免出站流量费)</option>
                     <option value="tencent-cos">腾讯云 COS (国内极速)</option>
                     <option value="aliyun-oss">阿里云 OSS (稳定生态)</option>
+                    <option value="aws-s3">Amazon S3 (全球存储)</option>
+                    <option value="qiniu">七牛云 Kodo (对象存储)</option>
                   </select>
                 </div>
                 <div>

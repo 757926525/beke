@@ -699,13 +699,17 @@ export function App() {
 
   const activePost = posts.find((p) => p.id === activePostId);
 
+  const isTransparentTheme = Boolean(currentTheme?.isTransparent || appearance?.transparentLayout);
+
   return (
     <div
       className={`min-h-screen font-sans transition-colors duration-300 relative ${
-        darkMode ? 'bg-slate-900 text-slate-100' : 'text-slate-800'
+        isTransparentTheme ? 'theme-transparent' : ''
+      } ${
+        darkMode ? 'bg-slate-900/90 text-slate-100' : 'text-slate-800'
       }`}
       style={{
-        backgroundColor: darkMode ? '#0f172a' : appearance.bgColor || '#f8fafc',
+        backgroundColor: appearance.bgImage ? 'transparent' : (darkMode ? '#0f172a' : appearance.bgColor || '#f8fafc'),
         backgroundImage: appearance.bgImage ? `url(${appearance.bgImage})` : undefined,
         backgroundSize: 'cover',
         backgroundAttachment: 'fixed',

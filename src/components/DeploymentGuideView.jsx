@@ -120,6 +120,18 @@ export const DeploymentGuideView = ({ siteName = 'fox', t }) => {
           </button>
 
           <button
+            onClick={() => setActiveTab('vercel-netlify')}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+              activeTab === 'vercel-netlify'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Vercel / Netlify / Railway</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('database')}
             className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
               activeTab === 'database'
@@ -128,7 +140,7 @@ export const DeploymentGuideView = ({ siteName = 'fox', t }) => {
             }`}
           >
             <Database className="w-4 h-4" />
-            <span>后台接入数据库指南</span>
+            <span>Cloudflare D1 & R2 后台直绑指南</span>
           </button>
         </div>
       </div>
@@ -404,45 +416,108 @@ export const DeploymentGuideView = ({ siteName = 'fox', t }) => {
         </div>
       )}
 
-      {/* 6. Backend Database Integration Guide */}
+      {/* 5. Vercel & Netlify & Railway Deployment Guide */}
+      {activeTab === 'vercel-netlify' && (
+        <div className="space-y-6">
+          <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-800 flex items-center space-x-2">
+                <Layers className="w-5 h-5 text-emerald-600" />
+                <span>Vercel / Netlify / Railway 多平台云托管部署</span>
+              </h2>
+              <span className="text-xs px-3 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-full">
+                自动化 Git CI/CD
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              白狐博客系统基于纯标准 React 19 + Vite 构建，可无缝部署至全球任何静态与 Serverless 云托管平台：
+            </p>
+
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <p className="text-xs font-bold text-slate-700">1. Vercel 极速部署</p>
+                <p className="text-xs text-slate-600">
+                  访问 <a href="https://vercel.com" target="_blank" rel="noreferrer" className="text-emerald-600 font-semibold underline">vercel.com</a>，点击 <strong>Add New Project</strong>，导入 GitHub 仓库。
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono bg-white p-3 rounded-xl border border-slate-200">
+                  <div><span className="text-slate-400">Build Command:</span> <span className="font-bold text-emerald-700">npm run build</span></div>
+                  <div><span className="text-slate-400">Output Directory:</span> <span className="font-bold text-emerald-700">dist</span></div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <p className="text-xs font-bold text-slate-700">2. Netlify 部署</p>
+                <p className="text-xs text-slate-600">
+                  访问 <a href="https://app.netlify.com" target="_blank" rel="noreferrer" className="text-emerald-600 font-semibold underline">app.netlify.com</a>，选择 <strong>Import from Git</strong>。构建命令填 <code className="font-mono bg-slate-100 px-1 py-0.5 rounded">npm run build</code>，发布目录填 <code className="font-mono bg-slate-100 px-1 py-0.5 rounded">dist</code>。
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <p className="text-xs font-bold text-slate-700">3. Railway / VPS 容器部署</p>
+                <p className="text-xs text-slate-600">
+                  直接连接 GitHub 仓库，Railway 将自动识别根目录的 <code className="font-mono bg-slate-100 px-1 py-0.5 rounded">Dockerfile</code> 进行多阶段快速打包上线。
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Cloudflare D1 & R2 Direct Binding Guide */}
       {activeTab === 'database' && (
         <div className="space-y-6">
           <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-800 flex items-center space-x-2">
                 <Database className="w-5 h-5 text-emerald-600" />
-                <span>后台接入数据库部署指南 (Database Integration)</span>
+                <span>Cloudflare 控制台后台直接绑定 D1 数据库与 R2 对象存储</span>
               </h2>
               <span className="text-xs px-3 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-full">
-                双模架构：接库/不接库均全面支持
+                免填 UUID · 免暴露密钥 · 原生直绑
               </span>
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed">
-              白狐博客系统采用高可用“离线优先与边缘直通双模设计”。无论您接入独立数据库与否，站内文章、书架、相册和配置均完全可用且支持本地快照双向同步。若需要多设备跨端持久共享，可按以下指南接入数据库后台：
+              无需在代码或配置文件中硬编码数据库 UUID 或密钥！您可直接在 Cloudflare Dashboard 控制台完成 D1 数据库与 R2 存储桶的一键原生绑定，系统状态灯将自动识别点亮为绿色 Connected。
             </p>
 
             <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-                <p className="text-xs font-bold text-slate-700">支持接入的数据库类型：</p>
-                <ul className="list-disc list-inside text-xs text-slate-600 space-y-1 pl-2">
-                  <li><strong>Cloudflare D1 边缘数据库 (首选推荐)：</strong> 与 Cloudflare Pages 原生融合，零运维毫秒级全局查询。</li>
-                  <li><strong>MySQL / MariaDB / PostgreSQL：</strong> 适用于传统 VPS、阿里云 RDS、腾讯云 CDB。</li>
-                  <li><strong>Supabase / PlanetScale：</strong> 现代 Serverless 云原生托管数据库。</li>
-                </ul>
+              <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 space-y-2.5">
+                <p className="text-xs font-bold text-emerald-900">第一步：在 Cloudflare Dashboard 控制台创建 D1 与 R2</p>
+                <ol className="list-decimal list-inside text-xs text-emerald-800 space-y-1.5 pl-1 leading-relaxed">
+                  <li>登录 <a href="https://dash.cloudflare.com" target="_blank" rel="noreferrer" className="underline font-bold">Cloudflare Dashboard</a> -&gt; 进入 <strong>Storage &amp; Databases</strong>。</li>
+                  <li>点击 <strong>D1 SQL Database</strong> -&gt; <strong>Create database</strong>，名称填 <code className="font-mono bg-white/70 px-1 py-0.5 rounded">whitefox-db</code>。</li>
+                  <li>进入该数据库的 <strong>Console (控制台)</strong>，粘贴执行仓库提供的 <code className="font-mono bg-white/70 px-1 py-0.5 rounded">deploy/cloudflare-d1-schema.sql</code> 即可完成建表。</li>
+                  <li>（可选）点击 <strong>R2 Object Storage</strong> -&gt; <strong>Create bucket</strong>，名称填 <code className="font-mono bg-white/70 px-1 py-0.5 rounded">whitefox-assets</code>。</li>
+                </ol>
               </div>
 
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                <p className="text-xs font-bold text-slate-700">快速初始化数据库表结构 (D1 SQL Schema)：</p>
-                <div className="bg-slate-900 text-slate-200 p-4 rounded-xl font-mono text-xs relative overflow-x-auto">
-                  <code># 步骤 1: 创建 Cloudflare D1 数据库{'\n'}npx wrangler d1 create whitefox_blog_db{'\n\n'}# 步骤 2: 执行建表脚本 (已内置于仓库 deploy/cloudflare-d1-schema.sql){'\n'}npx wrangler d1 execute whitefox_blog_db --file=./deploy/cloudflare-d1-schema.sql</code>
-                </div>
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <p className="text-xs font-bold text-slate-700">第二步：在 Pages 项目后台一键配置原生绑定 (Direct Binding)</p>
+                <ol className="list-decimal list-inside text-xs text-slate-600 space-y-1.5 pl-1 leading-relaxed">
+                  <li>在 Cloudflare 控制台打开您的 Pages 项目 (如 <code className="font-mono bg-white px-1 py-0.5 rounded">whitefox-blog</code>)。</li>
+                  <li>点击 <strong>Settings (设置)</strong> -&gt; <strong>Functions (函数)</strong>。</li>
+                  <li>向下滚动到 <strong>D1 database bindings (D1 数据库绑定)</strong> -&gt; 点击 <strong>Add binding (添加绑定)</strong>：
+                    <ul className="list-disc list-inside pl-4 text-slate-700 font-mono mt-1 space-y-0.5">
+                      <li>Variable name (变量名称): <strong>DB</strong> （必须为大写字母 DB）</li>
+                      <li>D1 database (选择数据库): 选择刚创建的 <strong>whitefox-db</strong></li>
+                    </ul>
+                  </li>
+                  <li>向下滚动到 <strong>R2 bucket bindings (R2 存储桶绑定)</strong> -&gt; 点击 <strong>Add binding (添加绑定)</strong>：
+                    <ul className="list-disc list-inside pl-4 text-slate-700 font-mono mt-1 space-y-0.5">
+                      <li>Variable name (变量名称): <strong>BUCKET</strong> （必须为大写字母 BUCKET）</li>
+                      <li>R2 bucket (选择存储桶): 选择刚创建的 <strong>whitefox-assets</strong></li>
+                    </ul>
+                  </li>
+                  <li>点击 <strong>Save (保存)</strong> 并触发一次重新部署。完成后，站内数据库与存储桶状态灯将自动点亮，全站数据实现持久化与多端极速同步！</li>
+                </ol>
               </div>
 
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-                <p className="text-xs font-bold text-slate-700">在后台控制台配置连接凭证：</p>
-                <p className="text-xs text-slate-500">
-                  点击顶部导航栏的 <strong>系统设置</strong> -&gt; 滚动至 <strong>独立数据库与存储桶接入</strong>，填入您的数据库连接地址（Host）、端口、数据库名与安全口令，点击 <strong>测试并保存连接配置</strong> 即可秒级连通并激活全量远程实时同步。
+                <p className="text-xs font-bold text-slate-700">各大外部云平台数据库接入（Supabase / MySQL / TDSQL / PolarDB）：</p>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  如果您使用的是腾讯云 TDSQL、阿里云 PolarDB 或 Supabase，只需在站内 <strong>系统设置</strong> -&gt; <strong>全能数据库后台与管理界面接入</strong> 中下拉选择对应的数据库或对象存储平台，填入访问 Endpoint 与安全口令，点击“测试并激活数据库接入”，实时指示灯即可立即检验握手状态！
                 </p>
               </div>
             </div>

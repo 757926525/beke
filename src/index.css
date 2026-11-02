@@ -66,6 +66,38 @@ body.font-size-extra {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* 无遮挡背景图通透透明区块（Transparent & Acrylic Theme） */
+.theme-transparent .bg-white,
+.theme-transparent .bg-white\/90,
+.theme-transparent .bg-white\/80,
+.theme-transparent .bg-slate-50,
+.theme-transparent .bg-slate-100 {
+  background-color: rgba(255, 255, 255, 0.35) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+.theme-transparent.dark .bg-white,
+.theme-transparent.dark .bg-white\/90,
+.theme-transparent.dark .bg-white\/80,
+.theme-transparent.dark .bg-slate-800,
+.theme-transparent.dark .bg-slate-900 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.theme-transparent header,
+.theme-transparent nav {
+  background-color: rgba(255, 255, 255, 0.45) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.3) !important;
+}
+
 .glass-nav {
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(20px);
