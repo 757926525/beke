@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Palette, Image as ImageIcon, Users, Cloud, HardDrive, Lock, Mail,
   ChevronDown, ChevronUp, RefreshCw, Trash2, CheckCircle2,
@@ -72,20 +72,11 @@ export const AdminSettingsView = ({
     return localStorage.getItem('wf_auto_sync_enabled') === 'true';
   });
 
-  // Cloudflare Zero-Database Edge Sync Room Key
-  const [cfRoomKey, setCfRoomKey] = useState(() => localStorage.getItem('wf_cf_room_key') || 'fox-cf-sync');
-  const [isCfEdgeSyncing, setIsCfEdgeSyncing] = useState(false);
-
   // Manual one-click database sync states (with live progress bar 0% -> 100%)
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncStatusStep, setSyncStatusStep] = useState('');
   const [lastSyncResult, setLastSyncResult] = useState(null);
-
-  // Cross-Device Sync Key & Remote Vault tunnel states
-  const [crossDeviceSyncKey, setCrossDeviceSyncKey] = useState(() => localStorage.getItem('wf_cross_device_sync_key') || 'fox-vault-master');
-  const [isPullingRemote, setIsPullingRemote] = useState(false);
-  const [showRemoteVaultPanel, setShowRemoteVaultPanel] = useState(false);
 
   const toggleSection = (key) => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -107,6 +98,31 @@ export const AdminSettingsView = ({
   const [storageStatus, setStorageStatus] = useState(backendConfig?.storageConnected ? 'connected' : 'idle');
   const [storageErrorMsg, setStorageErrorMsg] = useState('');
   const [isTestingStorage, setIsTestingStorage] = useState(false);
+
+  // 页面加载时自动探测 Cloudflare Pages 原生 D1 和 R2 绑定
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { probePlatformNativeBindings } = await import('../services/cloudAdapter');
+        const health = await probePlatformNativeBindings();
+        if (!active) return;
+        if (health.success) {
+          if (health.d1?.healthy) {
+            setDbStatus('connected');
+            setBackendConfig((prev) => ({ ...prev, dbConnected: true }));
+          }
+          if (health.r2?.healthy) {
+            setStorageStatus('connected');
+            setBackendConfig((prev) => ({ ...prev, storageConnected: true }));
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+    return () => { active = false; };
+  }, []);
 
   // Email test sending state
   const [testEmailTarget, setTestEmailTarget] = useState('');
