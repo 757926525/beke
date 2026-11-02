@@ -216,22 +216,27 @@ http://<服务器IP>:80
 
 ---
 
-## 🗄️ 数据库接入指南 (接库与不接库双模支持)
+## 🗄️ 存储与同步模式说明
 
-白狐博客原生支持**离线优先**与**独立数据库接入**双模式：
-- **不接数据库时：** 所有博文、阅读进度、照片、系统设置均由本地安全持久化引擎管理，支持生成离线快照，轻量且完全可用。
-- **接入数据库时：** 支持 Cloudflare D1、MySQL、PostgreSQL 或 Supabase。
+白狐博客原生支持**纯本地文件离线模式**与**真实云端数据库同步模式**：
+- **未连接数据库时（纯本地文件模式）：** 取消向远端发起无意义的无库同步尝试，所有博文、阅读进度、相册、自定义配置均严格存放在当前浏览器本地文件中，支持在后台一键导出 JSON 完整镜像或导入本地备份，安全可靠。
+- **连接数据库后（多端实时同步模式）：** 接入 Cloudflare D1 或外部数据库后，系统自动激活实时跨设备同步，博文、相册、配置等多端秒级对齐。
+
+### 统一管理员账号与 CF 后台动态定制
+
+- **统一最高权限身份**：无论从首页普通登录还是站长专线登录，只要密码匹配管理员密码，系统均统一认证为唯一的最高站长身份（`u-admin`），杜绝因账号大小写或别名歧义进入不同界面或降级为普通会员。
+- **Cloudflare 后台动态修改管理员名称**：在 Cloudflare Pages 项目后台 `Settings` -> `Environment variables` 添加 `ADMIN_USERNAME` 或 `VITE_ADMIN_USERNAME`（例如修改为 `master_fox`），站点与 Functions 将自动同步读取并在后台生效，无需重新打包编译！
 
 ### 初始化 Cloudflare D1 数据库：
 ```bash
-# 1. 创建 D1 数据库
-npx wrangler d1 create whitefox_blog_db
+# 1. 在 Cloudflare 控制台创建 D1 数据库 whitefox-db 或使用命令行：
+npx wrangler d1 create whitefox-db
 
 # 2. 执行建表 SQL (位于 deploy/cloudflare-d1-schema.sql)
-npx wrangler d1 execute whitefox_blog_db --file=./deploy/cloudflare-d1-schema.sql
+npx wrangler d1 execute whitefox-db --file=./deploy/cloudflare-d1-schema.sql
 ```
 
-进入站点右上角 **系统设置** -> **独立数据库与存储桶接入** 填入连接信息即可。
+进入站点右上角 **系统设置** -> **全能数据库后台与管理界面接入** 即可查看状态灯。
 
 ---
 
@@ -239,8 +244,8 @@ npx wrangler d1 execute whitefox_blog_db --file=./deploy/cloudflare-d1-schema.sq
 
 | 变量名 | 说明 | 示例值 |
 | :--- | :--- | :--- |
-| `VITE_ADMIN_USERNAME` | 唯一系统站长管理员账号（部署时或CF后台环境变量修改） | `fox` |
-| `VITE_ADMIN_PASSWORD` | 唯一系统站长管理员密码（部署时或CF后台环境变量修改） | `whitefox2025` |
+| `ADMIN_USERNAME` / `VITE_ADMIN_USERNAME` | 唯一系统站长管理员账号（可随时在 CF 后台修改动态生效） | `fox` |
+| `ADMIN_PASSWORD` / `VITE_ADMIN_PASSWORD` | 唯一系统站长管理员密码（可随时在 CF 后台修改动态生效） | `whitefox2025` |
 | `VITE_SITE_NAME` | 博客系统默认名称 | `fox` |
 | `VITE_DEFAULT_LANG` | 默认语言 | `zh-CN` |
 | `VITE_CLOUDFLARE_D1_DATABASE_ID` | Cloudflare D1 边缘数据库 ID | `your-d1-db-uuid` |

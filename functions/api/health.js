@@ -57,10 +57,13 @@ export async function onRequestGet(context) {
     r2Message = '未在 Cloudflare Pages 绑定 R2 (变量名需为 "BUCKET")';
   }
 
+  const adminUsername = env?.ADMIN_USERNAME || env?.VITE_ADMIN_USERNAME || '';
+
   return new Response(JSON.stringify({
     success: true,
     platform: 'Cloudflare Pages',
     timestamp: Date.now(),
+    adminUsername: adminUsername || undefined,
     d1: {
       bound: d1Bound,
       healthy: d1Healthy,

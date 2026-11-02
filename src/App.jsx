@@ -245,17 +245,41 @@ export function App() {
   };
 
   // -------------------------------------------------------------
-  // 核心逻辑 1: 初次加载 "pull → merge → push" 流程
+  // 核心逻辑 1: 初次加载检测（有数据库时才向云端拉取；无数据库时仅保留本地文件，取消无库同步）
   // -------------------------------------------------------------
   useEffect(() => {
     let isCancelled = false;
 
     async function initialHydrationPull() {
-      setSyncStatus('syncing');
-      setSyncStatusMessage('正在从云端拉取最新数据...');
-
       try {
-        const { pullFromCloudSyncVault } = await import('./services/cloudAdapter');
+        const { probePlatformNativeBindings, pullFromCloudSyncVault } = await import('./services/cloudAdapter');
+        const health = await probePlatformNativeBindings();
+
+        // 如果 Cloudflare Pages 传回了 ADMIN_USERNAME，动态对齐管理员名称
+        if (health.success && health.adminUsername) {
+          const remoteAdminName = health.adminUsername.trim();
+          setCurrentUser((prev) => {
+            if (prev && prev.role === 'admin') {
+              return { ...prev, username: `${remoteAdminName} (站长)` };
+            }
+            return prev;
+          });
+        }
+
+        const isD1Bound = Boolean(health.success && health.d1?.healthy);
+        const hasCustomDb = Boolean(backendConfig?.dbConnected || backendConfig?.dbHost);
+
+        // 取消无数据库时的同步功能：如果未接入 D1 且未配置外部数据库，则纯本地存放，不发起云端拉取与推送
+        if (!isD1Bound && !hasCustomDb) {
+          setSyncStatus('idle');
+          setSyncStatusMessage('本地离线优先模式（未绑定数据库，数据存放在当前浏览器本地）');
+          setHydrated(true);
+          return;
+        }
+
+        setSyncStatus('syncing');
+        setSyncStatusMessage('正在从数据库拉取最新数据...');
+
         const res = await pullFromCloudSyncVault(syncRoomKey, {
           customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
           authToken: backendConfig?.dbToken
@@ -266,7 +290,6 @@ export function App() {
         if (res.success && res.payload) {
           isApplyingRemote.current = true;
 
-          // 本地数据与云端数据按 ID 与 updatedAt 执行完备合并
           const localSnapshot = {
             posts,
             books,
@@ -290,23 +313,22 @@ export function App() {
           applyMergedDataToState(merged);
 
           setSyncStatus('success');
-          setSyncStatusMessage(`数据已同步至最新版本 (v${res.version || 1})`);
+          setSyncStatusMessage(`数据库已同步至最新版本 (v${res.version || 1})`);
 
-          // 释放 isApplyingRemote
           setTimeout(() => {
             isApplyingRemote.current = false;
           }, 300);
         } else {
           setSyncStatus('idle');
-          setSyncStatusMessage('云端就绪');
+          setSyncStatusMessage('数据库通道就绪');
         }
       } catch (err) {
         console.warn('Initial hydration notice:', err);
         setSyncStatus('error');
-        setSyncStatusMessage('拉取云端数据失败: ' + err.message);
+        setSyncStatusMessage('拉取数据库失败: ' + err.message);
       } finally {
         if (!isCancelled) {
-          setHydrated(true); // 只有在此处设置 hydrated 后，才允许后续 push
+          setHydrated(true);
         }
       }
     }
@@ -399,6 +421,13 @@ export function App() {
     // 首次 hydrated 之前，坚决不 push
     if (!hydrated) return { success: false, reason: 'not_hydrated' };
     if (isApplyingRemote.current) return { success: false, reason: 'is_applying_remote' };
+
+    // 取消无数据库时的同步功能，仅保留本地文件存放功能
+    const hasDb = Boolean(backendConfig?.dbConnected || backendConfig?.dbHost);
+    if (!hasDb && !isManual) {
+      // 本地离线优先，不向远端发起无意义的网络推送
+      return { success: true, localOnly: true };
+    }
 
     setSyncStatus('syncing');
     setSyncStatusMessage('正在同步至云端...');

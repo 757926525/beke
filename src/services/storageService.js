@@ -265,6 +265,7 @@ export const initialCloudFiles = [
 
 export const getDeploymentAdminCredentials = () => {
   const username =
+    (typeof localStorage !== 'undefined' && localStorage.getItem('wf_cf_admin_username')) ||
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_USERNAME) ||
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_INITIAL_ADMIN_USERNAME) ||
     'fox';

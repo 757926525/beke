@@ -98,8 +98,12 @@ export async function probePlatformNativeBindings() {
     const res = await fetch('/api/health', { method: 'GET', headers: { 'Accept': 'application/json' } });
     if (res.ok) {
       const data = await res.json();
+      if (data.adminUsername) {
+        localStorage.setItem('wf_cf_admin_username', data.adminUsername);
+      }
       return {
         success: true,
+        adminUsername: data.adminUsername,
         d1: data.d1,
         r2: data.r2
       };
@@ -109,6 +113,7 @@ export async function probePlatformNativeBindings() {
   }
   return {
     success: false,
+    adminUsername: undefined,
     d1: { bound: false, healthy: false, message: '未检测到原生 D1 绑定' },
     r2: { bound: false, healthy: false, message: '未检测到原生 R2 绑定' }
   };
