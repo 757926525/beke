@@ -44,13 +44,24 @@ export function App() {
   // Navigation & Role States
   const [activeTab, setActiveTab] = useState('home');
   const [activePostId, setActivePostId] = useState(null);
-  const [currentUser, setCurrentUser] = useState(() =>
-    loadFromStorage(STORAGE_KEYS.AUTH, {
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = loadFromStorage(STORAGE_KEYS.AUTH, null);
+    if (saved && saved.role === 'admin') {
+      return {
+        ...saved,
+        id: 'u-admin',
+        username: `${deploymentAdmin.username} (站长)`,
+        email: 'admin@whitefox.blog',
+        role: 'admin'
+      };
+    }
+    return saved || {
+      id: 'u-admin',
       role: 'admin',
       username: `${deploymentAdmin.username} (站长)`,
       email: 'admin@whitefox.blog'
-    })
-  );
+    };
+  });
 
   // Auth modal
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -586,13 +597,14 @@ export function App() {
     }
   };
 
-  // Login handler
+  // Login handler - 彻底统一站长身份认证，杜绝相同凭据进入不同界面
   const handleLogin = ({ username, password, isAdminLogin }) => {
     const cleanUser = (username || '').trim().toLowerCase();
     const inputPass = (password || '').trim();
     const adminConfigName = (deploymentAdmin.username || 'fox').trim().toLowerCase();
     const adminConfigPass = (deploymentAdmin.password || 'whitefox2025').trim();
 
+    // 匹配管理员账号的所有标准形式
     const isAdminUserMatch =
       cleanUser === adminConfigName ||
       cleanUser === 'admin' ||
@@ -600,38 +612,49 @@ export function App() {
       cleanUser === (siteName || '').toLowerCase() ||
       cleanUser === 'admin@whitefox.blog';
 
+    // 管理员密码验证（严格针对管理员密码，剔除可能与普通用户混淆的弱密码）
     const isAdminPassMatch =
       inputPass === adminConfigPass ||
-      inputPass === 'whitefox2025' ||
-      inputPass === 'password123';
+      inputPass === 'whitefox2025';
 
-    if (isAdminUserMatch && isAdminPassMatch) {
-      const adminUser = {
-        id: 'u-admin',
-        username: `${deploymentAdmin.username || siteName || 'fox'} (站长)`,
-        email: 'admin@whitefox.blog',
-        role: 'admin'
-      };
-      setCurrentUser(adminUser);
-      saveToStorage(STORAGE_KEYS.AUTH, adminUser);
-      return { success: true };
+    // 只要是管理员账号或从管理员专线登录
+    if (isAdminUserMatch || isAdminLogin) {
+      if (isAdminPassMatch) {
+        // 无论从哪个入口（普通登录或站长登录）登录，只要凭据正确，统一赋予唯一标准的最高管理员用户对象
+        const adminUser = {
+          id: 'u-admin',
+          username: `${deploymentAdmin.username || 'fox'} (站长)`,
+          email: 'admin@whitefox.blog',
+          role: 'admin'
+        };
+        setCurrentUser(adminUser);
+        saveToStorage(STORAGE_KEYS.AUTH, adminUser);
+        return { success: true };
+      } else {
+        return {
+          success: false,
+          message: `站长密码不正确。当前部署设定管理员账号为 [${deploymentAdmin.username}]，请确认管理密码。`
+        };
+      }
     }
 
-    if (isAdminLogin) {
-      return {
-        success: false,
-        message: `管理员密码不正确。当前部署设定管理员账号为 [${deploymentAdmin.username}]，请确认 VITE_ADMIN_PASSWORD`
-      };
-    }
-
-    const matched = users.find(
+    // 普通会员用户验证（非管理员账号，严禁管理员凭据降级流向普通成员）
+    const matched = (users || []).find(
       (u) =>
-        (u.username.toLowerCase() === cleanUser || u.email.toLowerCase() === cleanUser) &&
-        (u.password === inputPass || (u.role === 'admin' && isAdminPassMatch))
+        !u.deleted &&
+        u.role !== 'admin' &&
+        (u.username.toLowerCase() === cleanUser || (u.email && u.email.toLowerCase() === cleanUser)) &&
+        u.password === inputPass
     );
     if (matched) {
-      setCurrentUser(matched);
-      saveToStorage(STORAGE_KEYS.AUTH, matched);
+      const memberUser = {
+        id: matched.id,
+        username: matched.username,
+        email: matched.email || `${matched.username}@example.com`,
+        role: 'member'
+      };
+      setCurrentUser(memberUser);
+      saveToStorage(STORAGE_KEYS.AUTH, memberUser);
       return { success: true };
     }
 

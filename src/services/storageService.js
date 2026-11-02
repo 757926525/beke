@@ -279,8 +279,8 @@ const deploymentAdmin = getDeploymentAdminCredentials();
 
 export const initialUsers = [
   {
-    id: 'u-1',
-    username: deploymentAdmin.username,
+    id: 'u-admin',
+    username: `${deploymentAdmin.username} (站长)`,
     email: 'admin@whitefox.blog',
     password: deploymentAdmin.password,
     role: 'admin',
