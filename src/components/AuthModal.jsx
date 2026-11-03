@@ -8,14 +8,13 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   // Deployment credentials
   const defaultAdminUsername =
     (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_ADMIN_USERNAME || import.meta.env?.VITE_INITIAL_ADMIN_USERNAME)) || 'fox';
   const defaultAdminPassword =
     (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_ADMIN_PASSWORD || import.meta.env?.VITE_INITIAL_ADMIN_PASSWORD)) || '';
-
-  const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
@@ -29,25 +28,20 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
         setError('请输入用户名和密码');
         return;
       }
-      setLoading(true);
-      try {
-        const res = await Promise.resolve(onLogin({
-          username: username.trim(),
-          password: password.trim(),
-          isAdminLogin: mode === 'admin'
-        }));
-        if (res && res.success) {
-          setSuccess(mode === 'admin' ? '系统站长认证成功！欢迎回来' : '登录成功！');
-          setTimeout(() => {
-            onClose();
-          }, 600);
-        } else {
-          setError(res?.message || (mode === 'admin' ? '管理员账号或密码不匹配，请核对部署环境变量' : '用户名或密码错误'));
-        }
-      } catch (err) {
-        setError('登录请求异常: ' + err.message);
-      } finally {
-        setLoading(false);
+      setSubmitting(true);
+      const res = await onLogin({
+        username: username.trim(),
+        password: password.trim(),
+        isAdminLogin: mode === 'admin'
+      });
+      setSubmitting(false);
+      if (res && res.success) {
+        setSuccess(mode === 'admin' ? '系统站长认证成功！欢迎回来' : '登录成功！');
+        setTimeout(() => {
+          onClose();
+        }, 600);
+      } else {
+        setError(res?.message || (mode === 'admin' ? '管理员账号或密码不匹配，请核对部署环境变量' : '用户名或密码错误'));
       }
     } else if (mode === 'register') {
       if (systemSettings && !systemSettings.allowRegistration) {
@@ -209,7 +203,8 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
 
           <button
             type="submit"
-            className={`w-full py-2.5 mt-2 rounded-xl text-white font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-1 cursor-pointer ${
+            disabled={submitting}
+            className={`w-full py-2.5 mt-2 disabled:opacity-60 disabled:cursor-wait rounded-xl text-white font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-1 cursor-pointer ${
               mode === 'admin'
                 ? 'bg-purple-600 hover:bg-purple-700'
                 : 'bg-emerald-600 hover:bg-emerald-700'

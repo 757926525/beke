@@ -1,89 +1,66 @@
 /**
- * Cloudflare Pages Functions: 服务端认证与 HMAC 令牌鉴权
- * 负责校验管理员账号密码并签发防伪防篡改 30 天会话令牌
- * 改密码后旧令牌自动失效
+ * 服务端统一管理员认证工具（Cloudflare Pages Functions 共享模块）
+ *
+ * 目的：管理员账号/密码以 Cloudflare 环境变量为唯一权威来源，
+ * 所有设备、所有浏览器都由服务端校验，不再依赖各设备本地构建/缓存的凭据，
+ * 从根本上避免“同一项目同一管理员密码，在不同设备进入不同界面”。
  */
 
-export function getAdminCredentials(env) {
-  const username = (env?.ADMIN_USERNAME || env?.VITE_ADMIN_USERNAME || 'fox').trim();
-  const password = (env?.ADMIN_PASSWORD || env?.VITE_ADMIN_PASSWORD || 'whitefox2025').trim();
-  return { username, password };
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 天
+
+export function getAdminConfig(env) {
+  const username = (env?.ADMIN_USERNAME || env?.VITE_ADMIN_USERNAME || '').trim();
+  const password = (env?.ADMIN_PASSWORD || env?.VITE_ADMIN_PASSWORD || '').trim();
+  return { username, password, configured: Boolean(password) };
 }
 
-// 基于密码与密钥派生 HMAC 签名密钥
-async function getSigningKey(password, secretSalt = 'whitefox-auth-salt') {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
+const encoder = new TextEncoder();
+
+function toHex(buffer) {
+  return Array.from(new Uint8Array(buffer), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function hmac(secret, message) {
+  const key = await crypto.subtle.importKey(
     'raw',
-    enc.encode(password + ':' + secretSalt),
-    { name: 'PBKDF2' },
-    false,
-    ['deriveKey']
-  );
-  return crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: enc.encode(secretSalt),
-      iterations: 10000,
-      hash: 'SHA-256'
-    },
-    keyMaterial,
+    encoder.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign', 'verify']
+    ['sign']
   );
+  return toHex(await crypto.subtle.sign('HMAC', key, encoder.encode(message)));
 }
 
-// 签发有效期 30 天的管理员令牌
-export async function createAdminToken(username, env) {
-  const { password } = getAdminCredentials(env);
-  const now = Date.now();
-  const exp = now + 30 * 24 * 60 * 60 * 1000; // 30 days
-  const payload = JSON.stringify({ u: username, exp, iat: now });
-  const payloadB64 = btoa(payload).replace(/=/g, '');
-
-  const key = await getSigningKey(password);
-  const sigBuffer = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadB64));
-  const sigHex = Array.from(new Uint8Array(sigBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-  return `${payloadB64}.${sigHex}`;
+// 常量时间字符串比较，防止时序攻击
+export function safeEqual(a, b) {
+  const x = String(a ?? '');
+  const y = String(b ?? '');
+  let diff = x.length ^ y.length;
+  const len = Math.max(x.length, y.length);
+  for (let i = 0; i < len; i++) {
+    diff |= (x.charCodeAt(i) || 0) ^ (y.charCodeAt(i) || 0);
+  }
+  return diff === 0;
 }
 
-// 验证令牌有效性
-export async function verifyAdminToken(token, env) {
-  if (!token || typeof token !== 'string') return null;
-  const parts = token.split('.');
-  if (parts.length !== 2) return null;
-  const [payloadB64, sigHex] = parts;
+/** 签发管理员会话令牌：exp.signature；密码一旦修改，旧令牌自动全部失效 */
+export async function issueAdminToken(env) {
+  const { username, password } = getAdminConfig(env);
+  const exp = Date.now() + SESSION_TTL_MS;
+  const sig = await hmac(`wf-session:${password}`, `${username}|${exp}`);
+  return { token: `${exp}.${sig}`, expiresAt: exp };
+}
 
-  let payload;
-  try {
-    payload = JSON.parse(atob(payloadB64));
-  } catch (e) {
-    return null;
-  }
+export async function verifyAdminToken(env, token) {
+  const { username, password, configured } = getAdminConfig(env);
+  if (!configured || !token || typeof token !== 'string') return false;
+  const [expStr, sig] = token.split('.');
+  const exp = parseInt(expStr, 10);
+  if (!exp || !sig || exp < Date.now()) return false;
+  const expected = await hmac(`wf-session:${password}`, `${username}|${exp}`);
+  return safeEqual(sig, expected);
+}
 
-  if (!payload || !payload.exp || Date.now() > payload.exp) {
-    return null; // Expired
-  }
-
-  const { password, username: expectedAdminUser } = getAdminCredentials(env);
-  const key = await getSigningKey(password);
-
-  // 解析并比对签名
-  const sigBytes = new Uint8Array(sigHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-  const isValid = await crypto.subtle.verify(
-    'HMAC',
-    key,
-    sigBytes,
-    new TextEncoder().encode(payloadB64)
-  );
-
-  if (!isValid) return null;
-
-  return {
-    username: expectedAdminUser || payload.u || 'fox',
-    role: 'admin',
-    exp: payload.exp
-  };
+export function readAdminToken(request) {
+  return (request.headers.get('X-Admin-Token') || '').trim();
 }

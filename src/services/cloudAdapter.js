@@ -1,4 +1,4 @@
-import { sanitizeSyncPayload, mergeSyncPayloadWithTimestamp, TAB_ID } from './storageService';
+import { sanitizeSyncPayload, mergeSyncPayloadWithTimestamp, TAB_ID, getAdminToken } from './storageService';
 
 /**
  * Bookmark file parser: parses standard Netscape bookmark HTML format
@@ -300,6 +300,8 @@ export async function pullFromCloudSyncVault(vaultKey, options = {}) {
       if (authToken) {
         headers['Authorization'] = `Bearer ${authToken}`;
       }
+      const adminToken = getAdminToken();
+      if (adminToken) headers['X-Admin-Token'] = adminToken;
 
       const res = await fetchWithRetry(url, { headers, method: 'GET' }, 3);
 
@@ -318,10 +320,15 @@ export async function pullFromCloudSyncVault(vaultKey, options = {}) {
       if (res.ok) {
         const data = await res.json();
         if (data && data.success) {
+          const serverVersion = typeof data.version === 'number' ? data.version : 1;
+          // 把服务端版本号并入 payload，保证新设备合并后本地版本与云端对齐，避免无谓的 409 冲突
+          const versionedPayload = data.payload && typeof data.payload === 'object' && !Array.isArray(data.payload)
+            ? { ...data.payload, version: serverVersion }
+            : data.payload;
           return {
             success: true,
-            payload: data.payload,
-            version: typeof data.version === 'number' ? data.version : 1,
+            payload: versionedPayload,
+            version: serverVersion,
             updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : Date.now(),
             source: url
           };
@@ -416,6 +423,8 @@ export async function pushToCloudSyncVault(payload, options = {}) {
       if (authToken) {
         headers['Authorization'] = `Bearer ${authToken}`;
       }
+      const adminToken = getAdminToken();
+      if (adminToken) headers['X-Admin-Token'] = adminToken;
 
       const res = await fetchWithRetry(url, {
         method: 'POST',
@@ -427,6 +436,14 @@ export async function pushToCloudSyncVault(payload, options = {}) {
         return {
           success: false,
           error: '云端拦截: Payload 超过 1.5MB 限制，请上传图片至对象存储 (R2) 并在库中保存链接。'
+        };
+      }
+
+      if (res.status === 401) {
+        return {
+          success: false,
+          unauthorized: true,
+          error: '云端拒绝写入：站长登录已失效或未登录，请重新登录管理员账号后再同步。'
         };
       }
 

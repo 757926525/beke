@@ -222,17 +222,26 @@ http://<服务器IP>:80
 - **未连接数据库时（纯本地文件模式）：** 取消向远端发起无意义的无库同步尝试，所有博文、阅读进度、相册、自定义配置均严格存放在当前浏览器本地文件中，支持在后台一键导出 JSON 完整镜像或导入本地备份，安全可靠。
 - **连接数据库后（多端实时同步模式）：** 接入 Cloudflare D1 或外部数据库后，系统自动激活实时跨设备同步，博文、相册、配置等多端秒级对齐。
 
-### 统一同步房间与服务端安全认证架构
+### 统一管理员账号与 CF 后台动态定制
 
-1. **统一同步房间（whitefox-site-main）：**
-   - 所有设备默认共用统一房间 `whitefox-site-main`，旧设备的随机密钥自动迁移并合并至该共享房间，彻底解决因各设备随机密钥导致写入不同记录而“进入不同界面”的根源。也可在 Cloudflare 后台设置 `SYNC_ROOM_KEY` 变量自定义指定。
-2. **服务端鉴权与防伪会话令牌（/api/auth）：**
-   - 站长密码验证移至 Cloudflare Pages Functions 服务端（`ADMIN_PASSWORD` 环境变量），验证通过后通过 HMAC-SHA256 签发 30 天有效期的防伪会话令牌。
-   - 改密码后旧令牌自动失效，本地残留若无效自动降级为访客。
-3. **保护写入与公开读取：**
-   - `/api/sync` 读取公开供访客浏览博文与相册，POST 写入必须携带合法的站长令牌，防止公共房间数据被未经授权覆盖。
-4. **默认身份安全访客化：**
-   - 首次访问或未登录时，默认身份严格为访客（游客模式），点击登录并成功通过服务端验证后方激活系统站长管理面板。
+- **统一最高权限身份**：无论从首页普通登录还是站长专线登录，只要密码匹配管理员密码，系统均统一认证为唯一的最高站长身份（`u-admin`），杜绝因账号大小写或别名歧义进入不同界面或降级为普通会员。
+- **Cloudflare 后台动态修改管理员名称**：在 Cloudflare Pages 项目后台 `Settings` -> `Environment variables` 添加 `ADMIN_USERNAME` 或 `VITE_ADMIN_USERNAME`（例如修改为 `master_fox`），站点与 Functions 将自动同步读取并在后台生效，无需重新打包编译！
+
+### 修复说明：绑定数据库后「同一管理员密码进入不同界面」
+
+**根因**
+1. 同步房间密钥原先在每个浏览器首次打开时随机生成，各设备读写 D1 中不同的 `site_sync` 记录，内容/外观/文章各不相同。
+2. 无登录会话时前端默认伪造站长身份，退出后刷新或换设备会直接进入站长界面。
+3. 管理员密码仅在前端按各自构建/缓存的凭据比对，且硬编码了 `whitefox2025`、`fox`、站点名等备用凭据。
+
+**修复**
+- 同一项目所有设备默认共用固定房间 `whitefox-site-main`（可用服务端 `SYNC_ROOM_KEY` 强制指定）；旧版本自动生成的随机密钥会自动迁移回共享房间，本地数据会与云端合并而不是丢失。
+- 新增 `/api/auth`：站长账号密码由 Cloudflare 环境变量 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 在服务端统一校验，签发会话令牌。
+- `/api/sync` 的写入需要站长会话令牌（读取仍公开），避免共享房间被他人覆盖。
+- 默认身份改为游客；本地残留的站长状态若没有有效服务端令牌，会自动降级为游客。
+- 移除硬编码的备用管理员凭据。
+
+> 升级后请在 Cloudflare Pages 设置 `ADMIN_PASSWORD`（建议同时设置 `ADMIN_USERNAME`），然后重新部署并重新登录一次。
 
 ### 初始化 Cloudflare D1 数据库：
 ```bash
@@ -253,6 +262,7 @@ npx wrangler d1 execute whitefox-db --file=./deploy/cloudflare-d1-schema.sql
 | :--- | :--- | :--- |
 | `ADMIN_USERNAME` / `VITE_ADMIN_USERNAME` | 唯一系统站长管理员账号（可随时在 CF 后台修改动态生效） | `fox` |
 | `ADMIN_PASSWORD` / `VITE_ADMIN_PASSWORD` | 唯一系统站长管理员密码（可随时在 CF 后台修改动态生效） | `whitefox2025` |
+| `SYNC_ROOM_KEY` | （可选）服务端强制全站共用的同步房间密钥 | `whitefox-site-main` |
 | `VITE_SITE_NAME` | 博客系统默认名称 | `fox` |
 | `VITE_DEFAULT_LANG` | 默认语言 | `zh-CN` |
 | `VITE_CLOUDFLARE_D1_DATABASE_ID` | Cloudflare D1 边缘数据库 ID | `your-d1-db-uuid` |

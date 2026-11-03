@@ -16,13 +16,29 @@
  *    WHERE excluded.version > site_sync.version
  */
 
+import { getAdminConfig, verifyAdminToken, readAdminToken } from '../_lib/auth.js';
+
 const MAX_PAYLOAD_BYTES = 1.5 * 1024 * 1024; // 1.5MB
+
+// 全站唯一的默认同步房间：同一个项目的所有设备/浏览器共用同一条 D1 记录
+const DEFAULT_SYNC_KEY = 'whitefox-site-main';
+
+/**
+ * 解析最终使用的房间密钥。
+ * - 设置了环境变量 SYNC_ROOM_KEY：服务端强制使用该值（所有设备必然一致，最稳妥）
+ * - 否则使用客户端传入的 key（默认也是同一个共享 key）
+ */
+function resolveSyncKey(clientKey, env) {
+  const forced = (env?.SYNC_ROOM_KEY || '').trim();
+  if (forced) return forced;
+  return (clientKey || '').trim() || DEFAULT_SYNC_KEY;
+}
 
 // 跨域响应头
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Sync-Key, X-Sync-Version',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Sync-Key, X-Sync-Version, X-Admin-Token',
   'Content-Type': 'application/json; charset=utf-8'
 };
 
@@ -33,22 +49,43 @@ export async function onRequestOptions() {
   });
 }
 
-import { verifyAdminToken } from '../_lib/auth.js';
+// 读取：公开站点内容需要被所有访客拉取（写入受保护，且 payload 已剔除敏感凭据）
+function verifyReadAuth(request, env) {
+  const serverToken = env?.SYNC_BEARER_TOKEN;
+  if (!serverToken) return true;
+  const authHeader = request.headers.get('Authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  return token === serverToken;
+}
 
-// GET 读取公开开放（任何人皆可读取公开站内文章和资料）
+// 写入：共享房间之后必须保护写权限，仅管理员会话令牌（或服务端 Bearer）可写
+async function verifyWriteAuth(request, env) {
+  const serverToken = env?.SYNC_BEARER_TOKEN;
+  if (serverToken) {
+    const authHeader = request.headers.get('Authorization') || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    if (token === serverToken) return true;
+  }
+  const admin = getAdminConfig(env);
+  if (admin.configured) {
+    return verifyAdminToken(env, readAdminToken(request));
+  }
+  // 既没有配置 Bearer 也没有配置管理员密码：保持旧行为（开放写入）
+  return !serverToken;
+}
+
 export async function onRequestGet(context) {
   const { request, env } = context;
 
-  const url = new URL(request.url);
-  const configuredRoom = env?.SYNC_ROOM_KEY || 'whitefox-site-main';
-  const syncKey = (url.searchParams.get('key') || request.headers.get('X-Sync-Key') || configuredRoom).trim();
-
-  if (!syncKey) {
-    return new Response(JSON.stringify({ success: false, error: 'Missing sync_key parameter' }), {
-      status: 400,
+  if (!verifyReadAuth(request, env)) {
+    return new Response(JSON.stringify({ success: false, error: 'Unauthorized: Invalid Bearer Token' }), {
+      status: 401,
       headers: CORS_HEADERS
     });
   }
+
+  const url = new URL(request.url);
+  const syncKey = resolveSyncKey(url.searchParams.get('key') || request.headers.get('X-Sync-Key'), env);
 
   const db = env?.DB;
   if (!db) {
@@ -106,35 +143,11 @@ export async function onRequestGet(context) {
   }
 }
 
-// POST 写入严格保护：必须携带合法的管理员签发令牌（或 SYNC_BEARER_TOKEN）
-async function verifyWriteAuth(request, env) {
-  const authHeader = request.headers.get('Authorization') || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-
-  // 若设置了固定的 SYNC_BEARER_TOKEN
-  if (env?.SYNC_BEARER_TOKEN && token === env.SYNC_BEARER_TOKEN) {
-    return true;
-  }
-
-  // 服务端若未配置 ADMIN_PASSWORD，放行向后兼容（但提示尽快配置）
-  if (!env?.ADMIN_PASSWORD && !env?.VITE_ADMIN_PASSWORD) {
-    return true;
-  }
-
-  // 校验 HMAC 签发的站长令牌
-  const session = await verifyAdminToken(token, env);
-  return Boolean(session && session.role === 'admin');
-}
-
 export async function onRequestPost(context) {
   const { request, env } = context;
 
-  const isAuthorized = await verifyWriteAuth(request, env);
-  if (!isAuthorized) {
-    return new Response(JSON.stringify({
-      success: false,
-      error: 'Unauthorized: 写入需要站长管理权限，请重新登录站长账号'
-    }), {
+  if (!(await verifyWriteAuth(request, env))) {
+    return new Response(JSON.stringify({ success: false, error: 'Unauthorized: 仅登录的站长可以写入同步数据，请先登录管理员账号' }), {
       status: 401,
       headers: CORS_HEADERS
     });
@@ -194,13 +207,13 @@ export async function onRequestPost(context) {
     });
   }
 
-  const syncKey = (body.key || request.headers.get('X-Sync-Key') || '').trim();
+  const syncKey = resolveSyncKey(body.key || request.headers.get('X-Sync-Key'), env);
   const rawPayload = body.payload;
   const version = typeof body.version === 'number' ? body.version : parseInt(request.headers.get('X-Sync-Version') || '1', 10);
   const updatedAt = typeof body.updatedAt === 'number' ? body.updatedAt : Date.now();
 
-  if (!syncKey || !rawPayload) {
-    return new Response(JSON.stringify({ success: false, error: 'Missing sync key or payload' }), {
+  if (!rawPayload) {
+    return new Response(JSON.stringify({ success: false, error: 'Missing payload' }), {
       status: 400,
       headers: CORS_HEADERS
     });

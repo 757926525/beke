@@ -58,8 +58,21 @@ export const STORAGE_KEYS = {
 };
 
 /**
+ * 同步房间密钥策略（修复“同一项目同一管理员密码，不同设备进入不同界面”）：
+ *
+ * 旧逻辑：每个浏览器首次打开都随机生成一个 wf-xxxx 房间密钥 ->
+ *         每台设备读写 D1 里不同的 site_sync 记录 -> 各设备界面/内容互不相同。
+ * 新逻辑：同一个项目的所有设备默认共用同一个固定房间密钥；
+ *         只有站长在设置中手动指定过自定义密钥（带 custom 标记）才会使用自定义值。
+ *         服务端若配置了 SYNC_ROOM_KEY 环境变量，则以服务端为准（见 functions/api/sync.js）。
+ */
+export const DEFAULT_SHARED_SYNC_KEY = 'whitefox-site-main';
+const ROOM_KEY_CUSTOM_FLAG = 'wf_cf_room_key_custom';
+const LEGACY_ROOM_KEY_ALIAS = 'wf_cross_device_sync_key';
+
+/**
  * Generate cryptographically secure random sync key (>= 128 bits)
- * No static or shared default keys
+ * 仅用于站长主动“生成独立房间密钥”的场景，不再自动调用
  */
 export const generateSecureSyncKey = () => {
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
@@ -72,23 +85,55 @@ export const generateSecureSyncKey = () => {
 };
 
 /**
- * Gets or initializes a secure unique sync room key
- */
-export const DEFAULT_SYNC_ROOM_KEY = 'whitefox-site-main';
-
-/**
- * Gets or initializes unified sync room key
- * 统一所有设备共用主同步房间 'whitefox-site-main'，自动迁移旧版随机 wf-xxxx 密钥
+ * 获取当前使用的同步房间密钥：默认共享密钥；仅当站长显式设置过自定义密钥时才使用自定义值
  */
 export const getOrInitSecureSyncKey = () => {
-  let key = localStorage.getItem(STORAGE_KEYS.CF_ROOM_KEY) || localStorage.getItem('wf_cross_device_sync_key');
-  // 自动将旧的随机密钥或旧默认值迁移到统一房间 whitefox-site-main
-  if (!key || key.startsWith('wf-') || key === 'fox-cf-sync' || key === 'fox-vault-master') {
-    key = DEFAULT_SYNC_ROOM_KEY;
+  try {
+    const isCustom = localStorage.getItem(ROOM_KEY_CUSTOM_FLAG) === 'true';
+    const stored = localStorage.getItem(STORAGE_KEYS.CF_ROOM_KEY);
+    if (isCustom && stored) {
+      return stored;
+    }
+    // 迁移：丢弃旧版本自动生成的随机密钥，统一回到项目共享房间
+    localStorage.setItem(STORAGE_KEYS.CF_ROOM_KEY, DEFAULT_SHARED_SYNC_KEY);
+    localStorage.setItem(LEGACY_ROOM_KEY_ALIAS, DEFAULT_SHARED_SYNC_KEY);
+  } catch (e) {
+    // ignore storage errors
+  }
+  return DEFAULT_SHARED_SYNC_KEY;
+};
+
+/**
+ * 站长手动设置同步房间密钥（留空或等于默认值即恢复为项目共享房间）
+ */
+export const setSyncRoomKeyPreference = (newKey) => {
+  const key = (newKey || '').trim();
+  try {
+    if (!key || key === DEFAULT_SHARED_SYNC_KEY) {
+      localStorage.setItem(ROOM_KEY_CUSTOM_FLAG, 'false');
+      localStorage.setItem(STORAGE_KEYS.CF_ROOM_KEY, DEFAULT_SHARED_SYNC_KEY);
+      localStorage.setItem(LEGACY_ROOM_KEY_ALIAS, DEFAULT_SHARED_SYNC_KEY);
+      return DEFAULT_SHARED_SYNC_KEY;
+    }
+    localStorage.setItem(ROOM_KEY_CUSTOM_FLAG, 'true');
     localStorage.setItem(STORAGE_KEYS.CF_ROOM_KEY, key);
-    localStorage.setItem('wf_cross_device_sync_key', key);
+    localStorage.setItem(LEGACY_ROOM_KEY_ALIAS, key);
+  } catch (e) {
+    // ignore storage errors
   }
   return key;
+};
+
+// 管理员服务端会话令牌（由 /api/auth 签发，写入云端数据时携带）
+export const ADMIN_TOKEN_KEY = 'wf_admin_session_token';
+export const getAdminToken = () => {
+  try { return localStorage.getItem(ADMIN_TOKEN_KEY) || ''; } catch (e) { return ''; }
+};
+export const setAdminToken = (token) => {
+  try {
+    if (token) localStorage.setItem(ADMIN_TOKEN_KEY, token);
+    else localStorage.removeItem(ADMIN_TOKEN_KEY);
+  } catch (e) { /* ignore */ }
 };
 
 export const defaultHeroIntro = {

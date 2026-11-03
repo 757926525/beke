@@ -1,109 +1,64 @@
 /**
  * Cloudflare Pages Function: /api/auth
- * 服务端站长登录验证与会话令牌核对接口
+ * 统一管理员认证（服务端校验）
+ *
+ * POST /api/auth   { username, password } -> { success, token, username, expiresAt }
+ * GET  /api/auth   (Header: X-Admin-Token) -> { success, configured, valid, username }
+ *
+ * 管理员账号密码来源：环境变量 ADMIN_USERNAME / ADMIN_PASSWORD
+ * （兼容 VITE_ADMIN_USERNAME / VITE_ADMIN_PASSWORD）。
+ * 未配置密码时返回 configured:false，前端回退到本地构建期凭据。
  */
-
-import { getAdminCredentials, createAdminToken, verifyAdminToken } from '../_lib/auth.js';
+import { getAdminConfig, issueAdminToken, verifyAdminToken, readAdminToken, safeEqual } from '../_lib/auth.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Content-Type': 'application/json; charset=utf-8'
+  'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Token',
+  'Content-Type': 'application/json; charset=utf-8',
+  'Cache-Control': 'no-store'
 };
 
+const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: CORS_HEADERS });
+
 export async function onRequestOptions() {
-  return new Response(null, {
-    status: 204,
-    headers: CORS_HEADERS
-  });
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
 }
 
-// GET: 核对当前请求携带的 Bearer 令牌有效性
-export async function onRequestGet(context) {
-  const { request, env } = context;
-  const authHeader = request.headers.get('Authorization') || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-
-  if (!token) {
-    return new Response(JSON.stringify({ valid: false, message: 'No token provided' }), {
-      status: 200,
-      headers: CORS_HEADERS
-    });
+export async function onRequestGet({ request, env }) {
+  const cfg = getAdminConfig(env);
+  if (!cfg.configured) {
+    return json({ success: true, configured: false, valid: false });
   }
-
-  const session = await verifyAdminToken(token, env);
-  if (session) {
-    return new Response(JSON.stringify({
-      valid: true,
-      user: {
-        id: 'u-admin',
-        username: `${session.username} (站长)`,
-        email: 'admin@whitefox.blog',
-        role: 'admin'
-      }
-    }), {
-      status: 200,
-      headers: CORS_HEADERS
-    });
-  }
-
-  return new Response(JSON.stringify({ valid: false, message: 'Invalid or expired token' }), {
-    status: 200,
-    headers: CORS_HEADERS
-  });
+  const valid = await verifyAdminToken(env, readAdminToken(request));
+  return json({ success: true, configured: true, valid, username: cfg.username || 'fox' });
 }
 
-// POST: 站长登录认证，核对环境变量并签发 30 天安全令牌
-export async function onRequestPost(context) {
-  const { request, env } = context;
+export async function onRequestPost({ request, env }) {
+  const cfg = getAdminConfig(env);
+  if (!cfg.configured) {
+    return json({ success: false, configured: false, error: 'Server admin credentials not configured' }, 200);
+  }
 
   let body = {};
   try {
     body = await request.json();
   } catch (e) {
-    return new Response(JSON.stringify({ success: false, message: 'Malformed JSON' }), {
-      status: 400,
-      headers: CORS_HEADERS
-    });
+    return json({ success: false, error: 'Malformed JSON' }, 400);
   }
 
-  const inputUsername = (body.username || '').trim().toLowerCase();
-  const inputPassword = (body.password || '').trim();
+  const inputUser = String(body.username || '').trim().toLowerCase();
+  const inputPass = String(body.password || '').trim();
+  const adminName = (cfg.username || 'fox').toLowerCase();
 
-  const { username: configuredUsername, password: configuredPassword } = getAdminCredentials(env);
-  const adminNameClean = configuredUsername.toLowerCase();
+  const userOk = inputUser === adminName || inputUser === 'admin@whitefox.blog';
+  const passOk = safeEqual(inputPass, cfg.password);
 
-  const isUserMatch =
-    inputUsername === adminNameClean ||
-    inputUsername === 'admin' ||
-    inputUsername === 'fox' ||
-    inputUsername === 'admin@whitefox.blog';
-
-  const isPassMatch = inputPassword === configuredPassword;
-
-  if (isUserMatch && isPassMatch) {
-    const token = await createAdminToken(configuredUsername, env);
-    return new Response(JSON.stringify({
-      success: true,
-      token,
-      user: {
-        id: 'u-admin',
-        username: `${configuredUsername} (站长)`,
-        email: 'admin@whitefox.blog',
-        role: 'admin'
-      }
-    }), {
-      status: 200,
-      headers: CORS_HEADERS
-    });
+  if (!userOk || !passOk) {
+    // 统一模糊错误，不暴露是账号还是密码错误；`adminAttempt` 让前端区分“管理员入口失败”与“普通会员登录”
+    return json({ success: false, configured: true, adminAttempt: userOk, error: 'Invalid credentials' }, userOk ? 401 : 200);
   }
 
-  return new Response(JSON.stringify({
-    success: false,
-    message: '账号或管理员密码不正确'
-  }), {
-    status: 401,
-    headers: CORS_HEADERS
-  });
+  const { token, expiresAt } = await issueAdminToken(env);
+  return json({ success: true, configured: true, token, expiresAt, username: cfg.username || 'fox' });
 }
