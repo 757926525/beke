@@ -664,7 +664,7 @@ export function App() {
     const cleanUser = (username || '').trim().toLowerCase();
     const inputPass = (password || '').trim();
 
-    const grantAdmin = (displayName) => {
+    const grantAdmin = async (displayName) => {
       const adminUser = {
         id: 'u-admin',
         username: `${displayName || deploymentAdmin.username || 'fox'} (站长)`,
@@ -673,6 +673,26 @@ export function App() {
       };
       setCurrentUser(adminUser);
       saveToStorage(STORAGE_KEYS.AUTH, adminUser);
+
+      // 管理员在任意浏览器登录成功后，立即主动从云端 D1 / 数据库拉取全站最新数据并应用，
+      // 保证不同浏览器登入后的文章、配置、外观、布局与云端最新状态完全一致。
+      try {
+        const { pullFromCloudSyncVault } = await import('./services/cloudAdapter');
+        const pullRes = await pullFromCloudSyncVault(syncRoomKey, {
+          customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
+          authToken: backendConfig?.dbToken
+        });
+        if (pullRes && pullRes.success && pullRes.payload) {
+          isApplyingRemote.current = true;
+          applyMergedDataToState(pullRes.payload);
+          setTimeout(() => {
+            isApplyingRemote.current = false;
+          }, 200);
+        }
+      } catch (e) {
+        // 静默捕获，不阻断正常登录流程
+      }
+
       return { success: true };
     };
 
