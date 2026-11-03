@@ -74,10 +74,17 @@ export const generateSecureSyncKey = () => {
 /**
  * Gets or initializes a secure unique sync room key
  */
+export const DEFAULT_SYNC_ROOM_KEY = 'whitefox-site-main';
+
+/**
+ * Gets or initializes unified sync room key
+ * 统一所有设备共用主同步房间 'whitefox-site-main'，自动迁移旧版随机 wf-xxxx 密钥
+ */
 export const getOrInitSecureSyncKey = () => {
   let key = localStorage.getItem(STORAGE_KEYS.CF_ROOM_KEY) || localStorage.getItem('wf_cross_device_sync_key');
-  if (!key || key === 'fox-cf-sync' || key === 'fox-vault-master') {
-    key = generateSecureSyncKey();
+  // 自动将旧的随机密钥或旧默认值迁移到统一房间 whitefox-site-main
+  if (!key || key.startsWith('wf-') || key === 'fox-cf-sync' || key === 'fox-vault-master') {
+    key = DEFAULT_SYNC_ROOM_KEY;
     localStorage.setItem(STORAGE_KEYS.CF_ROOM_KEY, key);
     localStorage.setItem('wf_cross_device_sync_key', key);
   }

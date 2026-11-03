@@ -44,6 +44,7 @@ export function App() {
   // Navigation & Role States
   const [activeTab, setActiveTab] = useState('home');
   const [activePostId, setActivePostId] = useState(null);
+  // 默认无会话时为访客 (null)，已保存的会话在启动时向服务端校验
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = loadFromStorage(STORAGE_KEYS.AUTH, null);
     if (saved && saved.role === 'admin') {
@@ -55,12 +56,7 @@ export function App() {
         role: 'admin'
       };
     }
-    return saved || {
-      id: 'u-admin',
-      role: 'admin',
-      username: `${deploymentAdmin.username} (站长)`,
-      email: 'admin@whitefox.blog'
-    };
+    return saved; // 若无会话记录，则为 null（访客），绝不默认赋权站长
   });
 
   // Auth modal
@@ -259,15 +255,29 @@ export function App() {
         const { probePlatformNativeBindings, pullFromCloudSyncVault } = await import('./services/cloudAdapter');
         const health = await probePlatformNativeBindings();
 
-        // 如果 Cloudflare Pages 传回了 ADMIN_USERNAME，动态对齐管理员名称
-        if (health.success && health.adminUsername) {
-          const remoteAdminName = health.adminUsername.trim();
-          setCurrentUser((prev) => {
-            if (prev && prev.role === 'admin') {
-              return { ...prev, username: `${remoteAdminName} (站长)` };
+        // 服务端会话令牌核对：如果本地有站长记录，校验令牌有效性，若令牌无效则降级为访客
+        const storedToken = localStorage.getItem('wf_admin_session_token');
+        if (storedToken) {
+          try {
+            const authCheckRes = await fetch('/api/auth', {
+              method: 'GET',
+              headers: { 'Authorization': `Bearer ${storedToken}` }
+            });
+            if (authCheckRes.ok) {
+              const authData = await authCheckRes.json();
+              if (authData.valid && authData.user) {
+                setCurrentUser(authData.user);
+                saveToStorage(STORAGE_KEYS.AUTH, authData.user);
+              } else {
+                // 服务端校验不通过（如改密码导致旧令牌失效），安全降级为访客
+                localStorage.removeItem('wf_admin_session_token');
+                setCurrentUser(null);
+                saveToStorage(STORAGE_KEYS.AUTH, null);
+              }
             }
-            return prev;
-          });
+          } catch (e) {
+            // 本地离线开发环境忽略
+          }
         }
 
         const isD1Bound = Boolean(health.success && health.d1?.healthy);
@@ -464,10 +474,13 @@ export function App() {
     try {
       const { pushToCloudSyncVault, pullFromCloudSyncVault } = await import('./services/cloudAdapter');
 
+      const adminSessionToken = localStorage.getItem('wf_admin_session_token');
+      const authToken = adminSessionToken || backendConfig?.dbToken;
+
       let pushRes = await pushToCloudSyncVault(payload, {
         vaultKey: syncRoomKey,
         customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
-        authToken: backendConfig?.dbToken,
+        authToken,
         currentVersion
       });
 
@@ -630,14 +643,42 @@ export function App() {
     }
   };
 
-  // Login handler - 彻底统一站长身份认证，杜绝相同凭据进入不同界面
-  const handleLogin = ({ username, password, isAdminLogin }) => {
+  // Login handler - 优先向服务端 /api/auth 校验，只在没有 Functions 环境时才回退到前端构建变量
+  const handleLogin = async ({ username, password, isAdminLogin }) => {
     const cleanUser = (username || '').trim().toLowerCase();
     const inputPass = (password || '').trim();
+
+    // 1. 尝试向服务端 /api/auth 请求验证并获取会话令牌
+    try {
+      const authRes = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: cleanUser, password: inputPass })
+      });
+      if (authRes.ok) {
+        const authData = await authRes.json();
+        if (authData.success && authData.user) {
+          if (authData.token) {
+            localStorage.setItem('wf_admin_session_token', authData.token);
+          }
+          setCurrentUser(authData.user);
+          saveToStorage(STORAGE_KEYS.AUTH, authData.user);
+          return { success: true };
+        }
+      } else if (authRes.status === 401 && (isAdminLogin || cleanUser === 'fox' || cleanUser === 'admin')) {
+        return {
+          success: false,
+          message: '管理员账号或密码不匹配，请核对 Cloudflare Pages 环境变量 ADMIN_PASSWORD'
+        };
+      }
+    } catch (e) {
+      // 本地预览或非 Cloudflare Functions 静态环境回退到构建期环境变量
+    }
+
+    // 2. 本地回退认证（仅针对本地离线开发环境）
     const adminConfigName = (deploymentAdmin.username || 'fox').trim().toLowerCase();
     const adminConfigPass = (deploymentAdmin.password || 'whitefox2025').trim();
 
-    // 匹配管理员账号的所有标准形式
     const isAdminUserMatch =
       cleanUser === adminConfigName ||
       cleanUser === 'admin' ||
@@ -645,15 +686,10 @@ export function App() {
       cleanUser === (siteName || '').toLowerCase() ||
       cleanUser === 'admin@whitefox.blog';
 
-    // 管理员密码验证（严格针对管理员密码，剔除可能与普通用户混淆的弱密码）
-    const isAdminPassMatch =
-      inputPass === adminConfigPass ||
-      inputPass === 'whitefox2025';
+    const isAdminPassMatch = inputPass === adminConfigPass;
 
-    // 只要是管理员账号或从管理员专线登录
     if (isAdminUserMatch || isAdminLogin) {
       if (isAdminPassMatch) {
-        // 无论从哪个入口（普通登录或站长登录）登录，只要凭据正确，统一赋予唯一标准的最高管理员用户对象
         const adminUser = {
           id: 'u-admin',
           username: `${deploymentAdmin.username || 'fox'} (站长)`,

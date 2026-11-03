@@ -33,29 +33,15 @@ export async function onRequestOptions() {
   });
 }
 
-function verifyAuth(request, env) {
-  const serverToken = env?.SYNC_BEARER_TOKEN;
-  if (!serverToken) {
-    // 若服务端未配置强校验 token，允许通过房间密钥 sync_key 逻辑隔离
-    return true;
-  }
-  const authHeader = request.headers.get('Authorization') || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  return token === serverToken;
-}
+import { verifyAdminToken } from '../_lib/auth.js';
 
+// GET 读取公开开放（任何人皆可读取公开站内文章和资料）
 export async function onRequestGet(context) {
   const { request, env } = context;
 
-  if (!verifyAuth(request, env)) {
-    return new Response(JSON.stringify({ success: false, error: 'Unauthorized: Invalid Bearer Token' }), {
-      status: 401,
-      headers: CORS_HEADERS
-    });
-  }
-
   const url = new URL(request.url);
-  const syncKey = (url.searchParams.get('key') || request.headers.get('X-Sync-Key') || '').trim();
+  const configuredRoom = env?.SYNC_ROOM_KEY || 'whitefox-site-main';
+  const syncKey = (url.searchParams.get('key') || request.headers.get('X-Sync-Key') || configuredRoom).trim();
 
   if (!syncKey) {
     return new Response(JSON.stringify({ success: false, error: 'Missing sync_key parameter' }), {
@@ -120,11 +106,35 @@ export async function onRequestGet(context) {
   }
 }
 
+// POST 写入严格保护：必须携带合法的管理员签发令牌（或 SYNC_BEARER_TOKEN）
+async function verifyWriteAuth(request, env) {
+  const authHeader = request.headers.get('Authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+  // 若设置了固定的 SYNC_BEARER_TOKEN
+  if (env?.SYNC_BEARER_TOKEN && token === env.SYNC_BEARER_TOKEN) {
+    return true;
+  }
+
+  // 服务端若未配置 ADMIN_PASSWORD，放行向后兼容（但提示尽快配置）
+  if (!env?.ADMIN_PASSWORD && !env?.VITE_ADMIN_PASSWORD) {
+    return true;
+  }
+
+  // 校验 HMAC 签发的站长令牌
+  const session = await verifyAdminToken(token, env);
+  return Boolean(session && session.role === 'admin');
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context;
 
-  if (!verifyAuth(request, env)) {
-    return new Response(JSON.stringify({ success: false, error: 'Unauthorized: Invalid Bearer Token' }), {
+  const isAuthorized = await verifyWriteAuth(request, env);
+  if (!isAuthorized) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'Unauthorized: 写入需要站长管理权限，请重新登录站长账号'
+    }), {
       status: 401,
       headers: CORS_HEADERS
     });
