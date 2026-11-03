@@ -638,7 +638,7 @@ export function App() {
   const handleSyncD1 = async () => {
     const res = await executePushToCloud(true);
     if (res.success) {
-      alert(`[${siteName} 系统] 云端多设备双向同步成功！\n\n✓ 状态：版本 v${res.version || currentVersion + 1} 已持久化\n✓ 房间密钥：${syncRoomKey}\n✓ 各类实体与墓碑已对齐\n✓ 多标签页与远端设备同步完成！`);
+      alert(`[${siteName} 系统] 云端多设备双向同步成功！\n\n✓ 状态：版本 v${res.version || currentVersion + 1} 已持久化\n✓ 同步通道：全站主通道就绪\n✓ 各类实体与墓碑已对齐\n✓ 多标签页与跨设备数据同步完成！`);
     } else {
       alert(`[${siteName} 系统] 云端同步未能完成：${res.error || res.reason || '网络无法连通或云端无响应'}\n\n本地数据已正常保存在当前浏览器存储中。`);
     }
@@ -853,7 +853,7 @@ export function App() {
             </div>
 
             <div className="flex items-center space-x-2 text-slate-500 font-mono text-[10px]">
-              <span>房间: {syncRoomKey.substring(0, 10)}...</span>
+              <span>通道: 全站云端主通道</span>
               <span>版本: v{currentVersion}</span>
               <span className={`px-1.5 py-0.2 rounded text-[9px] font-semibold ${autoSyncEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
                 {autoSyncEnabled ? '自动同步开启' : '手动同步'}
