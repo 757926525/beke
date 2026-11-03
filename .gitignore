@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist.zip
+whitefox-pages-deploy.zip
+*.zip
+*.png
+*.webm
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store

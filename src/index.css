@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-serif: 'Noto Serif SC', serif;
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+}
+
+body {
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  transition: font-size 0.2s ease-in-out;
+}
+
+/* Site-wide font size control */
+html.font-size-compact,
+body.font-size-compact {
+  font-size: 14px;
+}
+
+html.font-size-standard,
+body.font-size-standard {
+  font-size: 16px;
+}
+
+html.font-size-large,
+body.font-size-large {
+  font-size: 18px;
+}
+
+html.font-size-extra,
+body.font-size-extra {
+  font-size: 20px;
+}
+
+/* Global layout modes */
+.site-layout-compact main {
+  max-width: 90rem;
+}
+
+.site-layout-magazine main {
+  max-width: 82rem;
+}
+
+.site-layout-minimal main {
+  max-width: 64rem;
+}
+
+.font-serif-sc {
+  font-family: var(--font-serif);
+}
+
+/* Glassmorphism helpers */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.dark .glass-panel {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-nav {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.dark .glass-nav {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+}
+
+/* Custom Fox Gradients */
+.fox-gradient {
+  background: linear-gradient(135deg, #f43f5e 0%, #fb7185 50%, #fda4af 100%);
+}
+
+.fox-gradient-text {
+  background: linear-gradient(135deg, #f43f5e 0%, #fb7185 50%, #e11d48 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.cyber-fox-glow {
+  box-shadow: 0 0 25px rgba(244, 63, 94, 0.25);
+}
+
+/* Scrollbar aesthetic */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(244, 63, 94, 0.6);
+}
