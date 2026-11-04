@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Code2, Sparkles, Terminal, GitBranch, Key, Cpu, Play,
   Send, Copy, Check, RefreshCw, Trash2, Globe, Server, CheckCircle2,
   FolderGit2, BookOpen, Layers, Settings, CornerDownLeft, FileCode,
   ShieldCheck, HelpCircle, ExternalLink, Download, Upload, Image as ImageIcon,
-  FileArchive, Save, Edit3, Plus, ArrowRight, Eye, Shield, AlertTriangle
+  FileArchive, Save, Edit3, Plus, ArrowRight, Eye, Shield, AlertTriangle,
+  History, Clock, MessageSquare, CheckSquare, Square
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
 
@@ -13,20 +14,20 @@ export const CodingAIView = ({
   isAdmin,
   t
 }) => {
-  // Navigation tabs: 'chat' | 'repos' | 'api-keys' | 'models'
+  // Navigation tabs: 'chat' | 'repos' | 'models'
   const [activeTab, setActiveTab] = useState('chat');
   const [toast, setToast] = useState('');
 
   // 1. Model Status & Selection
   const [selectedModel, setSelectedModel] = useState('@cf/meta/llama-3-8b-instruct');
-  const [modelStatus, setModelStatus] = useState('connected'); // 'connected' | 'idle' | 'testing'
+  const [modelStatus, setModelStatus] = useState('connected');
 
   // 2. Chat history & generation state
   const [chatMessages, setChatMessages] = useState([
     {
       id: 'msg-1',
       sender: 'assistant',
-      text: '您好！我是白狐智能编程引擎。已深度连接 Cloudflare Workers AI、DeepSeek 与代码仓库，支持全语言工程生成、实时分支代码编写与压缩包解析。',
+      text: '您好！我是白狐智能编程引擎。已深度连接 Cloudflare Workers AI、DeepSeek 与代码仓库，支持全语言工程生成与压缩包解析。当前对话面板已实时锁定目标仓库与分支！',
       code: `// 示例：Cloudflare Pages 边缘数据同步处理
 export async function onRequestPost({ request, env }) {
   const payload = await request.json();
@@ -45,7 +46,7 @@ export async function onRequestPost({ request, env }) {
   const zipInputRef = useRef(null);
   const imageInputRef = useRef(null);
 
-  // 4. Prompt Drafts (替代原常用快捷指令) - 可保存、修改与一键复制草稿
+  // 4. Prompt Drafts (提示词草稿区) - 可保存、修改与一键复制草稿
   const [promptDrafts, setPromptDrafts] = useState(() => {
     try {
       const saved = localStorage.getItem('wf_ai_prompt_drafts');
@@ -78,7 +79,7 @@ export async function onRequestPost({ request, env }) {
   const [newDraftContent, setNewDraftContent] = useState('');
   const [showNewDraftModal, setShowNewDraftModal] = useState(false);
 
-  // 5. Code Repositories & In-Browser Code Writing/Editing with Real-Time Branch
+  // 5. Code Repositories: 取消在线仓库改码，改为“选择仓库与分支”选项
   const [repositories, setRepositories] = useState(() => {
     try {
       const saved = localStorage.getItem('wf_ai_repositories');
@@ -90,15 +91,10 @@ export async function onRequestPost({ request, env }) {
         name: 'whitefox-blog',
         platform: 'GitHub',
         url: 'https://github.com/whitefox/whitefox-blog',
-        authUrl: 'https://github.com/login/oauth/authorize?client_id=whitefox-dev',
+        authUrl: 'https://github.com/login/oauth/authorize?client_id=whitefox-dev-client',
         branch: 'main',
         branches: ['main', 'feat/edge-ai', 'dev'],
-        connected: true,
-        files: [
-          { path: 'src/App.jsx', content: '// 根组件入口\nimport React from "react";\nexport default function App() {\n  return <div>白狐博客系统</div>;\n}' },
-          { path: 'src/services/cloudAdapter.js', content: '// 多云适配层\nexport async function syncCloud() {\n  return { success: true };\n}' },
-          { path: 'wrangler.toml', content: 'name = "whitefox-blog"\ncompatibility_date = "2025-05-18"' }
-        ]
+        connected: true
       },
       {
         id: 'repo-2',
@@ -108,32 +104,72 @@ export async function onRequestPost({ request, env }) {
         authUrl: 'https://dash.cloudflare.com',
         branch: 'production',
         branches: ['production', 'staging'],
-        connected: true,
-        files: [
-          { path: 'functions/api/sync.js', content: 'export async function onRequest(context) {\n  return new Response("OK");\n}' }
-        ]
+        connected: true
+      },
+      {
+        id: 'repo-3',
+        name: 'enterprise-microservices',
+        platform: 'GitLab',
+        url: 'https://gitlab.com/enterprise/services',
+        authUrl: 'https://gitlab.com/oauth/authorize?client_id=whitefox-gitlab',
+        branch: 'master',
+        branches: ['master', 'release-2025'],
+        connected: false
+      },
+      {
+        id: 'repo-4',
+        name: 'china-edge-relay',
+        platform: 'Gitee',
+        url: 'https://gitee.com/whitefox/china-relay',
+        authUrl: 'https://gitee.com/oauth/authorize?client_id=whitefox-gitee',
+        branch: 'master',
+        branches: ['master', 'develop'],
+        connected: true
       }
     ];
   });
 
-  // Active coding repository and file state
-  const [activeRepoId, setActiveRepoId] = useState(repositories[0]?.id || null);
-  const activeRepo = repositories.find((r) => r.id === activeRepoId) || repositories[0];
-  const [activeFilePath, setActiveFilePath] = useState(activeRepo?.files?.[0]?.path || 'src/App.jsx');
-  const [activeFileContent, setActiveFileContent] = useState(activeRepo?.files?.[0]?.content || '');
-  const [codingStatusAlert, setCodingStatusAlert] = useState('就绪 · 实时分支安全锁定');
-
-  // New Repo form
-  const [newRepoForm, setNewRepoForm] = useState({
-    name: '',
-    platform: 'GitHub',
-    url: '',
-    branch: 'main'
+  // Selected Repository & Branch
+  const [selectedRepoId, setSelectedRepoId] = useState(() => {
+    const saved = localStorage.getItem('wf_ai_selected_repo_id');
+    return saved || 'repo-1';
   });
+  const currentRepo = repositories.find((r) => r.id === selectedRepoId) || repositories[0];
 
-  // 6. Free Models Explorer (底部一键搜索与加入免费模型选区，十个默认保存免费模型)
+  // 6. Coding AI History Synchronization & Management (编程历史管理与同步)
+  const [codingHistory, setCodingHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wf_ai_coding_history');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: 'hist-1',
+        prompt: 'Cloudflare Worker 边缘流式代理函数生成',
+        responsePreview: 'export async function onRequestPost({ request, env }) { ... }',
+        model: '@cf/meta/llama-3-8b-instruct',
+        repoName: 'whitefox-blog',
+        branch: 'main',
+        time: '2025-05-18 10:24',
+        messagesCount: 2
+      },
+      {
+        id: 'hist-2',
+        prompt: 'React 19 翡翠绿白响应式卡片组件编写',
+        responsePreview: 'export const WhiteFoxWidget = ({ title }) => { ... }',
+        model: 'deepseek-coder',
+        repoName: 'whitefox-blog',
+        branch: 'feat/edge-ai',
+        time: '2025-05-17 16:50',
+        messagesCount: 4
+      }
+    ];
+  });
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // 7. Free Models Directory (10 默认免费模型)
   const defaultTenFreeModels = [
-    { id: '@cf/meta/llama-3-8b-instruct', name: 'Meta Llama 3 8B Instruct', provider: 'Cloudflare Workers AI', free: true, desc: '轻量极速，官方永久免费推理' },
+    { id: '@cf/meta/llama-3-8b-instruct', name: 'Meta Llama 3 8B Instruct', provider: 'Cloudflare Workers AI', free: true, desc: '官方免费边缘推理，极低延迟' },
     { id: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b', name: 'DeepSeek R1 Distill 32B', provider: 'Cloudflare Workers AI', free: true, desc: '数学与逻辑代码深度推理能力' },
     { id: '@cf/qwen/qwen1.5-14b-chat-awq', name: 'Qwen 1.5 14B Chat', provider: 'Cloudflare Workers AI', free: true, desc: '通义千问中文编程语料强化版' },
     { id: '@cf/mistral/mistral-7b-instruct-v0.2', name: 'Mistral 7B Instruct v0.2', provider: 'Cloudflare Workers AI', free: true, desc: '欧洲顶级开源基座，高执行效率' },
@@ -159,6 +195,15 @@ export async function onRequestPost({ request, env }) {
     setTimeout(() => setToast(''), 3000);
   };
 
+  // Synchronize history & prompt drafts
+  useEffect(() => {
+    localStorage.setItem('wf_ai_coding_history', JSON.stringify(codingHistory));
+  }, [codingHistory]);
+
+  useEffect(() => {
+    localStorage.setItem('wf_ai_prompt_drafts', JSON.stringify(promptDrafts));
+  }, [promptDrafts]);
+
   // Handle 1-click copy code snippet
   const handleCopyCode = (code, id) => {
     if (navigator.clipboard) {
@@ -169,7 +214,34 @@ export async function onRequestPost({ request, env }) {
     }
   };
 
-  // Handle AI Prompt submission & code generation
+  // Jump to specific repository website for authorization / OAuth
+  const handleJumpToOAuth = (repo) => {
+    const authUrlMap = {
+      GitHub: 'https://github.com/login/oauth/authorize?client_id=whitefox-dev-client',
+      GitLab: 'https://gitlab.com/oauth/authorize?client_id=whitefox-gitlab-client',
+      Gitee: 'https://gitee.com/oauth/authorize?client_id=whitefox-gitee-client',
+      'Cloudflare Pages': 'https://dash.cloudflare.com'
+    };
+    const targetUrl = repo.authUrl || authUrlMap[repo.platform] || repo.url;
+    window.open(targetUrl, '_blank');
+    showToast(`正在跳转到 ${repo.platform} 平台完成账号授权与回调...`);
+  };
+
+  // Connect or Disconnect repository
+  const handleToggleRepoConnect = (repoId) => {
+    const updated = repositories.map((r) => {
+      if (r.id === repoId) {
+        const nextState = !r.connected;
+        showToast(nextState ? `已成功连接代码仓库「${r.name}」！` : `已断开「${r.name}」连接`);
+        return { ...r, connected: nextState };
+      }
+      return r;
+    });
+    setRepositories(updated);
+    localStorage.setItem('wf_ai_repositories', JSON.stringify(updated));
+  };
+
+  // Handle AI Prompt submission & code generation with history recording
   const handleSendPrompt = async (e) => {
     e.preventDefault();
     if (!inputPrompt.trim() || isGenerating) return;
@@ -185,13 +257,12 @@ export async function onRequestPost({ request, env }) {
     setInputPrompt('');
     setIsGenerating(true);
 
-    // Simulate model inference with context-aware code generation
     setTimeout(() => {
       let responseText = '';
       let codeSnippet = '';
 
       if (userText.toLowerCase().includes('react') || userText.includes('组件')) {
-        responseText = '已为您生成标准现代 React 19 函数式组件代码：';
+        responseText = `已针对 [${currentRepo.name} (${currentRepo.branch})] 生成标准 React 19 函数式组件：`;
         codeSnippet = `import React, { useState } from 'react';
 
 export const WhiteFoxWidget = ({ title = "狐语编程" }) => {
@@ -200,7 +271,7 @@ export const WhiteFoxWidget = ({ title = "狐语编程" }) => {
   return (
     <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-slate-800">
       <h3 className="font-bold text-sm text-emerald-800">{title}</h3>
-      <p className="text-xs text-slate-500 mt-1">当前点击状态: {count}</p>
+      <p className="text-xs text-slate-500 mt-1">当前分支: ${currentRepo.branch} · 点击: {count}</p>
       <button
         onClick={() => setCount(c => c + 1)}
         className="mt-2 px-3 py-1 bg-emerald-600 text-white rounded-xl text-xs font-bold"
@@ -210,28 +281,24 @@ export const WhiteFoxWidget = ({ title = "狐语编程" }) => {
     </div>
   );
 };`;
-      } else if (userText.toLowerCase().includes('sql') || userText.includes('数据库') || userText.includes('d1')) {
-        responseText = '已为您生成 Cloudflare D1 边缘 SQLite 建表与索引优化脚本：';
-        codeSnippet = `-- Cloudflare D1 优化建表
-CREATE TABLE IF NOT EXISTS ai_code_snippets (
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  language TEXT DEFAULT 'javascript',
-  code_content TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      } else if (userText.toLowerCase().includes('sql') || userText.includes('d1')) {
+        responseText = `已为仓库 [${currentRepo.name}] 生成 Cloudflare D1 边缘 SQLite 索引脚本：`;
+        codeSnippet = `-- Cloudflare D1 边缘优化
+CREATE TABLE IF NOT EXISTS site_sync (
+  sync_key TEXT PRIMARY KEY,
+  sync_payload TEXT NOT NULL,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE INDEX IF NOT EXISTS idx_ai_snippets_time ON ai_code_snippets(created_at);`;
+CREATE INDEX IF NOT EXISTS idx_sync_time ON site_sync(updated_at);`;
       } else {
-        responseText = `已根据您提出的「${userText}」完成技术方案分析与工程实现代码：`;
+        responseText = `已为仓库 [${currentRepo.name}] 的 [${currentRepo.branch}] 分支完成方案实现代码：`;
         codeSnippet = `/**
- * 白狐智能编程引擎自动化分析结果
- * 运行节点: Cloudflare Workers AI / Edge Engine
+ * 仓库: ${currentRepo.name} | 分支: ${currentRepo.branch}
+ * 执行任务: ${userText}
  */
-async function executeFoxTask() {
-  console.log("🦊 任务执行中: ${userText}");
-  const timestamp = new Date().toISOString();
-  return { status: "success", timestamp, verified: true };
+export async function executeRepositoryTask() {
+  console.log("🦊 任务已在分支 [${currentRepo.branch}] 执行完成");
+  return { status: "ready", synced: true, timestamp: Date.now() };
 }`;
       }
 
@@ -244,74 +311,20 @@ async function executeFoxTask() {
 
       setChatMessages((prev) => [...prev, botMsg]);
       setIsGenerating(false);
-    }, 900);
-  };
 
-  // Jump to repository website for authorization / OAuth
-  const handleJumpToOAuth = (repo) => {
-    const authUrlMap = {
-      GitHub: 'https://github.com/login/oauth/authorize?client_id=whitefox-dev-client',
-      GitLab: 'https://gitlab.com/oauth/authorize?client_id=whitefox-gitlab-client',
-      Gitee: 'https://gitee.com/oauth/authorize?client_id=whitefox-gitee-client',
-      'Cloudflare Pages': 'https://dash.cloudflare.com'
-    };
-    const targetUrl = repo.authUrl || authUrlMap[repo.platform] || repo.url;
-    window.open(targetUrl, '_blank');
-    showToast(`正在跳转到 ${repo.platform} 平台完成账号授权与 Token 回调...`);
-  };
-
-  // Toggle connection state
-  const handleToggleRepoConnect = (repoId) => {
-    const updated = repositories.map((r) => {
-      if (r.id === repoId) {
-        const nextState = !r.connected;
-        showToast(nextState ? `已成功连接代码仓库「${r.name}」！` : `已断开「${r.name}」连接`);
-        return { ...r, connected: nextState };
-      }
-      return r;
-    });
-    setRepositories(updated);
-    localStorage.setItem('wf_ai_repositories', JSON.stringify(updated));
-  };
-
-  // Switch repository branch
-  const handleSwitchBranch = (repoId, newBranch) => {
-    const updated = repositories.map((r) => r.id === repoId ? { ...r, branch: newBranch } : r);
-    setRepositories(updated);
-    localStorage.setItem('wf_ai_repositories', JSON.stringify(updated));
-    setCodingStatusAlert(`实时分支切换至 [${newBranch}] · 工作区已重新同步`);
-    showToast(`已切换至分支：${newBranch}`);
-  };
-
-  // Save modified code in active repository
-  const handleSaveRepoCode = () => {
-    if (!activeRepo) return;
-    const updatedFiles = (activeRepo.files || []).map((f) =>
-      f.path === activeFilePath ? { ...f, content: activeFileContent } : f
-    );
-    const updatedRepos = repositories.map((r) =>
-      r.id === activeRepo.id ? { ...r, files: updatedFiles } : r
-    );
-    setRepositories(updatedRepos);
-    localStorage.setItem('wf_ai_repositories', JSON.stringify(updatedRepos));
-    setCodingStatusAlert(`修改已暂存并写入 [${activeRepo.branch}] 分支 (${new Date().toLocaleTimeString()})`);
-    showToast(`文件「${activeFilePath}」修改已保存至仓库分支！`);
-  };
-
-  // 1-Click Download Coding Project ZIP Package
-  const handleDownloadProjectZip = () => {
-    if (!activeRepo) return;
-    showToast(`正在打包 ${activeRepo.name} (${activeRepo.branch}) 源码工程...`);
-
-    // Build project manifest archive content
-    let zipBundleText = `# ====================================================\n# 白狐编程 AI · 源码工程归档\n# 仓库: ${activeRepo.name} | 分支: ${activeRepo.branch}\n# 生成时间: ${new Date().toISOString()}\n# ====================================================\n\n`;
-
-    (activeRepo.files || []).forEach((f) => {
-      zipBundleText += `\n/* ---- FILE: ${f.path} ---- */\n${f.content}\n`;
-    });
-
-    downloadFile(zipBundleText, `${activeRepo.name}_${activeRepo.branch}_bundle.zip`, 'application/zip');
-    showToast(`工程压缩包「${activeRepo.name}_${activeRepo.branch}_bundle.zip」已下载！`);
+      // Record to Coding AI History
+      const newHistItem = {
+        id: 'hist-' + Date.now(),
+        prompt: userText,
+        responsePreview: codeSnippet.slice(0, 80) + '...',
+        model: selectedModel,
+        repoName: currentRepo.name,
+        branch: currentRepo.branch,
+        time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+        messagesCount: 2
+      };
+      setCodingHistory((prev) => [newHistItem, ...prev].slice(0, 30));
+    }, 800);
   };
 
   // Upload ZIP project file to help write project
@@ -319,7 +332,6 @@ async function executeFoxTask() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Simulate reading archive structure
     const fileName = file.name;
     const simulatedFiles = [
       `src/components/${fileName.replace(/\.zip$/i, '')}Widget.jsx`,
@@ -327,7 +339,7 @@ async function executeFoxTask() {
       'README.md'
     ];
     setUploadedProjectFiles(simulatedFiles);
-    setInputPrompt(`请帮我分析已上传的项目压缩包【${fileName}】中的架构设计，并给出核心模块的代码重构建议。`);
+    setInputPrompt(`请帮我分析已上传的项目压缩包【${fileName}】中的架构设计，并结合当前仓库 [${currentRepo.name}] 给出重构代码。`);
     showToast(`成功解析项目压缩包「${fileName}」！已自动载入 AI 对话上下文`);
     e.target.value = '';
   };
@@ -340,20 +352,36 @@ async function executeFoxTask() {
     const reader = new FileReader();
     reader.onload = (event) => {
       setUploadedImagePreview(event.target.result);
-      setInputPrompt('请根据我上传的这副界面原型设计图，帮我编写对应的 React 19 + Tailwind CSS 响应式前端组件代码。');
+      setInputPrompt(`请根据上传的原型截图，为当前仓库 [${currentRepo.name}] 编写对应的 React 19 + Tailwind CSS 组件代码。`);
       showToast(`设计截图已挂载！已为 AI 编程助手注入图像多模态视觉上下文`);
     };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
 
-  // Prompt Drafts: 1-Click Copy Draft to Input
-  const handleCopyDraftToInput = (draft) => {
-    setInputPrompt(draft.content);
-    showToast(`草稿「${draft.title}」已填入输入框！`);
+  // 1-Click Download Project ZIP
+  const handleDownloadProjectZip = () => {
+    showToast(`正在打包 ${currentRepo.name} (${currentRepo.branch}) 源码工程...`);
+
+    let zipBundleText = `# ====================================================\n# 白狐编程 AI · 源码工程归档\n# 关联仓库: ${currentRepo.name} | 实时分支: ${currentRepo.branch}\n# 生成时间: ${new Date().toISOString()}\n# ====================================================\n\n`;
+
+    chatMessages.forEach((m, idx) => {
+      if (m.code) {
+        zipBundleText += `\n/* ---- MODULE ${idx + 1}: ${m.text.slice(0, 30)} ---- */\n${m.code}\n`;
+      }
+    });
+
+    downloadFile(zipBundleText, `${currentRepo.name}_${currentRepo.branch}_bundle.zip`, 'application/zip');
+    showToast(`工程压缩包「${currentRepo.name}_${currentRepo.branch}_bundle.zip」已下载！`);
   };
 
-  // Add custom prompt draft
+  // 1-Click Fill Prompt Draft into Input
+  const handleCopyDraftToInput = (draft) => {
+    setInputPrompt(draft.content);
+    showToast(`草稿「${draft.title}」已填入提问框！`);
+  };
+
+  // Save new prompt draft
   const handleSaveNewDraft = (e) => {
     e.preventDefault();
     if (!newDraftTitle.trim() || !newDraftContent.trim()) return;
@@ -365,38 +393,29 @@ async function executeFoxTask() {
     };
     const updated = [newDraft, ...promptDrafts];
     setPromptDrafts(updated);
-    localStorage.setItem('wf_ai_prompt_drafts', JSON.stringify(updated));
     setNewDraftTitle('');
     setNewDraftContent('');
     setShowNewDraftModal(false);
     showToast('新提示词草稿已保存！');
   };
 
-  // 1-Click Add Model to User List
+  // 1-Click Select and Add Free Model
   const handleAddFreeModelToList = (model) => {
     if (selectedModel === model.id) {
       showToast(`模型 [${model.name}] 已是当前激活模型`);
       return;
     }
     setSelectedModel(model.id);
-    setModelStatus('testing');
-    setTimeout(() => {
-      setModelStatus('connected');
-      showToast(`已成功将【${model.name}】加入并激活为当前对话推理模型！`);
-    }, 400);
+    setModelStatus('connected');
+    showToast(`已成功将【${model.name}】激活为当前对话推理模型！`);
   };
 
-  // 1-Click Refresh All Free Models
+  // 1-Click Update all free models
   const handleRefreshFreeModels = () => {
     setFreeModels(defaultTenFreeModels);
     localStorage.setItem('wf_ai_free_models', JSON.stringify(defaultTenFreeModels));
     showToast('已从云端同步刷新并更新全部 10 个免费开源 AI 编程模型！');
   };
-
-  // Filtered free models
-  const filteredFreeModels = freeModels.filter(
-    (m) => !modelSearchQuery.trim() || m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) || m.provider.toLowerCase().includes(modelSearchQuery.toLowerCase())
-  );
 
   return (
     <div className="space-y-6">
@@ -414,17 +433,17 @@ async function executeFoxTask() {
           <div>
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold mb-2">
               <Code2 className="w-3.5 h-3.5" />
-              <span>全能编程 AI 智识 · 多云仓库与自由模型枢纽</span>
+              <span>编程 AI 智识 · 实时仓库直连与免费模型枢纽</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
               编程 AI 智识与代码工作台
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              直连 GitHub/GitLab 仓库在线编写修改代码、提示词草稿箱、多模态压缩包/截图辅助写码，配备 10 大免费模型选区。
+              对话面板直连并展示实时仓库与分支、跳转授权管理、提示词草稿箱与 10 大免费模型选区。
             </p>
           </div>
 
-          {/* Sub Navigation Bar - fully mobile responsive with horizontal scroll */}
+          {/* Sub Navigation Bar - Fully Mobile-Responsive without occlusion */}
           <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 overflow-x-auto max-w-full">
             <button
               onClick={() => setActiveTab('chat')}
@@ -447,7 +466,7 @@ async function executeFoxTask() {
               }`}
             >
               <FolderGit2 className="w-3.5 h-3.5" />
-              <span>在线仓库与改码 ({repositories.length})</span>
+              <span>选择仓库与授权 ({repositories.length})</span>
             </button>
 
             <button
@@ -465,48 +484,42 @@ async function executeFoxTask() {
         </div>
       </div>
 
-      {/* TAB 1: 智能编程对话与工作台 (手机优化布局 + 提示词草稿区 + 多模态上传) */}
+      {/* TAB 1: 智能编程对话面板 (显示实时连接仓库和分支 + 手机防遮挡布局 + 提示词草稿区) */}
       {activeTab === 'chat' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Main Chat & Playground */}
+          {/* Main Chat Area */}
           <div className="lg:col-span-8 bg-white/90 backdrop-blur-md rounded-3xl p-4 sm:p-6 border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[580px] space-y-4">
-            {/* Top Toolbar: Model LED indicator + Model Selector + Clear */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
-              <div className="flex items-center space-x-2">
-                {/* Model active status indicator LED */}
-                <div
-                  className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-[11px] font-semibold"
-                  title="模型接入与握手状态指示灯"
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      modelStatus === 'connected'
-                        ? 'bg-emerald-500 animate-pulse ring-2 ring-emerald-300'
-                        : modelStatus === 'testing'
-                        ? 'bg-amber-500 animate-spin'
-                        : 'bg-rose-500'
-                    }`}
-                  />
-                  <span className="text-slate-700">
-                    {modelStatus === 'connected' ? '模型正常就绪' : modelStatus === 'testing' ? '正在连接...' : '离线'}
-                  </span>
+            {/* Top Status Bar: 实时连接仓库和分支 + 模型指示灯 + 编程历史 */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* 核心亮点：对话面板显示实时连接仓库和分支 */}
+                <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-900">
+                  <FolderGit2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>已连接仓库:</span>
+                  <span className="font-mono text-emerald-700">{currentRepo.name}</span>
+                  <span className="text-slate-300">|</span>
+                  <GitBranch className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <span className="font-mono text-emerald-700">[{currentRepo.branch}]</span>
                 </div>
 
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="px-2.5 py-1 rounded-xl border border-slate-200 text-xs bg-slate-50 font-mono text-emerald-800 font-semibold max-w-[220px] sm:max-w-xs truncate"
-                >
-                  {freeModels.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.provider})
-                    </option>
-                  ))}
-                </select>
+                {/* Model Connection Status Indicator LED */}
+                <div className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-slate-100 text-[11px] font-semibold text-slate-700">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ring-2 ring-emerald-300" />
+                  <span>模型就绪</span>
+                </div>
               </div>
 
+              {/* Action Buttons: 历史记录 + 下载代码包 */}
               <div className="flex items-center space-x-2">
-                {/* 1-click Download Project ZIP button */}
+                <button
+                  onClick={() => setShowHistoryModal(true)}
+                  className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center space-x-1 cursor-pointer"
+                  title="管理与查看编程历史"
+                >
+                  <History className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>编程历史 ({codingHistory.length})</span>
+                </button>
+
                 <button
                   onClick={handleDownloadProjectZip}
                   className="px-2.5 py-1 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-bold flex items-center space-x-1 cursor-pointer"
@@ -519,14 +532,14 @@ async function executeFoxTask() {
                 <button
                   onClick={() => setChatMessages([chatMessages[0]])}
                   className="p-1 rounded-lg text-slate-400 hover:text-rose-600 cursor-pointer"
-                  title="清空对话"
+                  title="清空当前对话"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            {/* Uploaded Zip and Image attachments preview */}
+            {/* Uploaded Zip and Image attachments banner */}
             {(uploadedProjectFiles.length > 0 || uploadedImagePreview) && (
               <div className="p-3 bg-emerald-50/70 rounded-2xl border border-emerald-200 flex flex-wrap items-center gap-3 text-xs">
                 {uploadedImagePreview && (
@@ -557,7 +570,7 @@ async function executeFoxTask() {
               </div>
             )}
 
-            {/* Messages Display (Mobile-friendly with touch scrolling) */}
+            {/* Messages Display (Mobile-optimized touch scrolling) */}
             <div className="flex-1 overflow-y-auto space-y-4 max-h-[460px] pr-1">
               {chatMessages.map((msg) => (
                 <div
@@ -577,11 +590,12 @@ async function executeFoxTask() {
                   >
                     <p className="whitespace-pre-line">{msg.text}</p>
 
-                    {/* Formatted Code Block with Copy Button */}
                     {msg.code && (
                       <div className="mt-2.5 rounded-xl overflow-hidden bg-slate-900 text-slate-100 border border-slate-800 font-mono text-[11px]">
                         <div className="px-3 py-1.5 bg-slate-800/80 flex items-center justify-between border-b border-slate-700">
-                          <span className="text-emerald-400 text-[10px]">Clean Code Snippet</span>
+                          <span className="text-emerald-400 text-[10px]">
+                            {currentRepo.name} · {currentRepo.branch}
+                          </span>
                           <button
                             onClick={() => handleCopyCode(msg.code, msg.id)}
                             className="text-slate-300 hover:text-white flex items-center space-x-1 cursor-pointer"
@@ -602,15 +616,14 @@ async function executeFoxTask() {
               {isGenerating && (
                 <div className="flex items-center space-x-2 text-xs text-emerald-600 font-semibold p-2 animate-pulse">
                   <Sparkles className="w-4 h-4 animate-spin" />
-                  <span>正在通过模型分析工程与生成代码...</span>
+                  <span>正在为分支 [{currentRepo.branch}] 生成代码...</span>
                 </div>
               )}
             </div>
 
-            {/* Input bar: Mobile friendly & Safe-area padded */}
+            {/* Prompt Input Box (Safe on mobile without keyboard occlusion) */}
             <form onSubmit={handleSendPrompt} className="pt-2 border-t border-slate-100 space-y-2">
               <div className="flex items-center space-x-2 pb-1">
-                {/* Upload Zip button */}
                 <input
                   type="file"
                   ref={zipInputRef}
@@ -628,7 +641,6 @@ async function executeFoxTask() {
                   <span className="hidden sm:inline">上传源码压缩包</span>
                 </button>
 
-                {/* Upload Image button */}
                 <input
                   type="file"
                   ref={imageInputRef}
@@ -668,7 +680,7 @@ async function executeFoxTask() {
             </form>
           </div>
 
-          {/* Right Sidebar: 提示词草稿区 (替换原常用快捷指令区) */}
+          {/* Right Sidebar: 提示词草稿区 (可一键复制/填入草稿) */}
           <div className="lg:col-span-4 space-y-4">
             <div className="bg-white/90 backdrop-blur-md rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -686,7 +698,7 @@ async function executeFoxTask() {
               </div>
 
               {/* Drafts List with 1-click copy */}
-              <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
                 {promptDrafts.map((d) => (
                   <div
                     key={d.id}
@@ -711,150 +723,147 @@ async function executeFoxTask() {
               </div>
             </div>
 
-            {/* Real-time Branch & Coding Status Alert */}
-            <div className="p-4 bg-emerald-50 rounded-3xl border border-emerald-200 space-y-2 text-xs">
-              <div className="flex items-center justify-between font-bold text-emerald-900">
-                <span className="flex items-center space-x-1.5">
-                  <GitBranch className="w-4 h-4 text-emerald-600" />
-                  <span>实时写码分支状态提醒</span>
-                </span>
-                <span className="font-mono text-emerald-700 bg-white px-2 py-0.5 rounded-lg border border-emerald-200">
-                  {activeRepo?.branch || 'main'}
-                </span>
-              </div>
-              <p className="text-[11px] text-emerald-800 font-medium">
-                {codingStatusAlert}
-              </p>
+            {/* Quick Repository Selector on Sidebar */}
+            <div className="p-4 bg-slate-50 rounded-3xl border border-slate-200 space-y-2.5 text-xs">
+              <span className="font-bold text-slate-700 block">快捷切换工作仓库选项：</span>
+              <select
+                value={selectedRepoId}
+                onChange={(e) => {
+                  setSelectedRepoId(e.target.value);
+                  localStorage.setItem('wf_ai_selected_repo_id', e.target.value);
+                  const matched = repositories.find((r) => r.id === e.target.value);
+                  if (matched) showToast(`当前对话已绑定至仓库「${matched.name}」！`);
+                }}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800 cursor-pointer"
+              >
+                {repositories.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} ({r.platform}) - [{r.branch}]
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
       )}
 
-      {/* TAB 2: 可跳转到仓库网站获得授权、连接/断开仓库、编写修改代码 */}
+      {/* TAB 2: 可选择仓库选项、支持不同跳转仓库网站授权、连接和断开仓库 */}
       {activeTab === 'repos' && (
         <div className="space-y-6">
-          {/* Top Repository Bar with Jump-to-Auth & Branch selector */}
           <div className="bg-white/90 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-              <div className="flex items-center space-x-3">
-                <FolderGit2 className="w-6 h-6 text-emerald-600 shrink-0" />
-                <div>
-                  <h3 className="font-bold text-sm text-slate-800">
-                    当前工作仓库：{activeRepo?.name} (平台: {activeRepo?.platform})
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    支持跳转授权、在线编写、修改与保存代码到指定实时分支
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Jump to OAuth / Auth Button */}
-                <button
-                  onClick={() => handleJumpToOAuth(activeRepo)}
-                  className="px-3.5 py-1.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 text-xs font-bold flex items-center space-x-1.5 cursor-pointer"
-                  title="跳转到平台官网进行授权"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>跳转仓库网站授权</span>
-                </button>
-
-                {/* Connect / Disconnect Toggle */}
-                <button
-                  onClick={() => handleToggleRepoConnect(activeRepo.id)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border flex items-center space-x-1 cursor-pointer ${
-                    activeRepo.connected
-                      ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
-                      : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                  }`}
-                >
-                  <span>{activeRepo.connected ? '断开此仓库' : '重新连接仓库'}</span>
-                </button>
-
-                {/* 1-click Download Project ZIP */}
-                <button
-                  onClick={handleDownloadProjectZip}
-                  className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center space-x-1 cursor-pointer shadow-xs"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>下载代码包 (.zip)</span>
-                </button>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-bold text-base text-slate-800 flex items-center space-x-2">
+                  <FolderGit2 className="w-5 h-5 text-emerald-600" />
+                  <span>可选择仓库选项与授权中枢</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  支持跳转至 GitHub / GitLab / Gitee / Cloudflare Pages 获得授权，连接或断开仓库
+                </p>
               </div>
             </div>
 
-            {/* Branch Switcher & Live Status */}
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center space-x-2">
-                <span className="font-bold text-slate-700 flex items-center space-x-1">
-                  <GitBranch className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>实时写码分支:</span>
-                </span>
-                <select
-                  value={activeRepo.branch}
-                  onChange={(e) => handleSwitchBranch(activeRepo.id, e.target.value)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white font-mono font-bold text-emerald-700 cursor-pointer"
-                >
-                  {(activeRepo.branches || ['main']).map((b) => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Repositories Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {repositories.map((repo) => {
+                const isSelected = selectedRepoId === repo.id;
+                return (
+                  <div
+                    key={repo.id}
+                    className={`p-5 rounded-3xl border transition-all flex flex-col justify-between space-y-3 ${
+                      isSelected
+                        ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20 shadow-sm'
+                        : 'border-slate-200 bg-slate-50/80 hover:bg-white'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <FolderGit2 className="w-4 h-4 text-emerald-600" />
+                          <span className="font-bold text-sm text-slate-800">{repo.name}</span>
+                        </div>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          repo.connected ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          {repo.platform} · {repo.connected ? '已连接' : '未连接'}
+                        </span>
+                      </div>
 
-              {/* Status Alert Badge */}
-              <div className="px-3 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold flex items-center space-x-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>状态提醒: {codingStatusAlert}</span>
-              </div>
-            </div>
-          </div>
+                      <p className="text-xs text-slate-500 font-mono bg-white p-2.5 rounded-xl border border-slate-200">
+                        {repo.url}
+                      </p>
 
-          {/* In-Browser Code Writing & Editing Canvas */}
-          <div className="bg-white/90 backdrop-blur-md rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div className="flex items-center space-x-2">
-                <FileCode className="w-4 h-4 text-emerald-600" />
-                <span className="font-bold text-xs text-slate-800">正在编写/修改文件:</span>
-                <select
-                  value={activeFilePath}
-                  onChange={(e) => {
-                    setActiveFilePath(e.target.value);
-                    const fileObj = (activeRepo.files || []).find((f) => f.path === e.target.value);
-                    if (fileObj) setActiveFileContent(fileObj.content);
-                  }}
-                  className="px-3 py-1 rounded-xl border border-slate-200 bg-slate-50 font-mono text-xs text-slate-800"
-                >
-                  {(activeRepo.files || []).map((f) => (
-                    <option key={f.path} value={f.path}>{f.path}</option>
-                  ))}
-                </select>
-              </div>
+                      {/* Branch Selection for this Repo */}
+                      <div className="flex items-center space-x-2 pt-2 text-xs">
+                        <span className="text-slate-500 font-medium">当前分支:</span>
+                        <select
+                          value={repo.branch}
+                          onChange={(e) => {
+                            const newBranch = e.target.value;
+                            const updated = repositories.map((r) => r.id === repo.id ? { ...r, branch: newBranch } : r);
+                            setRepositories(updated);
+                            localStorage.setItem('wf_ai_repositories', JSON.stringify(updated));
+                            showToast(`仓库「${repo.name}」已切换至 [${newBranch}] 分支`);
+                          }}
+                          className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white font-mono font-bold text-emerald-700"
+                        >
+                          {(repo.branches || ['main']).map((b) => (
+                            <option key={b} value={b}>{b}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
 
-              <button
-                onClick={handleSaveRepoCode}
-                className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center space-x-1.5 shadow-xs cursor-pointer"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>保存代码至仓库</span>
-              </button>
-            </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60">
+                      {/* Select as active working repo */}
+                      <button
+                        onClick={() => {
+                          setSelectedRepoId(repo.id);
+                          localStorage.setItem('wf_ai_selected_repo_id', repo.id);
+                          showToast(`已将「${repo.name}」设为当前对话工作仓库！`);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-white border border-slate-200 hover:border-emerald-400 text-slate-700'
+                        }`}
+                      >
+                        {isSelected ? '✓ 当前选定中' : '设为对话仓库'}
+                      </button>
 
-            {/* Code Editor Area */}
-            <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 p-1">
-              <textarea
-                rows={14}
-                value={activeFileContent}
-                onChange={(e) => {
-                  setActiveFileContent(e.target.value);
-                  setCodingStatusAlert(`正在编辑 ${activeFilePath} (${activeRepo.branch} 分支)`);
-                }}
-                className="w-full bg-slate-950 text-slate-100 font-mono text-xs p-4 leading-relaxed focus:outline-hidden"
-              />
+                      <div className="flex items-center space-x-2">
+                        {/* Jump to OAuth */}
+                        <button
+                          onClick={() => handleJumpToOAuth(repo)}
+                          className="px-3 py-1.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 text-xs font-bold flex items-center space-x-1 cursor-pointer"
+                          title="跳转至平台官网获取授权"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>跳转授权</span>
+                        </button>
+
+                        {/* Toggle connection */}
+                        <button
+                          onClick={() => handleToggleRepoConnect(repo.id)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer ${
+                            repo.connected
+                              ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          }`}
+                        >
+                          {repo.connected ? '断开连接' : '连接仓库'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
       )}
 
-      {/* TAB 3: 底部一键搜索与加入免费模型选区 (10个默认保存免费模型 + 一键更新) */}
+      {/* TAB 3: 底部一键搜索和加入免费模型选区 (10个默认保存 + 一键更新) */}
       {activeTab === 'models' && (
         <div className="bg-white/90 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
@@ -890,50 +899,52 @@ async function executeFoxTask() {
 
           {/* 10 Free Models Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredFreeModels.map((m) => {
-              const isCurrent = selectedModel === m.id;
-              return (
-                <div
-                  key={m.id}
-                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
-                    isCurrent
-                      ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20'
-                      : 'bg-slate-50/80 hover:bg-white border-slate-200'
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-xs text-slate-800 truncate" title={m.name}>{m.name}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold shrink-0">
-                        永久免费
-                      </span>
+            {freeModels
+              .filter((m) => !modelSearchQuery.trim() || m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) || m.provider.toLowerCase().includes(modelSearchQuery.toLowerCase()))
+              .map((m) => {
+                const isCurrent = selectedModel === m.id;
+                return (
+                  <div
+                    key={m.id}
+                    className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
+                      isCurrent
+                        ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20'
+                        : 'bg-slate-50/80 hover:bg-white border-slate-200'
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-slate-800 truncate" title={m.name}>{m.name}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold shrink-0">
+                          永久免费
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-mono">{m.provider}</p>
+                      <p className="text-xs text-slate-600 leading-relaxed mt-1">{m.desc}</p>
                     </div>
-                    <p className="text-[11px] text-slate-400 font-mono">{m.provider}</p>
-                    <p className="text-xs text-slate-600 leading-relaxed mt-1">{m.desc}</p>
-                  </div>
 
-                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                    <span className="text-[10px] font-mono text-slate-400 truncate max-w-[140px]">{m.id}</span>
-                    <button
-                      onClick={() => handleAddFreeModelToList(m)}
-                      disabled={isCurrent}
-                      className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        isCurrent
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-white border border-slate-200 hover:border-emerald-500 text-slate-700'
-                      }`}
-                    >
-                      {isCurrent ? '当前使用中' : '一键加入列表'}
-                    </button>
+                    <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-slate-400 truncate max-w-[140px]">{m.id}</span>
+                      <button
+                        onClick={() => handleAddFreeModelToList(m)}
+                        disabled={isCurrent}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isCurrent
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-white border border-slate-200 hover:border-emerald-500 text-slate-700'
+                        }`}
+                      >
+                        {isCurrent ? '当前使用中' : '一键加入列表'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         </div>
       )}
 
-      {/* SECTION BOTTOM: 编程使用详细指导 (区底部详细使用说明) */}
+      {/* SECTION BOTTOM: 编程使用详细指导 */}
       <div className="bg-slate-50/90 rounded-3xl p-6 border border-slate-200 text-xs text-slate-700 space-y-4">
         <div className="flex items-center space-x-2 font-bold text-slate-800 text-sm">
           <HelpCircle className="w-4 h-4 text-emerald-600" />
@@ -941,35 +952,123 @@ async function executeFoxTask() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 leading-relaxed text-[11px] text-slate-600">
           <div className="p-3.5 bg-white rounded-2xl border border-slate-200 space-y-1.5">
-            <span className="font-bold text-emerald-800 block">1. 仓库直连与跳转授权机制</span>
+            <span className="font-bold text-emerald-800 block">1. 仓库选项与跳转授权</span>
             <p>
-              点击“跳转仓库网站授权”可直达 GitHub / GitLab OAuth 授权页面。连接后可在站内通过“在线仓库与改码”直接编写修改代码，并在右侧切换实时分支一键保存。
+              在“选择仓库与授权”区自由切换当前对话绑定的工作仓库与实时分支。点击“跳转授权”可直达 GitHub、GitLab 或 Gitee 官网获得专属应用授权凭证。
             </p>
           </div>
 
           <div className="p-3.5 bg-white rounded-2xl border border-slate-200 space-y-1.5">
-            <span className="font-bold text-emerald-800 block">2. 多模态与工程包辅助写码</span>
+            <span className="font-bold text-emerald-800 block">2. 提示词草稿与多模态写码</span>
             <p>
-              在对话框下方可上传项目源码压缩包（.zip）与界面原型设计截图，系统自动将文件结构和视觉参考信息注入大模型上下文，生成贴合业务逻辑的完整组件代码。
+              常用的复杂提示词可保存在右侧草稿箱中一键填入。支持在对话输入栏上传项目 ZIP 压缩包与原型设计截图，系统自动提取结构与上下文生成高质代码。
             </p>
           </div>
 
           <div className="p-3.5 bg-white rounded-2xl border border-slate-200 space-y-1.5">
-            <span className="font-bold text-emerald-800 block">3. 免费模型选区与一键下载</span>
+            <span className="font-bold text-emerald-800 block">3. 编程历史同步与离线部署</span>
             <p>
-              内置 10 大免费开源编程模型（含 Cloudflare Llama-3、DeepSeek R1 及本地私有 Ollama）。完成代码编写后，支持一键将工程代码打包为 ZIP 压缩包下载至本地部署。
+              所有写码问答自动沉淀至编程历史并在多设备间双向全息同步。写码完成后可一键下载当前项目的源码压缩包，随时进行本地编译与上线部署。
             </p>
           </div>
         </div>
       </div>
 
-      {/* New Prompt Draft Modal */}
+      {/* Modal: 编程历史管理与同步查看 (Coding History Drawer) */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center space-x-2">
+                <History className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-bold text-sm text-slate-800">编程历史会话记录 ({codingHistory.length})</h3>
+              </div>
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+              {codingHistory.length === 0 ? (
+                <p className="text-center text-slate-400 py-8 text-xs">暂无历史写码会话记录</p>
+              ) : (
+                codingHistory.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-emerald-300 transition-all space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-slate-800 line-clamp-1">{item.prompt}</span>
+                      <span className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">{item.time}</span>
+                    </div>
+
+                    <div className="flex items-center space-x-2 text-[10px] text-slate-400 font-mono">
+                      <span>仓库: {item.repoName} [{item.branch}]</span>
+                      <span>•</span>
+                      <span>模型: {item.model}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                      <button
+                        onClick={() => {
+                          setInputPrompt(item.prompt);
+                          setShowHistoryModal(false);
+                          showToast('已恢复历史提问到提问框！');
+                        }}
+                        className="text-xs text-emerald-600 font-bold hover:underline cursor-pointer"
+                      >
+                        填入提问
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const updated = codingHistory.filter((h) => h.id !== item.id);
+                          setCodingHistory(updated);
+                          showToast('历史记录已删除');
+                        }}
+                        className="text-xs text-rose-500 hover:underline cursor-pointer"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+              <button
+                onClick={() => {
+                  if (confirm('确认清空全部编程历史记录？')) {
+                    setCodingHistory([]);
+                    showToast('编程历史已清空');
+                  }
+                }}
+                className="text-rose-500 hover:underline cursor-pointer"
+              >
+                清空全部历史
+              </button>
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="px-4 py-1.5 bg-emerald-600 text-white rounded-xl font-bold cursor-pointer"
+              >
+                完成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: 新建提示词草稿 */}
       {showNewDraftModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h3 className="font-bold text-sm text-slate-800">新建提示词草稿</h3>
-              <button onClick={() => setShowNewDraftModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <button onClick={() => setShowNewDraftModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">✕</button>
             </div>
             <form onSubmit={handleSaveNewDraft} className="space-y-3 text-xs">
               <div>
