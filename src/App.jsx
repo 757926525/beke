@@ -7,7 +7,6 @@ import { BookshelfView } from './components/BookshelfView';
 import { GalleryView } from './components/GalleryView';
 import { CodingAIView } from './components/CodingAIView';
 import { MediaPlayerView } from './components/MediaPlayerView';
-import { AdminFileAndPortalView } from './components/AdminFileAndPortalView';
 import { ShopView } from './components/ShopView';
 import { AdminSettingsView } from './components/AdminSettingsView';
 import { AuthModal } from './components/AuthModal';
@@ -512,20 +511,6 @@ export function App() {
             />
           )}
 
-          {activeTab === 'cloud' && (
-            <NetDriveView
-              cloudConfig={cloudConfig}
-              setCloudConfig={setCloudConfig}
-              cloudFiles={cloudFiles}
-              setCloudFiles={setCloudFiles}
-              currentUser={currentUser}
-              isAdmin={currentUser?.role === 'admin'}
-              backendConfig={backendConfig}
-              onWebDAVTransfer={handleTriggerWebDAVTransfer}
-              t={t}
-            />
-          )}
-
           {activeTab === 'shop' && (
             <ShopView
               currentUser={currentUser}
@@ -558,12 +543,17 @@ export function App() {
             />
           )}
 
-          {activeTab === 'admin-portal' && currentUser?.role === 'admin' && (
-            <AdminFileAndPortalView
-              currentUser={currentUser}
-              isAdmin={currentUser?.role === 'admin'}
+          {/* 网盘与 WebDAV 多云调度中枢：仅系统管理员可见与访问 */}
+          {activeTab === 'cloud' && currentUser?.role === 'admin' && (
+            <NetDriveView
+              cloudConfig={cloudConfig}
+              setCloudConfig={setCloudConfig}
               cloudFiles={cloudFiles}
               setCloudFiles={setCloudFiles}
+              currentUser={currentUser}
+              isAdmin={currentUser?.role === 'admin'}
+              backendConfig={backendConfig}
+              onWebDAVTransfer={handleTriggerWebDAVTransfer}
               t={t}
             />
           )}

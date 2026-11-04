@@ -51,7 +51,6 @@ export const Navbar = ({
   if (!hideNonBlogForGuests) {
     baseTabs.push(
       { id: 'books', label: t('bookshelf'), icon: Library },
-      { id: 'cloud', label: t('cloud'), icon: Cloud },
       { id: 'shop', label: t('shop'), icon: ShoppingBag },
       { id: 'gallery', label: t('gallery'), icon: ImageIcon },
       { id: 'media', label: t('player'), icon: Music },
@@ -59,8 +58,9 @@ export const Navbar = ({
     );
   }
 
+  // 网盘与 WebDAV 多云调度中枢仅系统管理员可见
   if (currentUser?.role === 'admin') {
-    baseTabs.push({ id: 'admin-portal', label: t('adminPortal'), icon: Shield, badge: '专属' });
+    baseTabs.push({ id: 'cloud', label: t('cloud'), icon: Cloud, badge: '管理' });
   }
 
   // 全能数据库后台、系统设置与部署指南仅管理员可见
