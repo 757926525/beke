@@ -157,42 +157,16 @@ export default function NewArticleModal({
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold text-slate-600">
-                封面配图 (可填外部/R2/OSS/COS链接，或直接上传本地图片)
-              </label>
-              <label className="text-xs font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer flex items-center space-x-1">
-                <Upload className="w-3.5 h-3.5" />
-                <span>上传本地封面图片</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      setCover(ev.target.result);
-                    };
-                    reader.readAsDataURL(file);
-                    e.target.value = '';
-                  }}
-                  className="hidden"
-                />
-              </label>
-            </div>
-            <div className="flex items-center space-x-2">
-              {cover && (
-                <img src={cover} alt="Cover Preview" className="w-12 h-8 object-cover rounded-lg border border-slate-200 shrink-0" />
-              )}
-              <input
-                type="text"
-                placeholder="https://... 或点击右上方直接上传本地文件"
-                value={cover}
-                onChange={(e) => setCover(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-mono"
-              />
-            </div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              封面配图 URL (可填 R2 / OSS / COS 链接)
+            </label>
+            <input
+              type="url"
+              placeholder="https://..."
+              value={cover}
+              onChange={(e) => setCover(e.target.value)}
+              className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-mono"
+            />
           </div>
 
           <div>

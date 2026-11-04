@@ -15,8 +15,8 @@ export const MediaPlayerView = ({
   t
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [aspectRatio, setAspectRatio] = useState('16:9'); // '16:9', '9:16', '4:3', '21:9', '1:1'
-  const [mediaViewMode, setMediaViewMode] = useState('grid'); // 'grid' (大图) | 'list' (详细列表)
+  const [aspectRatio, setAspectRatio] = useState('auto'); // 'auto' (自适应 默认), '16:9', '9:16', '4:3', '21:9', '1:1'
+  const [mediaViewMode, setMediaViewMode] = useState('medium'); // 'medium' (中图) | 'small' (小图) | 'list' (详细信息)
   const [mediaSearchQuery, setMediaSearchQuery] = useState('');
   const videoRef = useRef(null);
   const audioRef = useRef(null);
@@ -244,13 +244,14 @@ export const MediaPlayerView = ({
               <span>一键转存到站内</span>
             </button>
 
-            {/* Aspect Ratio Switcher Pills */}
+            {/* Aspect Ratio Switcher Pills (自适应为默认) */}
             <div className="flex flex-wrap items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/80">
               <span className="text-[10px] font-bold text-slate-400 px-2 uppercase">画幅调节:</span>
               {[
+                { id: 'auto', label: '自适应 (默认)', icon: RefreshCw },
                 { id: '16:9', label: '16:9 宽屏', icon: Monitor },
-                { id: '9:16', label: '9:16 竖屏短视频', icon: Smartphone },
-                { id: '21:9', label: '21:9 影院超宽', icon: Film },
+                { id: '9:16', label: '9:16 竖屏', icon: Smartphone },
+                { id: '21:9', label: '21:9 影院', icon: Film },
                 { id: '4:3', label: '4:3 经典', icon: Layers },
               ].map((ratio) => {
                 const Icon = ratio.icon;
@@ -278,7 +279,9 @@ export const MediaPlayerView = ({
         <div className="w-full flex justify-center py-2">
           <div
             className={`relative rounded-3xl overflow-hidden bg-slate-950 shadow-2xl transition-all duration-500 border border-slate-800 flex items-center justify-center ${
-              aspectRatio === '9:16'
+              aspectRatio === 'auto'
+                ? 'w-full max-w-[880px] max-h-[70vh]'
+                : aspectRatio === '9:16'
                 ? 'w-full max-w-[360px] aspect-[9/16]'
                 : aspectRatio === '21:9'
                 ? 'w-full max-w-[960px] aspect-[21/9]'
@@ -344,7 +347,7 @@ export const MediaPlayerView = ({
           </span>
         </div>
 
-        {/* Search & View Mode Switcher */}
+        {/* Search & 3-Tier View Mode Switcher: 中图 / 小图 / 详细信息 */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <div className="flex items-center space-x-2 flex-1 max-w-sm">
             <input
@@ -357,30 +360,38 @@ export const MediaPlayerView = ({
           </div>
 
           <div className="flex items-center space-x-2 text-xs">
-            <span className="text-slate-400 font-medium">显示视图:</span>
+            <span className="text-slate-400 font-medium">显示模式:</span>
             <div className="flex items-center bg-slate-100 p-1 rounded-xl">
               <button
-                onClick={() => setMediaViewMode('grid')}
-                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                  mediaViewMode === 'grid' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                onClick={() => setMediaViewMode('medium')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  mediaViewMode === 'medium' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                大图缩略
+                中图
+              </button>
+              <button
+                onClick={() => setMediaViewMode('small')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  mediaViewMode === 'small' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                小图
               </button>
               <button
                 onClick={() => setMediaViewMode('list')}
-                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
                   mediaViewMode === 'list' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                详细列表
+                详细信息
               </button>
             </div>
           </div>
         </div>
 
-        {/* Media Grid OR Detailed List */}
-        {mediaViewMode === 'grid' ? (
+        {/* Media Content Display according to Mode */}
+        {mediaViewMode === 'medium' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {mediaList
               .filter((m) => !mediaSearchQuery || m.title.toLowerCase().includes(mediaSearchQuery.toLowerCase()))
@@ -431,6 +442,7 @@ export const MediaPlayerView = ({
                       <span>{m.date}</span>
                     </div>
 
+                    {/* Management Buttons */}
                     <div className="flex items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={(e) => handleTransferToStorage(m, e)}
@@ -460,6 +472,28 @@ export const MediaPlayerView = ({
                 </div>
               );
             })}
+          </div>
+        ) : mediaViewMode === 'small' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
+            {mediaList
+              .filter((m) => !mediaSearchQuery || m.title.toLowerCase().includes(mediaSearchQuery.toLowerCase()))
+              .map((m) => (
+                <div
+                  key={m.id}
+                  onClick={() => handleSelectMedia(m)}
+                  className="p-2 rounded-xl bg-white border border-slate-200 hover:border-emerald-400 cursor-pointer flex flex-col justify-between space-y-1.5 shadow-2xs"
+                >
+                  <div className="aspect-video rounded-lg overflow-hidden relative bg-slate-900">
+                    <img src={m.poster} alt={m.title} className="w-full h-full object-cover" />
+                    <span className="absolute bottom-1 right-1 px-1 rounded bg-black/60 text-white text-[8px] font-mono">{m.duration}</span>
+                  </div>
+                  <div className="font-semibold text-xs text-slate-800 truncate" title={m.title}>{m.title}</div>
+                  <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                    <span>{m.size}</span>
+                    <span className="text-emerald-600 font-bold">{m.type === 'video' ? '视频' : '音频'}</span>
+                  </div>
+                </div>
+              ))}
           </div>
         ) : (
           <div className="bg-white/80 backdrop-blur-md rounded-2xl border border-slate-200/80 overflow-x-auto shadow-xs">

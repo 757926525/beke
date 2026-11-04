@@ -23,20 +23,7 @@ import { downloadFile } from '../services/documentConverter';
 export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [currentFolder, setCurrentFolder] = useState('全部');
-  const [folders, setFolders] = useState(['全部', '白狐物语', '风景山水', '云端随想', '私享秘境']);
-  const [sensitiveFolders, setSensitiveFolders] = useState(() => {
-    try {
-      const saved = localStorage.getItem('wf_sensitive_folders');
-      return saved ? JSON.parse(saved) : ['私享秘境'];
-    } catch {
-      return ['私享秘境'];
-    }
-  });
-  const [unlockedFolders, setUnlockedFolders] = useState([]);
-  const [showAgeWarningModal, setShowAgeWarningModal] = useState(false);
-  const [pendingSensitiveFolder, setPendingSensitiveFolder] = useState(null);
-  const [isNewFolderSensitive, setIsNewFolderSensitive] = useState(false);
-
+  const [folders, setFolders] = useState(['全部', '白狐物语', '风景山水', '云端随想']);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [uploadStatus, setUploadStatus] = useState(null);
@@ -53,42 +40,12 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
       alert('文件夹名称已存在！');
       return;
     }
-    const updatedFolders = [...folders, trimmed];
-    setFolders(updatedFolders);
-    if (isNewFolderSensitive) {
-      const updatedSens = [...sensitiveFolders, trimmed];
-      setSensitiveFolders(updatedSens);
-      localStorage.setItem('wf_sensitive_folders', JSON.stringify(updatedSens));
-    }
+    setFolders([...folders, trimmed]);
     setCurrentFolder(trimmed);
     setNewFolderName('');
-    setIsNewFolderSensitive(false);
     setShowNewFolderModal(false);
-    setUploadStatus(`新建文件夹「${trimmed}」成功！${isNewFolderSensitive ? ' (已标记为敏感内容文件夹)' : ''}`);
+    setUploadStatus(`新建文件夹「${trimmed}」成功！`);
     setTimeout(() => setUploadStatus(null), 3000);
-  };
-
-  // Toggle sensitive flag on current folder
-  const toggleFolderSensitive = (folderName) => {
-    if (!isAdmin) return;
-    const isSens = sensitiveFolders.includes(folderName);
-    const updated = isSens
-      ? sensitiveFolders.filter((f) => f !== folderName)
-      : [...sensitiveFolders, folderName];
-    setSensitiveFolders(updated);
-    localStorage.setItem('wf_sensitive_folders', JSON.stringify(updated));
-    setUploadStatus(`文件夹「${folderName}」已${isSens ? '取消' : '开启'}敏感内容标记！`);
-    setTimeout(() => setUploadStatus(null), 3000);
-  };
-
-  // Switch folder with 18+ check
-  const handleSelectFolder = (f) => {
-    if (f !== '全部' && sensitiveFolders.includes(f) && !isAdmin && !unlockedFolders.includes(f)) {
-      setPendingSensitiveFolder(f);
-      setShowAgeWarningModal(true);
-      return;
-    }
-    setCurrentFolder(f);
   };
 
   const canManagePhoto = (photo) => {
@@ -307,45 +264,22 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
                 (p) => f === '全部' || p.category === f || p.folder === f
               ).length;
               const isActive = currentFolder === f;
-              const isSensitive = sensitiveFolders.includes(f);
               return (
-                <div key={f} className="flex items-center space-x-1 flex-shrink-0">
-                  <button
-                    onClick={() => handleSelectFolder(f)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 cursor-pointer ${
-                      isActive
-                        ? isSensitive
-                          ? 'bg-rose-600 text-white shadow-xs'
-                          : 'bg-emerald-600 text-white shadow-xs'
-                        : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
-                    }`}
-                  >
-                    {isActive ? <FolderOpen className="w-3.5 h-3.5" /> : <Folder className="w-3.5 h-3.5 opacity-60" />}
-                    <span>{f}</span>
-                    {isSensitive && (
-                      <span className="text-[9px] px-1 py-0.2 bg-rose-500 text-white rounded font-bold">
-                        18+
-                      </span>
-                    )}
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                      {count}
-                    </span>
-                  </button>
-
-                  {isAdmin && f !== '全部' && (
-                    <button
-                      onClick={() => toggleFolderSensitive(f)}
-                      className={`p-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
-                        isSensitive
-                          ? 'border-rose-300 text-rose-700 bg-rose-50 hover:bg-rose-100'
-                          : 'border-slate-200 text-slate-400 hover:text-slate-600 bg-white'
-                      }`}
-                      title={isSensitive ? '点击取消敏感标记' : '标记为敏感内容文件夹 (18+)'}
-                    >
-                      {isSensitive ? '已标记18+' : '标记18+'}
-                    </button>
-                  )}
-                </div>
+                <button
+                  key={f}
+                  onClick={() => setCurrentFolder(f)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 flex-shrink-0 cursor-pointer ${
+                    isActive
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
+                  }`}
+                >
+                  {isActive ? <FolderOpen className="w-3.5 h-3.5" /> : <Folder className="w-3.5 h-3.5 opacity-60" />}
+                  <span>{f}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    {count}
+                  </span>
+                </button>
               );
             })}
           </div>
@@ -540,22 +474,6 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-400 focus:outline-none"
                 />
               </div>
-
-              {isAdmin && (
-                <div className="flex items-center space-x-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200">
-                  <input
-                    type="checkbox"
-                    id="sensitive-folder-checkbox"
-                    checked={isNewFolderSensitive}
-                    onChange={(e) => setIsNewFolderSensitive(e.target.checked)}
-                    className="rounded text-rose-600 cursor-pointer"
-                  />
-                  <label htmlFor="sensitive-folder-checkbox" className="text-xs text-rose-800 font-bold cursor-pointer">
-                    标记为敏感内容文件夹 (非管理员须确认已满18岁方可见)
-                  </label>
-                </div>
-              )}
-
               <div className="flex items-center justify-end space-x-2 pt-2">
                 <button
                   type="button"
@@ -572,50 +490,6 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* 18+ Age Verification Modal */}
-      {showAgeWarningModal && pendingSensitiveFolder && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-4 text-center">
-            <div className="w-16 h-16 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto text-2xl font-black">
-              18+
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-lg font-extrabold text-slate-800">敏感内容与适龄访问提醒</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                文件夹「<strong>{pendingSensitiveFolder}</strong>」已被标记为敏感内容专区。根据规定，非管理员访客必须确认已满 18 周岁方可解锁浏览。
-              </p>
-            </div>
-            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-amber-800 text-[11px] text-left">
-              • 请确认您已达法定成年年龄并愿意自愿浏览本分类内的影像记录。
-            </div>
-            <div className="flex items-center justify-center space-x-3 pt-2">
-              <button
-                onClick={() => {
-                  setShowAgeWarningModal(false);
-                  setPendingSensitiveFolder(null);
-                }}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-xs hover:bg-slate-50 cursor-pointer"
-              >
-                未满18岁 / 退出
-              </button>
-              <button
-                onClick={() => {
-                  setUnlockedFolders([...unlockedFolders, pendingSensitiveFolder]);
-                  setCurrentFolder(pendingSensitiveFolder);
-                  setShowAgeWarningModal(false);
-                  setPendingSensitiveFolder(null);
-                  setUploadStatus(`已确认年龄认证，已解锁「${pendingSensitiveFolder}」！`);
-                  setTimeout(() => setUploadStatus(null), 3000);
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md cursor-pointer"
-              >
-                我已满 18 岁，继续查看
-              </button>
-            </div>
           </div>
         </div>
       )}

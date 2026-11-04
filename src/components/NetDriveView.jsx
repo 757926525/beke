@@ -11,13 +11,17 @@ import { downloadFile } from '../services/documentConverter';
 
 export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloudFiles, backendConfig, t, currentUser }) => {
   const [activeDriver, setActiveDriver] = useState('r2'); // 'r2' | 'cos' | 'oss' | 'alist' | 'local' | 'b2' | 'minio' | 's3' | 'obs' | 'upyun'
-  const [viewMode, setViewMode] = useState('list'); // 'list' | 'grid' (大图/详细列表)
+  const [viewMode, setViewMode] = useState('medium'); // 'medium' (中图) | 'small' (小图) | 'list' (详细信息)
   const [searchQuery, setSearchQuery] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
   const [copiedUrl, setCopiedUrl] = useState('');
   const [showUsageGuide, setShowUsageGuide] = useState(false);
   const fileInputRef = useRef(null);
+
+  // In-site web window modal state
+  const [inSiteWindowUrl, setInSiteWindowUrl] = useState(null);
+  const [dockedWindowUrl, setDockedWindowUrl] = useState(null);
 
   // Preview file modal
   const [previewFile, setPreviewFile] = useState(null);
@@ -150,24 +154,20 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
     downloadFile(file.url, file.name);
   };
 
-  // Filter files by bucket & search query
+  // Filter files by bucket
   const currentProviderMap = {
     r2: 'Cloudflare R2',
     cos: 'Tencent COS',
     oss: 'Alibaba OSS',
     alist: 'AList / WebDAV',
-    local: '站内本地存储',
-    b2: 'Backblaze B2',
-    minio: 'MinIO 私有云',
-    s3: 'Amazon S3',
-    obs: '华为云 OBS',
-    upyun: '又拍云 USS'
+    local: '站内本地存储'
   };
 
   const filteredFiles = cloudFiles.filter((f) => {
-    const matchDriver = f.bucketKey ? f.bucketKey === activeDriver : (f.provider === currentProviderMap[activeDriver] || (activeDriver === 'r2' && !f.provider));
-    const matchQuery = !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchDriver && matchQuery;
+    if (f.bucketKey) return f.bucketKey === activeDriver;
+    // Fallback matching by provider name
+    const targetName = currentProviderMap[activeDriver];
+    return f.provider === targetName || (activeDriver === 'r2' && !f.provider);
   });
 
   return (
@@ -220,89 +220,14 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
         )}
       </div>
 
-      {/* 快捷一键备份与恢复全站博客与文件区 (NetDrive Site Backup & Restore) */}
-      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-slate-800 rounded-3xl p-4 sm:p-5 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-md">
-        <div className="space-y-0.5">
-          <div className="flex items-center space-x-2">
-            <span className="text-base font-bold">全站文件与博客一键备份恢复中心</span>
-            <span className="px-2 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-mono">Disaster Recovery</span>
-          </div>
-          <p className="text-xs text-emerald-100/80">
-            一键将站内所有文章、网盘调度文件、相册、书架及系统设置打包备份；也可一键选择备份文件彻底恢复。
-          </p>
-        </div>
-
-        <div className="flex items-center space-x-2 shrink-0">
-          {/* 一键备份按钮 */}
-          <button
-            onClick={() => {
-              const fullSiteBackup = {
-                app: 'WhiteFox Blog',
-                version: '2.0.0',
-                backupDate: new Date().toISOString(),
-                cloudFiles,
-                cloudConfig,
-                backendConfig
-              };
-              const blob = new Blob([JSON.stringify(fullSiteBackup, null, 2)], { type: 'application/json' });
-              downloadFile(blob, `whitefox-site-full-backup-${Date.now()}.json`);
-              setSyncStatus('全站文件、博客与网盘配置已成功导出为安全备份包！');
-              setTimeout(() => setSyncStatus(''), 3000);
-            }}
-            className="px-4 py-2 rounded-xl bg-white text-emerald-800 hover:bg-emerald-50 text-xs font-bold flex items-center space-x-1.5 shadow-sm cursor-pointer"
-          >
-            <Download className="w-4 h-4 text-emerald-600" />
-            <span>一键备份全站</span>
-          </button>
-
-          {/* 一键恢复按钮 */}
-          <label className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold flex items-center space-x-1.5 shadow-sm cursor-pointer">
-            <Upload className="w-4 h-4" />
-            <span>一键选择恢复</span>
-            <input
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                  try {
-                    const parsed = JSON.parse(event.target.result);
-                    if (parsed.cloudFiles && Array.isArray(parsed.cloudFiles)) {
-                      setCloudFiles(parsed.cloudFiles);
-                    }
-                    if (parsed.cloudConfig && setCloudConfig) {
-                      setCloudConfig(parsed.cloudConfig);
-                    }
-                    setSyncStatus('全站备份恢复成功！文件列表与多云配置已全部复原。');
-                    setTimeout(() => setSyncStatus(''), 3500);
-                  } catch (err) {
-                    alert('恢复失败：该备份文件无效或格式受损');
-                  }
-                };
-                reader.readAsText(file);
-                e.target.value = '';
-              }}
-            />
-          </label>
-        </div>
-      </div>
-
-      {/* Cloud Providers Selection Cards (包括更多预留对象存储：B2 / MinIO / S3 / 华为OBS / 又拍云) */}
+      {/* Cloud Providers Selection Cards (不同平台独立选区) */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
           { id: 'r2', name: 'Cloudflare R2', icon: Cloud, desc: '0 出站费边缘存储' },
           { id: 'cos', name: '腾讯云 COS', icon: Server, desc: '国内极速 CDN 存储' },
           { id: 'oss', name: '阿里云 OSS', icon: Database, desc: '高可用对象存储' },
           { id: 'alist', name: 'AList / WebDAV', icon: HardDrive, desc: '多网盘聚合挂载' },
-          { id: 'local', name: '站内存储池', icon: FolderPlus, desc: '本地音视频与转存' },
-          { id: 'b2', name: 'Backblaze B2', icon: Cloud, desc: '超低成本 S3 兼容' },
-          { id: 'minio', name: 'MinIO 私有云', icon: Server, desc: '私有化部署 S3 存储' },
-          { id: 's3', name: 'Amazon S3', icon: Globe, desc: '全球标准工业级存储' },
-          { id: 'obs', name: '华为云 OBS', icon: Database, desc: '政企高可靠对象存储' },
-          { id: 'upyun', name: '又拍云 USS', icon: HardDrive, desc: '特色音视频分发' }
+          { id: 'local', name: '站内存储池', icon: FolderPlus, desc: '本地视频转存与媒体' },
         ].map((p) => {
           const Icon = p.icon;
           const isSelected = activeDriver === p.id;
@@ -422,7 +347,7 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
           </form>
         </div>
 
-        {/* Search Bar & View Mode Switcher */}
+        {/* Search & 3-Tier View Mode Bar: 中图 / 小图 / 详细信息 */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <div className="flex items-center space-x-2 flex-1 max-w-sm">
             <input
@@ -435,35 +360,75 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
           </div>
 
           <div className="flex items-center space-x-2 text-xs">
-            <span className="text-slate-400 font-medium">显示视图:</span>
+            {/* Open In-Site Web Window Trigger for Current Cloud Provider */}
+            <button
+              onClick={() => {
+                const targetUrl = cloudConfig?.cloudflare?.publicDomain || cloudConfig?.alist?.endpoint || 'https://dash.cloudflare.com';
+                setInSiteWindowUrl(targetUrl);
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold border border-indigo-200 flex items-center space-x-1 cursor-pointer"
+              title="在站内专属视窗中直接查看网盘后台"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>打开站内窗口</span>
+            </button>
+
+            <span className="text-slate-400 font-medium">显示模式:</span>
             <div className="flex items-center bg-slate-100 p-1 rounded-xl">
               <button
-                onClick={() => setViewMode('grid')}
-                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                  viewMode === 'grid' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                onClick={() => setViewMode('medium')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  viewMode === 'medium' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                大图缩略图
+                中图
+              </button>
+              <button
+                onClick={() => setViewMode('small')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  viewMode === 'small' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                小图
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
                   viewMode === 'list' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                详细列表
+                详细信息
               </button>
             </div>
           </div>
         </div>
 
-        {/* Files Display: Grid (大图) OR Table (详细信息) */}
-        {viewMode === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 pt-2">
+        {/* In-Site Docked Window Widget */}
+        {dockedWindowUrl && (
+          <div className="p-3 bg-slate-900 rounded-2xl text-white space-y-2 border border-slate-700">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold flex items-center space-x-1 text-emerald-400">
+                <Globe className="w-3.5 h-3.5" />
+                <span>已在网盘区内固化站内窗口 ({dockedWindowUrl})</span>
+              </span>
+              <div className="flex items-center space-x-2">
+                <a href={dockedWindowUrl} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline">跳至浏览器</a>
+                <button onClick={() => setDockedWindowUrl(null)} className="text-rose-400 hover:text-rose-300">关闭固定</button>
+              </div>
+            </div>
+            <div className="h-64 rounded-xl overflow-hidden bg-white">
+              <iframe src={dockedWindowUrl} title="Docked NetDrive" className="w-full h-full border-0" sandbox="allow-same-origin allow-scripts allow-forms" />
+            </div>
+          </div>
+        )}
+
+        {/* Files Display: Medium (中图) / Small (小图) / Table (详细信息) */}
+        {viewMode === 'medium' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {filteredFiles.map((file) => (
               <div
                 key={file.id}
-                className="group p-2.5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-emerald-300 hover:bg-white transition-all flex flex-col justify-between space-y-2 relative"
+                className="group p-2.5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-emerald-300 hover:bg-white transition-all flex flex-col justify-between space-y-2"
               >
                 <div
                   onClick={() => setPreviewFile(file)}
@@ -482,35 +447,35 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                     {file.size}
                   </span>
                 </div>
-
                 <div className="space-y-0.5">
                   <p className="font-bold text-xs text-slate-800 truncate" title={file.name}>{file.name}</p>
                   <p className="text-[10px] text-slate-400">{file.uploadedAt}</p>
                 </div>
-
                 <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
-                  <button
-                    onClick={() => handleDownloadFile(file)}
-                    className="p-1 rounded-lg text-emerald-600 hover:bg-emerald-50 cursor-pointer"
-                    title="下载文件"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleCopy(file.url)}
-                    className="p-1 rounded-lg text-slate-500 hover:bg-slate-100 cursor-pointer"
-                    title="复制直链"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteFile(file.id, file.name)}
-                    className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer"
-                    title="移除"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <button onClick={() => handleDownloadFile(file)} className="p-1 rounded-lg text-emerald-600 hover:bg-emerald-50" title="下载"><Download className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => handleCopy(file.url)} className="p-1 rounded-lg text-slate-500 hover:bg-slate-100" title="复制直链"><Copy className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => handleDeleteFile(file.id, file.name)} className="p-1 rounded-lg text-rose-500 hover:bg-rose-50" title="删除"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
+              </div>
+            ))}
+          </div>
+        ) : viewMode === 'small' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+            {filteredFiles.map((file) => (
+              <div
+                key={file.id}
+                onClick={() => setPreviewFile(file)}
+                className="p-1.5 rounded-xl bg-white border border-slate-200 hover:border-emerald-400 cursor-pointer flex flex-col justify-between space-y-1"
+              >
+                <div className="w-full aspect-square rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center">
+                  {file.thumbnail || (file.type === 'image' && file.url) ? (
+                    <img src={file.thumbnail || file.url} alt="Thumb" className="w-full h-full object-cover" />
+                  ) : (
+                    <Folder className="w-5 h-5 text-emerald-600" />
+                  )}
+                </div>
+                <div className="font-semibold text-[10px] text-slate-800 truncate" title={file.name}>{file.name}</div>
+                <div className="text-[9px] text-slate-400 font-mono">{file.size}</div>
               </div>
             ))}
           </div>
@@ -563,7 +528,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                       <td className="py-3 px-3 text-slate-400 font-mono">{file.size}</td>
                       <td className="py-3 px-3 text-slate-400">{file.uploadedAt}</td>
                       <td className="py-3 px-3 text-right space-x-2">
-                        {/* View / Preview */}
                         <button
                           onClick={() => setPreviewFile(file)}
                           className="text-sky-600 hover:text-sky-700 inline-block p-1"
@@ -571,7 +535,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
-                        {/* Download */}
                         <button
                           onClick={() => handleDownloadFile(file)}
                           className="text-emerald-600 hover:text-emerald-700 inline-block p-1"
@@ -579,7 +542,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                         >
                           <Download className="w-3.5 h-3.5" />
                         </button>
-                        {/* Copy Link */}
                         <button
                           onClick={() => handleCopy(file.url)}
                           className="text-slate-500 hover:text-emerald-600 inline-block p-1"
@@ -587,7 +549,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                         >
                           <Copy className="w-3.5 h-3.5" />
                         </button>
-                        {/* Open Link */}
                         <a
                           href={file.url}
                           target="_blank"
@@ -597,7 +558,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
                         </a>
-                        {/* Delete */}
                         <button
                           onClick={() => handleDeleteFile(file.id, file.name)}
                           className="text-rose-500 hover:text-rose-700 inline-block p-1"

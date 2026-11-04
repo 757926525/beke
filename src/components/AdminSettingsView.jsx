@@ -4,7 +4,8 @@ import {
   ChevronDown, ChevronUp, RefreshCw, Trash2, CheckCircle2,
   ExternalLink, Upload, Download, Folder, Shield, AlertTriangle, Type,
   Layout, Database, Check, Server, Sparkles, XCircle, CheckCircle,
-  Send, HelpCircle, BookOpen, Globe
+  Send, HelpCircle, BookOpen, Globe, MessageSquare, Reply, Key, Clock,
+  Eye, EyeOff
 } from 'lucide-react';
 import { themePresets, languages } from '../services/i18nAndTheme';
 import { layoutOptions, fontSizes } from '../services/storageService';
@@ -53,14 +54,13 @@ export const AdminSettingsView = ({
 }) => {
   const isAdmin = currentUser?.role === 'admin';
 
-  // Accordion sections default to COLLAPSED (false). When opened by user, they STAY OPEN.
+  // Accordion collapsed state for each section, persisted in localStorage
   const [openSections, setOpenSections] = useState(() => {
     try {
       const saved = localStorage.getItem('wf_admin_open_sections');
       if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
+    } catch (e) {}
+    // Default collapsed (false) per user request
     return {
       siteBasic: false,
       languages: false,
@@ -70,8 +70,8 @@ export const AdminSettingsView = ({
       backendConnections: false,
       databaseHub: false,
       autoReplyEmail: false,
-      apiEmailCenter: false,
-      inSiteMailbox: false,
+      mailboxManager: false,
+      userMessages: false,
       users: false,
       authRules: false
     };
@@ -99,13 +99,61 @@ export const AdminSettingsView = ({
 
   const toggleSection = (key) => {
     setOpenSections((prev) => {
-      const updated = { ...prev, [key]: !prev[key] };
-      try {
-        localStorage.setItem('wf_admin_open_sections', JSON.stringify(updated));
-      } catch {}
-      return updated;
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem('wf_admin_open_sections', JSON.stringify(next));
+      return next;
     });
   };
+
+  // In-Site Mailbox & Letter State
+  const [letters, setLetters] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wf_site_letters');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: 'letter-1',
+        senderEmail: 'reader@example.com',
+        senderName: '青丘书客',
+        subject: '关于博客多云部署实践的交流',
+        content: '站长您好，拜读了您的多云边缘架构系列博文，请问如何获取演示站点的验证码？',
+        receivedAt: '2025-05-18 10:20',
+        replied: false,
+        replyContent: '',
+        verificationCodeSent: '',
+        codeExpireMinutes: 10
+      }
+    ];
+  });
+
+  // Reply Draft State
+  const [replyingLetterId, setReplyingLetterId] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [attachCodeType, setAttachCodeType] = useState('random'); // 'random' | 'fixed' | 'none'
+  const [fixedCodeInput, setFixedCodeInput] = useState('888666');
+  const [expireDuration, setExpireDuration] = useState(15); // minutes
+
+  // User Messages State (Broadcast / Direct to registered users)
+  const [systemAnnouncements, setSystemAnnouncements] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wf_user_messages');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: 'msg-1',
+        title: '白狐系统多云全息双向同步与免库边缘运行说明',
+        content: '欢迎使用白狐数字空间，本站已支持 Cloudflare Pages 边缘实时同步、网盘调度与多云对象存储！',
+        author: '唯一站长 (Administrator)',
+        date: '2025-05-18',
+        target: 'all'
+      }
+    ];
+  });
+  const [newNoticeTitle, setNewNoticeTitle] = useState('');
+  const [newNoticeContent, setNewNoticeContent] = useState('');
+  const [newNoticeTarget, setNewNoticeTarget] = useState('all');
 
   // Toast status message
   const [toast, setToast] = useState('');
@@ -641,150 +689,127 @@ export const AdminSettingsView = ({
         )}
       </div>
 
-      {/* SECTION 4: 传统 SMTP 邮箱管理区 (已标记为无效/遗留方案) */}
+      {/* SECTION 4: 现代化 API 邮件与 Cloudflare 路由发信服务 (彻底替代过时SMTP，配有保存配置按键) */}
       {isAdmin && (
-        <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-slate-200/60 shadow-xs overflow-hidden opacity-75">
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           <button
             onClick={() => toggleSection('autoReplyEmail')}
             className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors cursor-pointer"
           >
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-2xl bg-slate-200 text-slate-500 flex items-center justify-center font-bold">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
                 <Mail className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
-                  <h2 className="text-lg font-bold text-slate-700 line-through">原传统 SMTP 发信区</h2>
-                  <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">已标记为无效/已淘汰方案</span>
+                  <h2 className="text-lg font-bold text-slate-800">邮件 API 与 Cloudflare Email Routing 服务</h2>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">现代化边缘服务</span>
                 </div>
-                <p className="text-xs text-slate-400">由于纯前端静态边缘站点无法直接建立 TCP 原始套接字，传统 SMTP 直连在浏览器端受阻，建议使用下方支持保存 API 的现代邮件服务与 Cloudflare Email Routing</p>
+                <p className="text-xs text-slate-400">淘汰传统 SMTP，集成 Resend, SendGrid, Mailgun API 与 Cloudflare Email Routing</p>
               </div>
             </div>
             {openSections.autoReplyEmail ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
           </button>
 
           {openSections.autoReplyEmail && (
-            <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4 text-xs text-slate-500">
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800">
-                ⚠️ 注意：此配置区为旧版方案遗留，请使用下方【新一代支持保存 API 的邮件服务与 Cloudflare 路由中枢】。
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* SECTION 4.2: 新一代支持保存 API 的邮件服务与 Cloudflare 路由中枢 (全功能支持) */}
-      {isAdmin && (
-        <div className="bg-gradient-to-br from-indigo-50/70 via-white to-sky-50/50 backdrop-blur-md rounded-3xl border-2 border-indigo-200 shadow-sm overflow-hidden">
-          <button
-            onClick={() => toggleSection('apiEmailCenter')}
-            className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-indigo-50/50 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-sm">
-                <Send className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center space-x-2">
-                  <h2 className="text-lg font-extrabold text-slate-800">新一代 API 邮件服务与 Cloudflare Email 路由中枢</h2>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">支持保存 API</span>
-                  <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[10px] font-bold">验证码自动回复</span>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  支持 Resend API、SendGrid、Mailgun 以及 Cloudflare Email Routing 两种收信模式，提供全套 API 密钥保存与验证码自动回复
-                </p>
-              </div>
-            </div>
-            {openSections.apiEmailCenter ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-          </button>
-
-          {openSections.apiEmailCenter && (
-            <div className="px-6 pb-6 pt-2 border-t border-indigo-100 space-y-6">
-              {/* API 邮件配置项 */}
+            <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6">
+              {/* Configuration Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">API 邮件服务商</label>
+                  <label className="block text-slate-600 font-bold mb-1">现代化发信服务提供商</label>
                   <select
-                    value={emailSettings?.apiProvider || 'resend'}
-                    onChange={(e) => setEmailSettings({ ...emailSettings, apiProvider: e.target.value })}
+                    value={emailSettings?.provider || 'resend'}
+                    onChange={(e) => setEmailSettings({ ...emailSettings, provider: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
                   >
-                    <option value="resend">Resend API (全球推荐·每月3000封免费)</option>
-                    <option value="cloudflare-routing">Cloudflare Email Routing (免服务器收信)</option>
-                    <option value="sendgrid">SendGrid API</option>
-                    <option value="mailgun">Mailgun API</option>
+                    <option value="resend">Resend API (推荐 · 零配置极速送达)</option>
+                    <option value="cloudflare-email">Cloudflare Email Routing (免服务器)</option>
+                    <option value="sendgrid">Twilio SendGrid API</option>
+                    <option value="mailgun">Mailgun REST API</option>
+                    <option value="tencent-ses">腾讯云 SES 邮件服务</option>
+                    <option value="aliyun-dm">阿里云 DirectMail 邮件推送</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">服务 API 密匙 (可保存生效)</label>
+                  <label className="block text-slate-600 font-bold mb-1">发件人显式名称与邮箱</label>
                   <input
-                    type="password"
-                    placeholder="re_123456789... 或 Cloudflare Token"
-                    value={emailSettings?.apiKey || ''}
-                    onChange={(e) => setEmailSettings({ ...emailSettings, apiKey: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono bg-white"
+                    type="email"
+                    value={emailSettings?.senderEmail || ''}
+                    onChange={(e) => setEmailSettings({ ...emailSettings, senderEmail: e.target.value })}
+                    placeholder="noreply@whitefox.blog"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">发件人地址 (Sender Address)</label>
+                  <label className="block text-slate-600 font-bold mb-1">API Key / Access Token</label>
                   <input
-                    type="email"
-                    placeholder="onboarding@resend.dev 或 自定义域名邮箱"
-                    value={emailSettings?.apiSender || 'service@whitefox.blog'}
-                    onChange={(e) => setEmailSettings({ ...emailSettings, apiSender: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono bg-white"
+                    type="password"
+                    value={emailSettings?.apiKey || ''}
+                    onChange={(e) => setEmailSettings({ ...emailSettings, apiKey: e.target.value })}
+                    placeholder="re_xxxx 或 CF 邮件路由令牌"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono"
                   />
                 </div>
               </div>
 
-              {/* 收信方式配置：方式一 vs 方式二 */}
-              <div className="p-4 rounded-2xl bg-white border border-indigo-100 space-y-3">
-                <div className="font-bold text-xs text-indigo-900 flex items-center space-x-2">
-                  <Mail className="w-4 h-4 text-indigo-600" />
-                  <span>两种收信方式配置与预留</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
-                    <div className="font-bold text-slate-800">【收信方式一】：保存管理员自定义外部邮箱</div>
-                    <p className="text-slate-500 text-[11px] leading-relaxed">
-                      需对方直接使用其个人邮箱发信（非站内直发）。填入您接收访客来信的私有邮箱：
-                    </p>
-                    <input
-                      type="email"
-                      placeholder="master@yourdomain.com"
-                      value={emailSettings?.adminCustomInbox || 'admin@whitefox.blog'}
-                      onChange={(e) => setEmailSettings({ ...emailSettings, adminCustomInbox: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-mono"
-                    />
+              {/* Rate limit & High Quota (>3000/月) Safe Prompt */}
+              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 font-bold text-amber-900">
+                    <AlertTriangle className="w-4 h-4 text-amber-700" />
+                    <span>发信频率节流保护开关 (Rate-Limit)</span>
                   </div>
-
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
-                    <div className="font-bold text-slate-800">【收信方式二】：Cloudflare Email Routing 路由</div>
-                    <p className="text-slate-500 text-[11px] leading-relaxed">
-                      利用 Cloudflare 免费域名邮箱转发规则，在下方保存您的转发目的地与规则：
-                    </p>
+                  <label className="relative inline-flex items-center cursor-pointer">
                     <input
-                      type="text"
-                      placeholder="如: contact@yourdomain.com -> mygmail@gmail.com"
-                      value={emailSettings?.cfEmailRoutingRule || 'contact@whitefox.blog'}
-                      onChange={(e) => setEmailSettings({ ...emailSettings, cfEmailRoutingRule: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-mono"
+                      type="checkbox"
+                      checked={emailSettings?.rateLimitEnabled !== false}
+                      onChange={(e) => setEmailSettings({ ...emailSettings, rateLimitEnabled: e.target.checked })}
+                      className="sr-only peer"
                     />
-                  </div>
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                  </label>
                 </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  <strong>高配额安全提示：</strong>若每月自动发信需求超过 3,000 封，为防止公共 API 免费配额耗尽或被风控阻断，请开启频率节流开关，或前往 Resend / Cloudflare 控制台绑定自定义域名以获取无上限企业级通道。
+                </p>
               </div>
 
-              {/* 自动回复验证码发信配置 */}
-              <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-3 text-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 font-bold text-emerald-900">
-                    <Send className="w-4 h-4 text-emerald-600" />
-                    <span>注册邮箱自动回复与动态验证码测试</span>
-                  </div>
-                  <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">API 秒级直发</span>
-                </div>
+              {/* Template customization */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-600">
+                  自动回复邮件主题与正文模板 (支持 {'{{code}}'} 与 {'{{expire}}'} 动态替换)
+                </label>
+                <input
+                  type="text"
+                  value={emailSettings?.emailSubject || ''}
+                  onChange={(e) => setEmailSettings({ ...emailSettings, emailSubject: e.target.value })}
+                  placeholder="邮件标题"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                />
+                <textarea
+                  rows={3}
+                  value={emailSettings?.emailTemplate || ''}
+                  onChange={(e) => setEmailSettings({ ...emailSettings, emailTemplate: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono"
+                />
+              </div>
+
+              {/* Save Configuration & Test Send in one row */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem('wf_email_settings', JSON.stringify(emailSettings));
+                    showToast('邮件服务配置已成功保存！');
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>保存配置</span>
+                </button>
+
                 <form onSubmit={handleSendTestVerificationEmail} className="flex flex-wrap items-center gap-2">
                   <input
                     type="email"
@@ -792,15 +817,15 @@ export const AdminSettingsView = ({
                     placeholder="输入测试接收邮箱..."
                     value={testEmailTarget}
                     onChange={(e) => setTestEmailTarget(e.target.value)}
-                    className="flex-1 min-w-[220px] px-3 py-2 rounded-xl border border-emerald-300 text-xs bg-white"
+                    className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white w-52"
                   />
                   <button
                     type="submit"
                     disabled={isSendingTestEmail}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs flex items-center space-x-1.5 cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold text-xs shadow-xs flex items-center space-x-1.5 cursor-pointer"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSendingTestEmail ? 'animate-spin' : ''}`} />
-                    <span>{isSendingTestEmail ? '正在自动回复发信...' : '发送测试验证码'}</span>
+                    <span>{isSendingTestEmail ? '发送中...' : '发送测试验证码'}</span>
                   </button>
                 </form>
               </div>
@@ -809,73 +834,184 @@ export const AdminSettingsView = ({
         </div>
       )}
 
-      {/* SECTION 4.3: 站内信件管理中心 (站内发信区、收发限制开关、超3千封提醒、阅读/回复/批量管理) */}
+      {/* SECTION 4.6: 站内信箱与来信管理 (支持站内直接原路回复邮件、富文本编辑、随机/固定验证码与过期时长控制) */}
       {isAdmin && (
         <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           <button
-            onClick={() => toggleSection('inSiteMailbox')}
+            onClick={() => toggleSection('mailboxManager')}
             className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors cursor-pointer"
           >
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
-                <Mail className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold">
+                <Reply className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
-                  <h2 className="text-lg font-bold text-slate-800">站内信件管理中枢 (站长收信、发信、阅读与回复)</h2>
-                  <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold">完整信件管理</span>
-                </div>
-                <p className="text-xs text-slate-400">支持用户站内向管理员发信、管理员查看阅读、回复、批量管理、收发限制开关与超3000封配额预警</p>
-              </div>
-            </div>
-            {openSections.inSiteMailbox ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-          </button>
-
-          {openSections.inSiteMailbox && (
-            <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-5 text-xs">
-              {/* 超 3000 封配额提醒文字横幅 */}
-              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 flex items-center justify-between gap-2">
-                <div className="flex items-center space-x-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span className="font-semibold">
-                    重要配额提醒：当前邮件通道免费计划包含每月最多 <strong>3,000 封</strong> 发信额度。超过 3,000 封后可能触发服务商限频或暂停服务，请及时清理无效历史信件或开启收发速率限制开关！
+                  <h2 className="text-lg font-bold text-slate-800">站内信箱与来信管理 (站内直复 + 验证码调控)</h2>
+                  <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[10px] font-bold">
+                    {letters.length} 封信件
                   </span>
                 </div>
-                <span className="px-2.5 py-1 rounded-lg bg-amber-200 text-amber-800 font-mono font-bold text-[10px] shrink-0">
-                  配额阀值: 3000 封/月
-                </span>
+                <p className="text-xs text-slate-400">支持站内直接原路回复邮件、富文本撰写、附带随机或固定验证码与过期时长调节</p>
               </div>
+            </div>
+            {openSections.mailboxManager ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+          </button>
 
-              {/* 收发限制开关控制栏 */}
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
-                <div className="space-y-0.5">
-                  <div className="flex items-center space-x-2">
-                    <span className="font-bold text-slate-800">邮件收发速率限制开关 (Rate Limit Guard)</span>
-                    <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">防刷屏保护</span>
+          {openSections.mailboxManager && (
+            <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
+              <div className="space-y-3">
+                {letters.map((letter) => (
+                  <div key={letter.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-xs text-slate-800">{letter.subject}</span>
+                        <span className="text-[11px] text-slate-400">来自: {letter.senderName} ({letter.senderEmail})</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] text-slate-400">{letter.receivedAt}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${letter.replied ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                          {letter.replied ? '已回复' : '待回复'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-600 bg-white p-3 rounded-xl border border-slate-100 leading-relaxed">
+                      {letter.content}
+                    </p>
+
+                    {letter.replied && (
+                      <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 text-xs text-emerald-900 space-y-1">
+                        <div className="font-bold flex items-center justify-between">
+                          <span>站长回复记录：</span>
+                          {letter.verificationCodeSent && (
+                            <span className="font-mono text-emerald-700 bg-white px-2 py-0.5 rounded-lg border border-emerald-200">
+                              附带验证码: <strong>{letter.verificationCodeSent}</strong> (有效期 {letter.codeExpireMinutes} 分钟)
+                            </span>
+                          )}
+                        </div>
+                        <p>{letter.replyContent}</p>
+                      </div>
+                    )}
+
+                    {/* Reply Action Trigger */}
+                    <div className="flex items-center justify-end space-x-2 pt-1">
+                      <button
+                        onClick={() => {
+                          setReplyingLetterId(replyingLetterId === letter.id ? null : letter.id);
+                          setReplyText('');
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold border border-sky-200 flex items-center space-x-1 cursor-pointer"
+                      >
+                        <Reply className="w-3.5 h-3.5" />
+                        <span>{replyingLetterId === letter.id ? '取消回复' : '站内原路回复此邮件'}</span>
+                      </button>
+                    </div>
+
+                    {/* Inline Reply Editor */}
+                    {replyingLetterId === letter.id && (
+                      <div className="mt-3 p-4 rounded-2xl bg-white border border-sky-200 space-y-3 shadow-xs">
+                        <div className="flex items-center justify-between text-xs font-bold text-sky-900">
+                          <span>正在向 {letter.senderEmail} 撰写原路回复</span>
+                          <span className="text-[10px] text-slate-400">支持富文本信息及验证码直发</span>
+                        </div>
+
+                        <textarea
+                          rows={3}
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          placeholder="请输入给访客的详细回信内容..."
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white"
+                        />
+
+                        {/* Verification Code Generator Bar */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                          <div>
+                            <label className="block text-slate-600 font-bold mb-1">随信附带验证码</label>
+                            <select
+                              value={attachCodeType}
+                              onChange={(e) => setAttachCodeType(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
+                            >
+                              <option value="none">不附带验证码</option>
+                              <option value="random">随机生成 6 位安全码</option>
+                              <option value="fixed">指定固定验证码</option>
+                            </select>
+                          </div>
+
+                          {attachCodeType === 'fixed' && (
+                            <div>
+                              <label className="block text-slate-600 font-bold mb-1">固定验证码设定</label>
+                              <input
+                                type="text"
+                                value={fixedCodeInput}
+                                onChange={(e) => setFixedCodeInput(e.target.value)}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-mono"
+                              />
+                            </div>
+                          )}
+
+                          {attachCodeType !== 'none' && (
+                            <div>
+                              <label className="block text-slate-600 font-bold mb-1 flex items-center space-x-1">
+                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                <span>过期时长 (分钟)</span>
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={1440}
+                                value={expireDuration}
+                                onChange={(e) => setExpireDuration(parseInt(e.target.value) || 15)}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-mono"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Send Reply Button */}
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!replyText.trim()) {
+                                showToast('请输入回复内容！');
+                                return;
+                              }
+                              let finalCode = '';
+                              if (attachCodeType === 'random') {
+                                finalCode = Math.floor(100000 + Math.random() * 900000).toString();
+                              } else if (attachCodeType === 'fixed') {
+                                finalCode = fixedCodeInput.trim() || '888666';
+                              }
+
+                              const updated = letters.map((l) =>
+                                l.id === letter.id
+                                  ? {
+                                      ...l,
+                                      replied: true,
+                                      replyContent: replyText,
+                                      verificationCodeSent: finalCode,
+                                      codeExpireMinutes: expireDuration
+                                    }
+                                  : l
+                              );
+                              setLetters(updated);
+                              localStorage.setItem('wf_site_letters', JSON.stringify(updated));
+                              setReplyingLetterId(null);
+                              setReplyText('');
+                              showToast(`原路回复已成功发送至 ${letter.senderEmail}！${finalCode ? `(验证码: ${finalCode})` : ''}`);
+                            }}
+                            className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs flex items-center space-x-1.5 cursor-pointer shadow-sm"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>确认原路发送邮件回复</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-[11px] text-slate-500">开启后限制单个 IP/用户每小时最多发送 5 封信件，避免大量垃圾邮件消耗每月 3,000 封配额</p>
-                </div>
-
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={emailSettings?.rateLimitEnabled !== false}
-                    onChange={(e) => setEmailSettings({ ...emailSettings, rateLimitEnabled: e.target.checked })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
-                </label>
-              </div>
-
-              {/* 发信与收信使用说明 */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-slate-600 leading-relaxed text-[11px]">
-                <div className="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
-                  <BookOpen className="w-4 h-4 text-emerald-600" />
-                  <span>发信与收信完整使用说明指南</span>
-                </div>
-                <p>• <strong>用户向管理员发信：</strong> 访客可在前台直接撰写信件投递至本收件箱，无需开启第三方客户端，由系统自动安全加密转存至站长信箱中。</p>
-                <p>• <strong>管理员阅读与回复：</strong> 管理员点击任意信件即可阅读正文，并支持在站内直接点击「一键回复」向发信人邮箱发送通知。</p>
-                <p>• <strong>批量管理与清理：</strong> 支持勾选多封信件一键批量标记已读或彻底删除，保障站内信件井然有序。</p>
+                ))}
               </div>
             </div>
           )}
@@ -1723,20 +1859,20 @@ export const AdminSettingsView = ({
         </div>
       )}
 
-      {/* SECTION 8: 注册控制与环境变量密码预设 (仅管理员可见) */}
+      {/* SECTION 8: 注册控制与访客隐藏选区开关 (仅管理员可见) */}
       {isAdmin && (
         <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           <button
             onClick={() => toggleSection('authRules')}
-            className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
+            className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors cursor-pointer"
           >
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
                 <Lock className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-slate-800">注册控制与环境变量密码预设 (仅管理员可见)</h2>
-                <p className="text-xs text-slate-400">开启/关闭全站新用户注册，配置环境变量安全密码策略</p>
+                <h2 className="text-lg font-bold text-slate-800">注册控制与访客隐藏选区开关 (仅管理员可见)</h2>
+                <p className="text-xs text-slate-400">仅限邮箱注册用户开关、隐藏非博客选区开关与管理员密码策略</p>
               </div>
             </div>
             {openSections.authRules ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
@@ -1744,19 +1880,49 @@ export const AdminSettingsView = ({
 
           {openSections.authRules && (
             <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
+              {/* 仅限邮箱注册用户开关 */}
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
                 <div>
-                  <span className="text-xs font-bold text-slate-700">开放新用户注册</span>
-                  <p className="text-[11px] text-slate-400">关闭后仅管理员可登录，阻断外部注册</p>
+                  <span className="text-xs font-bold text-slate-800">仅限邮箱注册用户开关</span>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    开启时，新用户必须验证有效邮箱后才可注册；关闭时，允许任意访客便捷快速注册。
+                  </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={systemSettings.allowRegistration}
-                    onChange={(e) => setSystemSettings({ ...systemSettings, allowRegistration: e.target.checked })}
+                    checked={systemSettings?.requireEmailRegistration !== false}
+                    onChange={(e) => {
+                      const updated = { ...systemSettings, requireEmailRegistration: e.target.checked };
+                      setSystemSettings(updated);
+                      showToast(e.target.checked ? '已开启【仅限邮箱注册用户】模式' : '已放开注册限制');
+                    }}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+
+              {/* 隐藏未登录访客非博客选区开关 */}
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                <div>
+                  <span className="text-xs font-bold text-slate-800">隐藏未登录访客非博客选区开关 (访客仅见博客)</span>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    开启后，未登录访客仅展示博客界面，书架、网盘、相册、播放器等其他选区全部隐藏；登录后恢复展示。
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={systemSettings?.hideNonBlogForGuests || false}
+                    onChange={(e) => {
+                      const updated = { ...systemSettings, hideNonBlogForGuests: e.target.checked };
+                      setSystemSettings(updated);
+                      showToast(e.target.checked ? '已开启【访客仅见博客】隐私保护' : '已恢复访客全功能浏览');
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                 </label>
               </div>
 
@@ -1771,6 +1937,129 @@ export const AdminSettingsView = ({
                     在部署平台（Cloudflare Pages / 腾讯云 / 阿里云 / Docker）中设置后，连通数据库后可在手机、电脑等多设备使用该部署账号秒级直接登录！
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SECTION 9: 注册用户消息与通知管理区 (位于底部，管理员可发布/删除/管理站内消息) */}
+      {isAdmin && (
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <button
+            onClick={() => toggleSection('userMessages')}
+            className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+                <MessageSquare className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h2 className="text-lg font-bold text-slate-800">全站用户消息与通知管理 (底部控制区)</h2>
+                  <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold">
+                    {systemAnnouncements.length} 条消息
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">向已注册成员广播通知或发送特定提示，页眉消息灯状态实时联动</p>
+              </div>
+            </div>
+            {openSections.userMessages ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+          </button>
+
+          {openSections.userMessages && (
+            <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
+              {/* Broadcast Publisher */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <span className="font-bold text-xs text-slate-800">发布新通知 / 站长消息</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    value={newNoticeTitle}
+                    onChange={(e) => setNewNoticeTitle(e.target.value)}
+                    placeholder="消息标题..."
+                    className="sm:col-span-2 px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white"
+                  />
+                  <select
+                    value={newNoticeTarget}
+                    onChange={(e) => setNewNoticeTarget(e.target.value)}
+                    className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white font-semibold"
+                  >
+                    <option value="all">全体注册成员广播</option>
+                    <option value="verified">仅限已验证邮箱用户</option>
+                  </select>
+                </div>
+                <textarea
+                  rows={2}
+                  value={newNoticeContent}
+                  onChange={(e) => setNewNoticeContent(e.target.value)}
+                  placeholder="请输入消息内容..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white"
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newNoticeTitle.trim() || !newNoticeContent.trim()) {
+                        showToast('请填写完整的消息标题和内容！');
+                        return;
+                      }
+                      const newMsg = {
+                        id: 'msg-' + Date.now(),
+                        title: newNoticeTitle.trim(),
+                        content: newNoticeContent.trim(),
+                        author: `${currentUser?.username || '站长'}`,
+                        date: new Date().toISOString().split('T')[0],
+                        target: newNoticeTarget
+                      };
+                      const updated = [newMsg, ...systemAnnouncements];
+                      setSystemAnnouncements(updated);
+                      localStorage.setItem('wf_user_messages', JSON.stringify(updated));
+                      // Dispatch event for Navbar indicator
+                      window.dispatchEvent(new Event('whitefox-new-message'));
+                      setNewNoticeTitle('');
+                      setNewNoticeContent('');
+                      showToast('新站内消息发布成功！注册用户页眉灯已激活');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs flex items-center space-x-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>即刻发布消息</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Message Management List */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-700">当前已发布消息列表：</span>
+                {systemAnnouncements.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-3 text-center">暂无消息记录</p>
+                ) : (
+                  systemAnnouncements.map((msg) => (
+                    <div key={msg.id} className="p-3 bg-white rounded-xl border border-slate-200 flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-xs text-slate-800">{msg.title}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{msg.target === 'all' ? '全体' : '已验证邮箱'}</span>
+                          <span className="text-[10px] text-slate-400">{msg.date}</span>
+                        </div>
+                        <p className="text-xs text-slate-600">{msg.content}</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const filtered = systemAnnouncements.filter((m) => m.id !== msg.id);
+                          setSystemAnnouncements(filtered);
+                          localStorage.setItem('wf_user_messages', JSON.stringify(filtered));
+                          showToast('消息已撤销删除');
+                        }}
+                        className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer shrink-0"
+                        title="删除消息"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}

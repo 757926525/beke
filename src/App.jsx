@@ -397,6 +397,7 @@ export function App() {
           headerCollapsed={headerCollapsed}
           setHeaderCollapsed={setHeaderCollapsed}
           currentTheme={currentTheme}
+          systemSettings={systemSettings}
           onSync={handleSyncD1}
           t={t}
         />

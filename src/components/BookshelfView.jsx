@@ -14,8 +14,6 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
   const [mobileFullscreen, setMobileFullscreen] = useState(false);
   const [readerFontSize, setReaderFontSize] = useState('text-base');
   const [showChapterMenu, setShowChapterMenu] = useState(false);
-  const [bookshelfViewMode, setBookshelfViewMode] = useState('grid'); // 'grid' (大图) | 'list' (详细列表)
-  const [bookSearchQuery, setBookSearchQuery] = useState('');
 
   // Admin / Upload / Edit Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -145,62 +143,54 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
     setIsModalOpen(true);
   };
 
-  // Local file upload parser for all web-viewable documents (.txt, .md, .pdf, .html, .json, .csv)
-  const handleLocalFileUpload = async (e) => {
+  // Local file upload parser strictly for TXT format
+  const handleLocalFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const fileName = file.name.replace(/\.[^/.]+$/, '');
-    const ext = (file.name.split('.').pop() || 'TXT').toUpperCase();
-
-    // If PDF, store as viewable PDF object data
-    if (ext === 'PDF' || file.type === 'application/pdf') {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setBookForm((prev) => ({
-          ...prev,
-          title: prev.title || fileName,
-          format: 'PDF',
-          content: `[PDF文档] 该文档已成功挂载，支持在内置阅读视窗或浏览器中直接查看。`,
-          fileUrl: event.target.result
-        }));
-        showToast(`已成功载入本地 PDF 文档「${file.name}」！`);
-      };
-      reader.readAsDataURL(file);
+    if (!file.name.toLowerCase().endsWith('.txt') && !file.type.includes('text')) {
+      showToast('温馨提示：本藏书阁仅支持 TXT 格式纯文本图书！');
+      e.target.value = '';
       return;
     }
 
-    // For TXT, Markdown, HTML, JSON, CSV
+    const fileName = file.name.replace(/\.[^/.]+$/, '');
     const reader = new FileReader();
     reader.onload = (event) => {
       const rawText = event.target.result;
       setBookForm((prev) => ({
         ...prev,
         title: prev.title || fileName,
-        format: ext,
+        format: 'TXT',
         content: typeof rawText === 'string' ? rawText : ''
       }));
-      showToast(`已成功载入本地文档「${file.name}」(${ext})！`);
+      showToast(`已成功载入本地 TXT 文本「${file.name}」！`);
     };
     reader.readAsText(file);
   };
 
-  // Batch file select handler (support all web-viewable documents)
+  // Batch file select handler (strictly TXT)
   const handleBatchFilesSelect = (e) => {
     const allFiles = Array.from(e.target.files || []);
-    if (!allFiles.length) {
-      showToast('请选择文档或图书文件！');
+    const validTxtFiles = allFiles.filter(f => f.name.toLowerCase().endsWith('.txt') || f.type.includes('text'));
+
+    if (validTxtFiles.length < allFiles.length) {
+      showToast(`已过滤掉非 TXT 文件，仅支持导入 TXT 格式图书！`);
+    }
+
+    if (!validTxtFiles.length) {
+      showToast('请选择 .txt 格式纯文本文件！');
       return;
     }
 
-    setBatchFiles(allFiles);
-    showToast(`已选入 ${allFiles.length} 份文档！`);
+    setBatchFiles(validTxtFiles);
+    showToast(`已选入 ${validTxtFiles.length} 份 TXT 文本图书！`);
   };
 
-  // Batch import files directly to bookshelf
+  // Batch import TXT files directly to bookshelf
   const handleProcessBatchImport = async () => {
     if (!batchFiles.length) {
-      showToast('请先选择需要批量导入的文档！');
+      showToast('请先选择需要批量导入的 TXT 文档！');
       return;
     }
 
@@ -209,40 +199,26 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
 
     try {
       for (const file of batchFiles) {
-        const ext = (file.name.split('.').pop() || 'TXT').toUpperCase();
-        let content = '';
-        let fileUrl = '';
-        let chapters = [];
+        const content = await file.text();
+        const lines = content.split('\n');
+        const chapters = [];
+        let currentChapter = { title: '第一章 · 引言', content: '' };
 
-        if (ext === 'PDF' || file.type === 'application/pdf') {
-          fileUrl = await new Promise((resolve) => {
-            const r = new FileReader();
-            r.onload = () => resolve(r.result);
-            r.readAsDataURL(file);
-          });
-          content = `[PDF文件] 格式为 PDF，支持网页在线查看。`;
-          chapters = [{ title: 'PDF 浏览视图', content }];
-        } else {
-          content = await file.text();
-          const lines = content.split('\n');
-          let currentChapter = { title: '第一章 · 引言', content: '' };
-
-          lines.forEach((line) => {
-            if (line.startsWith('#') || line.startsWith('第') || line.startsWith('Chapter') || line.startsWith('卷')) {
-              if (currentChapter.content.trim()) {
-                chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
-              }
-              currentChapter = { title: line.replace(/^[#\s]+/, '').trim(), content: '' };
-            } else {
-              currentChapter.content += line + '\n';
+        lines.forEach((line) => {
+          if (line.startsWith('#') || line.startsWith('第') || line.startsWith('Chapter') || line.startsWith('卷')) {
+            if (currentChapter.content.trim()) {
+              chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
             }
-          });
-          if (currentChapter.content.trim()) {
-            chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
+            currentChapter = { title: line.replace(/^[#\s]+/, '').trim(), content: '' };
+          } else {
+            currentChapter.content += line + '\n';
           }
-          if (chapters.length === 0) {
-            chapters.push({ title: '全本正文', content });
-          }
+        });
+        if (currentChapter.content.trim()) {
+          chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
+        }
+        if (chapters.length === 0) {
+          chapters.push({ title: '全本正文', content });
         }
 
         const newBook = {
@@ -250,14 +226,13 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
           title: file.name.replace(/\.[^/.]+$/, ''),
           author: currentUser?.username || '批量上架',
           userId: currentUser?.id || 'guest',
-          category: ext === 'PDF' ? 'PDF典藏' : '经典文集',
-          format: ext,
-          fileUrl: fileUrl || '',
+          category: '经典文集',
+          format: 'TXT',
           size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
           progress: 0,
           totalChapters: chapters.length,
           cover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
-          description: `批量上传入库的文档 (${file.name})。`,
+          description: `批量上传入库的纯文本电子书 (${file.name})。`,
           dateAdded: new Date().toISOString().split('T')[0],
           chapters: chapters
         };
@@ -266,7 +241,7 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
       }
 
       setBooks([...newBooksToAdd, ...books]);
-      showToast(`成功批量上架 ${newBooksToAdd.length} 本文档至书架！`);
+      showToast(`成功批量上架 ${newBooksToAdd.length} 本 TXT 图书至书架！`);
       setBatchFiles([]);
       setIsBatchModalOpen(false);
     } catch (err) {
@@ -575,184 +550,81 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
         </span>
       </div>
 
-      {/* Search & View Mode Toggle Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white/70 backdrop-blur-md p-3.5 rounded-2xl border border-slate-200/80 text-xs">
-        <div className="flex items-center space-x-2 flex-1 max-w-sm">
-          <input
-            type="text"
-            placeholder="搜索书名、作者或分类..."
-            value={bookSearchQuery}
-            onChange={(e) => setBookSearchQuery(e.target.value)}
-            className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white"
-          />
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <span className="text-slate-400">显示模式:</span>
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl">
-            <button
-              onClick={() => setBookshelfViewMode('grid')}
-              className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                bookshelfViewMode === 'grid' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              大图模式
-            </button>
-            <button
-              onClick={() => setBookshelfViewMode('list')}
-              className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                bookshelfViewMode === 'list' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              详细列表
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Book Grid or Detailed List View */}
-      {bookshelfViewMode === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {books
-            .filter((b) => !bookSearchQuery || b.title.includes(bookSearchQuery) || b.author.includes(bookSearchQuery))
-            .map((book) => (
-            <div
-              key={book.id}
-              className="bg-white/80 backdrop-blur-md rounded-3xl p-5 border border-slate-200/80 shadow-xs hover:shadow-xl transition-all flex flex-col justify-between group relative"
-            >
-              <div>
-                <div className="relative aspect-[3/4] rounded-2xl overflow-hidden mb-4 bg-slate-100 shadow-inner">
-                  <img
-                    src={book.cover}
-                    alt={book.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute top-3 left-3 px-2 py-1 rounded-full bg-black/60 backdrop-blur-xs text-[10px] text-white font-mono">
-                    {book.format || 'TXT'} · {book.size || '1.0 MB'}
-                  </div>
-                  <div className="absolute top-3 right-3 px-2 py-1 rounded-full bg-emerald-600 text-[10px] text-white font-mono">
-                    {book.chapters?.length || book.totalChapters || 1} 章节
-                  </div>
-
-                  {canManageBook(book) && (
-                    <div className="absolute bottom-3 right-3 flex items-center space-x-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => handleOpenEditModal(book, e)}
-                        className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-slate-700 shadow-sm cursor-pointer"
-                        title="编辑图书信息"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={(e) => handleDeleteBook(book.id, book.title, e)}
-                        className="p-1.5 rounded-lg bg-rose-500/90 hover:bg-rose-600 text-white shadow-sm cursor-pointer"
-                        title="下架删除图书"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
+      {/* Book Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {books.map((book) => (
+          <div
+            key={book.id}
+            className="bg-white/80 backdrop-blur-md rounded-3xl p-5 border border-slate-200/80 shadow-xs hover:shadow-xl transition-all flex flex-col justify-between group relative"
+          >
+            <div>
+              <div className="relative aspect-[3/4] rounded-2xl overflow-hidden mb-4 bg-slate-100 shadow-inner">
+                <img
+                  src={book.cover}
+                  alt={book.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute top-3 left-3 px-2 py-1 rounded-full bg-black/60 backdrop-blur-xs text-[10px] text-white font-mono">
+                  TXT · {book.size || '1.0 MB'}
+                </div>
+                <div className="absolute top-3 right-3 px-2 py-1 rounded-full bg-emerald-600 text-[10px] text-white font-mono">
+                  {book.chapters?.length || book.totalChapters || 1} 章节
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700">
-                    {book.category || '通识读物'}
-                  </span>
-                  <span className="text-[10px] text-slate-400">收录: {book.dateAdded || '近期'}</span>
-                </div>
-
-                <h2 className="text-base font-bold text-slate-800 group-hover:text-emerald-600 transition-colors mt-2">
-                  {book.title}
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">作者: {book.author}</p>
-                <p className="text-xs text-slate-500 mt-2 line-clamp-2">{book.description}</p>
+                {/* Owner or Admin Quick Action Floating Buttons */}
+                {canManageBook(book) && (
+                  <div className="absolute bottom-3 right-3 flex items-center space-x-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => handleOpenEditModal(book, e)}
+                      className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-slate-700 shadow-sm cursor-pointer"
+                      title="编辑图书信息"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteBook(book.id, book.title, e)}
+                      className="p-1.5 rounded-lg bg-rose-500/90 hover:bg-rose-600 text-white shadow-sm cursor-pointer"
+                      title="下架删除图书"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
 
-              <div className="pt-4 border-t border-slate-100 mt-4 flex items-center space-x-2">
-                <button
-                  onClick={() => openBook(book)}
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs transition-colors"
-                >
-                  <BookOpen className="w-3.5 h-3.5" />
-                  <span>进入沉浸阅读</span>
-                </button>
-                <button
-                  onClick={(e) => handleDownloadBook(book, e)}
-                  className="px-3 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-emerald-700 text-xs font-semibold flex items-center justify-center transition-colors"
-                  title="导出下载到本地"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                </button>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700">
+                  {book.category || '通识读物'}
+                </span>
+                <span className="text-[10px] text-slate-400">收录: {book.dateAdded || '近期'}</span>
               </div>
+
+              <h2 className="text-base font-bold text-slate-800 group-hover:text-emerald-600 transition-colors mt-2">
+                {book.title}
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">作者: {book.author}</p>
+              <p className="text-xs text-slate-500 mt-2 line-clamp-2">{book.description}</p>
             </div>
-          ))}
-        </div>
-      ) : (
-        /* Detailed List Table */
-        <div className="bg-white/80 backdrop-blur-md rounded-2xl border border-slate-200/80 overflow-x-auto shadow-xs">
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-[10px] border-b border-slate-200">
-              <tr>
-                <th className="py-3 px-4">书名 / 封面</th>
-                <th className="py-3 px-3">作者</th>
-                <th className="py-3 px-3">分类</th>
-                <th className="py-3 px-3">格式</th>
-                <th className="py-3 px-3">章节数</th>
-                <th className="py-3 px-3">收录日期</th>
-                <th className="py-3 px-4 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {books
-                .filter((b) => !bookSearchQuery || b.title.includes(bookSearchQuery) || b.author.includes(bookSearchQuery))
-                .map((book) => (
-                  <tr key={book.id} className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-4 flex items-center space-x-3">
-                      <img src={book.cover} alt="Cover" className="w-8 h-10 object-cover rounded-md border border-slate-200 shrink-0" />
-                      <div>
-                        <div className="font-bold text-slate-800 text-xs">{book.title}</div>
-                        <div className="text-[10px] text-slate-400 line-clamp-1">{book.description}</div>
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-3 font-medium text-slate-700">{book.author}</td>
-                    <td className="py-2.5 px-3">
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold text-[10px]">
-                        {book.category}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-[10px]">{book.format || 'TXT'}</td>
-                    <td className="py-2.5 px-3 font-mono">{book.chapters?.length || 1} 章</td>
-                    <td className="py-2.5 px-3 text-slate-400 text-[11px]">{book.dateAdded || '近期'}</td>
-                    <td className="py-2.5 px-4 text-right space-x-1.5">
-                      <button
-                        onClick={() => openBook(book)}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-                      >
-                        阅读
-                      </button>
-                      <button
-                        onClick={(e) => handleDownloadBook(book, e)}
-                        className="p-1 rounded-lg text-slate-500 hover:text-emerald-600"
-                        title="下载"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </button>
-                      {canManageBook(book) && (
-                        <button
-                          onClick={(e) => handleDeleteBook(book.id, book.title, e)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-rose-600"
-                          title="删除"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+
+            <div className="pt-4 border-t border-slate-100 mt-4 flex items-center space-x-2">
+              <button
+                onClick={() => openBook(book)}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs transition-colors"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>进入沉浸阅读</span>
+              </button>
+              <button
+                onClick={(e) => handleDownloadBook(book, e)}
+                className="px-3 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-emerald-700 text-xs font-semibold flex items-center justify-center transition-colors"
+                title="导出下载 TXT 到本地"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Batch TXT Upload Modal */}
       {isBatchModalOpen && (
@@ -878,23 +750,23 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
             </div>
 
             <form onSubmit={handleSaveBook} className="space-y-4 text-xs">
-              {/* Local Document File Selector (All web-viewable formats) */}
+              {/* Local TXT File Selector */}
               <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-emerald-900">选择本地文档/电子书 (支持TXT/PDF/MD/HTML/JSON)</span>
+                  <span className="font-bold text-emerald-900">快速读取本地 TXT 文件</span>
                   <label className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer font-semibold flex items-center space-x-1 shadow-xs">
                     <Upload className="w-3.5 h-3.5" />
-                    <span>选择本地文件</span>
+                    <span>选择本地 TXT</span>
                     <input
                       type="file"
-                      accept=".txt,.pdf,.md,.html,.json,.csv,text/*,application/pdf"
+                      accept=".txt,text/plain"
                       onChange={handleLocalFileUpload}
                       className="hidden"
                     />
                   </label>
                 </div>
                 <p className="text-[11px] text-emerald-700">
-                  全面支持网页可查看的文档格式，支持自动解析分章与内置沉浸阅读器挂载。
+                  支持自动解析标题、提取分章节目录，构建原汁原味的沉浸式阅读器。
                 </p>
               </div>
 

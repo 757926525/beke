@@ -46,13 +46,20 @@ export const DownloaderView = ({ t }) => {
     }
   ]);
 
+  const [previewMedia, setPreviewMedia] = useState(null);
+
   const bitrateOptions = [
     { id: '4k', label: '4K 2160p 原画极清', bitrate: '24 Mbps', format: 'MP4 / H.265' },
     { id: '2k', label: '2K 1440p 2K高清', bitrate: '12 Mbps', format: 'MP4 / H.264' },
     { id: '1080p60', label: '1080p 60帧 高帧率', bitrate: '8.5 Mbps', format: 'MP4 / H.264' },
     { id: '1080p', label: '1080p 全高清 (推荐)', bitrate: '5.0 Mbps', format: 'MP4' },
-    { id: '720p', label: '720p 高清省流', bitrate: '2.5 Mbps', format: 'MP4' },
-    { id: 'audio', label: '仅提取音频 (320kbps FLAC/MP3)', bitrate: '320 kbps', format: 'MP3 / FLAC' }
+    { id: '720p', label: '720p 高清', bitrate: '2.5 Mbps', format: 'MP4' },
+    { id: '480p', label: '480p 标清', bitrate: '1.2 Mbps', format: 'MP4' },
+    { id: '360p', label: '360p 低清流畅', bitrate: '700 kbps', format: 'MP4 / 移动端省流' },
+    { id: '240p', label: '240p 极速低分辨率', bitrate: '400 kbps', format: 'MP4 / 极低网络占用' },
+    { id: '144p', label: '144p 极致省流', bitrate: '200 kbps', format: 'MP4 / 慢速网络首选' },
+    { id: 'audio', label: '仅提取音频 (320kbps FLAC/MP3)', bitrate: '320 kbps', format: 'MP3 / FLAC' },
+    { id: 'audio_low', label: '低码率音频 (64kbps 语音省流)', bitrate: '64 kbps', format: 'MP3 / AAC' }
   ];
 
   const handleStartDownload = (e) => {
@@ -265,20 +272,53 @@ export const DownloaderView = ({ t }) => {
               </div>
 
               <div className="flex items-center space-x-2 self-end sm:self-center">
+                <button
+                  onClick={() => setPreviewMedia(item)}
+                  className="px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-semibold flex items-center space-x-1 transition-colors cursor-pointer"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  <span>在线查看/播放</span>
+                </button>
                 <a
                   href={item.url}
+                  download={item.title}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-xs text-slate-600 font-semibold flex items-center space-x-1 transition-colors"
+                  className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold flex items-center space-x-1 transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>导出本地</span>
+                  <span>下载文件</span>
                 </a>
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Online Preview Modal */}
+      {previewMedia && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-sm text-slate-800 truncate">{previewMedia.title}</h3>
+              <button onClick={() => setPreviewMedia(null)} className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer">✕</button>
+            </div>
+            <div className="rounded-2xl overflow-hidden bg-slate-950 p-2 flex items-center justify-center min-h-[220px]">
+              {previewMedia.title.match(/\.(mp4|webm)$/i) || previewMedia.quality.includes('p') ? (
+                <video src={previewMedia.url} controls className="max-h-[320px] w-full rounded-xl" autoPlay />
+              ) : (
+                <audio src={previewMedia.url} controls className="w-full" autoPlay />
+              )}
+            </div>
+            <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
+              <span>{previewMedia.quality} · {previewMedia.bitrate}</span>
+              <a href={previewMedia.url} download={previewMedia.title} className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl font-bold">
+                下载到电脑/手机
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
