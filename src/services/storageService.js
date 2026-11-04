@@ -39,10 +39,8 @@ export const STORAGE_KEYS = {
   THEME: 'wf_theme',
   APPEARANCE: 'wf_appearance',
   SYSTEM_SETTINGS: 'wf_system_settings',
-  SEARCH_PROXY: 'wf_search_proxy',
   POSTS: 'wf_posts',
   BOOKS: 'wf_books',
-  BOOKMARKS: 'wf_bookmarks',
   CLOUD_CONFIG: 'wf_cloud_config',
   CLOUD_FILES: 'wf_cloud_files',
   BACKEND_CONFIG: 'wf_backend_config',
@@ -51,7 +49,13 @@ export const STORAGE_KEYS = {
   MEDIA_LIST: 'wf_media_list',
   EMAIL_SETTINGS: 'wf_email_settings',
   BROWSING_HISTORY: 'wf_browsing_history',
-  HERO_INTRO: 'wf_hero_intro'
+  HERO_INTRO: 'wf_hero_intro',
+  SHOP_PRODUCTS: 'wf_shop_products',
+  SHOP_ORDERS: 'wf_shop_orders',
+  AI_CONFIG: 'wf_ai_coding_config',
+  AI_REPOS: 'wf_ai_repositories',
+  PAYMENT_CONFIG: 'wf_payment_config',
+  WEBDAV_CONFIG: 'wf_webdav_config'
 };
 
 export const defaultHeroIntro = {

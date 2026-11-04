@@ -1,6 +1,6 @@
 # 🦊 白狐博客 (WhiteFox Blog)
 
-> **极简·敏捷·多云边缘驱动的现代全能博客与文创商城系统**
+> **极简·敏捷·多云边缘驱动的现代全能博客、文创商城与编程 AI 系统**
 > 东方雅致翡翠绿白美学视觉体系，原生适配全球边缘网络与主流云服务商（Cloudflare Pages、腾讯云 EdgeOne / COS、阿里云 ESA / OSS 与 Docker 自建环境）。
 
 ---
@@ -8,11 +8,19 @@
 ## 🌟 核心特色与架构一览
 
 - **🎨 东方翡翠绿白美学视觉体系**：以温润翠竹与素雅白为基调，支持一键切换五大东方主题配色，全局排版布局自由切换（经典网格、杂志瀑布流、极简文字、紧凑清单）与 4 档全局字体调节。
-- **📝 原生博文与本地封面上传**：支持直接上传本地图片并自动压缩为高清封面，一键联动云相册图片、网盘文件、站内影音及外部引用链接。
+- **🤖 编程 AI 智识与代码工作台**：
+  - **基础界面与智能交互**：支持多轮代码对话、语法高亮展示、一键复制代码、常见开发 Prompt 快捷模板。
+  - **多平台与多模型接入**：支持 Cloudflare Workers AI（Llama-3-8B、DeepSeek-R1-Distill）、DeepSeek 官方 API（DeepSeek-Coder-V2）、OpenAI（GPT-4o-Mini）及本地私有 Ollama（Qwen2.5-Coder 离线无联网）。
+  - **代码仓库直连**：支持连接 GitHub、GitLab、Gitee 及 Cloudflare Pages 代码仓库，管理多端仓库分支与最新提交信息。
+  - **后台 AI 接口直通**：管理员后台专设 AI 接口管理区，支持统一维护 Cloudflare Account ID & Token、DeepSeek 与 OpenAI 接口凭证。
 - **🛍️ 甄选文创与数字艺术商城**：
   - **多图展示管理**：支持上传与删除多张高清展示图片，多选区分类切换。
   - **完备订单提交流程**：选购商品必须完整填写收件人姓名、**联系电话**、**电子邮箱**与**详细收货地址**。
   - **站长专属收费通道管理**：预留 **PayPal**、**万里汇 (WorldFirst)**、**微信支付 (WeChat Pay)**、**支付宝 (Alipay)** 接口参数设置与客户订单管理列表（仅系统管理员可见）。
+- **🛡️ 站长文件专区与存储桶站内直管**：
+  - **存储桶站内直管**：站内直接切换浏览与管理 Cloudflare R2、腾讯云 COS、阿里云 OSS 与坚果云 WebDAV 的全部内容。
+  - **虚拟目录管理**：支持在存储桶内一键新建虚拟子目录、进入子目录归档管理文件。
+  - **前缀隔离与文件显示修复**：强制应用标准 `admin/` 隔离前缀与文件扩展名动态检测机制，彻底解决文件不能显示或显示错误的问题，避免与普通网盘多云发生文件冲突。
 - **📚 墨香书阁 (4 档显示与全格式支持)**：
   - 支持 **大图、中图、小图、详情** 4 种显示模式自由切换。
   - 支持纯文本与电子书格式（`.txt`、`.md`、`.pdf`、`.epub`、`.mobi`、`.azw3`、`.docx`、`.html`、`.json`、`.csv`），明确标识网页沉浸式阅读与专用下载模式。
@@ -27,9 +35,6 @@
   - **一键 WebDAV 转存**：博客文章、书架图书、相册图片、媒体音视频均支持一键转存至 WebDAV 外接网盘，带有**流式上传实时进度条**。
   - 支持 Cloudflare R2、腾讯云 COS、阿里云 OSS、AList、Backblaze B2、MinIO、AWS S3、华为云 OBS、又拍云 USS 集中管理。
   - **彻底移除过时站内存储池**，网盘文件支持批量勾选管理。
-- **🛡️ 站长文件专区与前缀隔离**：
-  - 站长文件专区强制注入标准隔离前缀（`admin/`），与公共网盘区和多云使用互不干扰，彻底解决跨设备双向同步时的路径冲突与文件覆盖问题。
-  - 站长可自由指定目标存储桶（Cloudflare R2 / 腾讯云 COS / 阿里云 OSS / 坚果云）。
 - **🌍 12 种全球主流语言无死角实时切换**：
   - 简体中文、繁體中文、English、日本語、한국어、Français、Español、Deutsch、Русский、العربية、Português、Italiano。
 - **📬 现代邮件 API 与系统验证码策略**：
@@ -160,6 +165,11 @@ VITE_CF_R2_DOMAIN=https://r2.whitefox.blog
 VITE_WEBDAV_SERVER=https://dav.jianguoyun.com/dav/
 VITE_WEBDAV_USER=user@example.com
 VITE_WEBDAV_APP_PASS=your_app_password
+
+# 编程 AI 接口 (Cloudflare Workers AI & DeepSeek)
+VITE_CF_AI_ACCOUNT_ID=your_cloudflare_account_id
+VITE_CF_AI_TOKEN=your_workers_ai_token
+VITE_DEEPSEEK_API_KEY=your_deepseek_api_key
 ```
 
 ---

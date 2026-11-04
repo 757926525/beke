@@ -69,12 +69,26 @@ export const AdminSettingsView = ({
       theme: false,
       backendConnections: false,
       databaseHub: false,
+      aiBackend: false,
       autoReplyEmail: false,
       mailboxManager: false,
       userMessages: false,
       users: false,
       authRules: false,
       deployGuide: false
+    };
+  });
+
+  // Admin AI Backend Connectors State (Cloudflare Workers AI, DeepSeek, OpenAI)
+  const [adminAiConfig, setAdminAiConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wf_ai_coding_config');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+      cloudflare: { accountId: '', apiToken: '' },
+      deepseek: { apiKey: '', endpoint: 'https://api.deepseek.com/v1' },
+      openai: { apiKey: '', endpoint: 'https://api.openai.com/v1' }
     };
   });
 
@@ -1224,6 +1238,120 @@ export const AdminSettingsView = ({
           </div>
         )}
       </div>
+
+      {/* SECTION 4.8: 后台可连接 CF 和其他平台的 AI 接口实现 */}
+      {isAdmin && (
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <button
+            onClick={() => toggleSection('aiBackend')}
+            className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                <Cpu className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h2 className="text-lg font-bold text-slate-800">后台 AI 模型与接口接入 (Cloudflare Workers AI 及多平台)</h2>
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold">AI 中枢</span>
+                </div>
+                <p className="text-xs text-slate-400">后台可连接 Cloudflare Workers AI、DeepSeek、OpenAI 等大模型接口与令牌管理</p>
+              </div>
+            </div>
+            {openSections.aiBackend ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+          </button>
+
+          {openSections.aiBackend && (
+            <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                  <span className="font-bold text-slate-800">Cloudflare Workers AI 接口</span>
+                  <div>
+                    <label className="block text-slate-500 text-[11px] mb-1">CF Account ID</label>
+                    <input
+                      type="text"
+                      placeholder="Cloudflare 账户 ID"
+                      value={adminAiConfig.cloudflare?.accountId || ''}
+                      onChange={(e) => setAdminAiConfig({ ...adminAiConfig, cloudflare: { ...adminAiConfig.cloudflare, accountId: e.target.value } })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-mono text-[11px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 text-[11px] mb-1">Workers AI API Token</label>
+                    <input
+                      type="password"
+                      placeholder="拥有 AI 权限的 Token"
+                      value={adminAiConfig.cloudflare?.apiToken || ''}
+                      onChange={(e) => setAdminAiConfig({ ...adminAiConfig, cloudflare: { ...adminAiConfig.cloudflare, apiToken: e.target.value } })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-mono text-[11px]"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                  <span className="font-bold text-slate-800">DeepSeek 官方 API</span>
+                  <div>
+                    <label className="block text-slate-500 text-[11px] mb-1">DeepSeek API Key</label>
+                    <input
+                      type="password"
+                      placeholder="sk-xxxxxxxx"
+                      value={adminAiConfig.deepseek?.apiKey || ''}
+                      onChange={(e) => setAdminAiConfig({ ...adminAiConfig, deepseek: { ...adminAiConfig.deepseek, apiKey: e.target.value } })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-mono text-[11px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 text-[11px] mb-1">Endpoint 接口地址</label>
+                    <input
+                      type="text"
+                      value={adminAiConfig.deepseek?.endpoint || 'https://api.deepseek.com/v1'}
+                      onChange={(e) => setAdminAiConfig({ ...adminAiConfig, deepseek: { ...adminAiConfig.deepseek, endpoint: e.target.value } })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-mono text-[11px]"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                  <span className="font-bold text-slate-800">OpenAI / 兼容接口</span>
+                  <div>
+                    <label className="block text-slate-500 text-[11px] mb-1">OpenAI API Key</label>
+                    <input
+                      type="password"
+                      placeholder="sk-proj-xxxx"
+                      value={adminAiConfig.openai?.apiKey || ''}
+                      onChange={(e) => setAdminAiConfig({ ...adminAiConfig, openai: { ...adminAiConfig.openai, apiKey: e.target.value } })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-mono text-[11px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 text-[11px] mb-1">自定义反向代理 Endpoint</label>
+                    <input
+                      type="text"
+                      value={adminAiConfig.openai?.endpoint || 'https://api.openai.com/v1'}
+                      onChange={(e) => setAdminAiConfig({ ...adminAiConfig, openai: { ...adminAiConfig.openai, endpoint: e.target.value } })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-mono text-[11px]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem('wf_ai_coding_config', JSON.stringify(adminAiConfig));
+                    showToast('后台 AI 接口参数已成功同步并保存！前台编程 AI 专区即刻生效。');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center space-x-1 cursor-pointer shadow-xs"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>保存后台 AI 接口配置</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* SECTION 5: 多样化数据库后台与界面接入 */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">

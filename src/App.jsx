@@ -5,7 +5,7 @@ import { BlogPostView } from './components/BlogPostView';
 import { NetDriveView } from './components/NetDriveView';
 import { BookshelfView } from './components/BookshelfView';
 import { GalleryView } from './components/GalleryView';
-import { BrowserAndBookmarksView } from './components/BrowserAndBookmarksView';
+import { CodingAIView } from './components/CodingAIView';
 import { MediaPlayerView } from './components/MediaPlayerView';
 import { AdminFileAndPortalView } from './components/AdminFileAndPortalView';
 import { ShopView } from './components/ShopView';
@@ -568,14 +568,10 @@ export function App() {
             />
           )}
 
-          {activeTab === 'bookmarks' && (
-            <BrowserAndBookmarksView
-              bookmarks={bookmarks}
-              setBookmarks={setBookmarks}
+          {activeTab === 'ai-coding' && (
+            <CodingAIView
               currentUser={currentUser}
               isAdmin={currentUser?.role === 'admin'}
-              searchProxy={searchProxy}
-              setSearchProxy={setSearchProxy}
               t={t}
             />
           )}

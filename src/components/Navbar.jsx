@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   BookOpen, Library, Image as ImageIcon, Music, Compass,
   Download, Cloud, Shield, Moon, Sun, LogIn, LogOut,
-  ChevronDown, ChevronUp, Rocket, Bell, Check, X
+  ChevronDown, ChevronUp, Rocket, Bell, Check, X, Code2, ShoppingBag
 } from 'lucide-react';
 
 export const Navbar = ({
@@ -52,20 +52,15 @@ export const Navbar = ({
     baseTabs.push(
       { id: 'books', label: t('bookshelf'), icon: Library },
       { id: 'cloud', label: t('cloud'), icon: Cloud },
-      { id: 'shop', label: t('shop'), icon: BookOpen },
+      { id: 'shop', label: t('shop'), icon: ShoppingBag },
       { id: 'gallery', label: t('gallery'), icon: ImageIcon },
-      { id: 'media', label: t('player'), icon: Music }
+      { id: 'media', label: t('player'), icon: Music },
+      { id: 'ai-coding', label: '编程AI', icon: Code2 }
     );
   }
 
   if (currentUser?.role === 'admin') {
     baseTabs.push({ id: 'admin-portal', label: t('adminPortal'), icon: Shield, badge: '专属' });
-  }
-
-  if (!hideNonBlogForGuests) {
-    baseTabs.push(
-      { id: 'bookmarks', label: t('bookmarks'), icon: Compass }
-    );
   }
 
   // 全能数据库后台、系统设置与部署指南仅管理员可见
