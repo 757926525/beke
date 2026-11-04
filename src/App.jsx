@@ -8,8 +8,7 @@ import { GalleryView } from './components/GalleryView';
 import { BrowserAndBookmarksView } from './components/BrowserAndBookmarksView';
 import { MediaPlayerView } from './components/MediaPlayerView';
 import { AdminFileAndPortalView } from './components/AdminFileAndPortalView';
-import { DownloaderView } from './components/DownloaderView';
-import { DeploymentGuideView } from './components/DeploymentGuideView';
+import { ShopView } from './components/ShopView';
 import { AdminSettingsView } from './components/AdminSettingsView';
 import { AuthModal } from './components/AuthModal';
 import {
@@ -527,11 +526,10 @@ export function App() {
             />
           )}
 
-          {activeTab === 'download' && (
-            <DownloaderView
+          {activeTab === 'shop' && (
+            <ShopView
               currentUser={currentUser}
-              mediaList={mediaList}
-              setMediaList={setMediaList}
+              isAdmin={currentUser?.role === 'admin'}
               t={t}
             />
           )}
@@ -580,10 +578,6 @@ export function App() {
               setSearchProxy={setSearchProxy}
               t={t}
             />
-          )}
-
-          {activeTab === 'guide' && (
-            <DeploymentGuideView siteName={siteName} t={t} />
           )}
 
           {activeTab === 'admin' && currentUser?.role === 'admin' && (

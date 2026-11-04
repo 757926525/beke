@@ -5,7 +5,7 @@ import {
   ExternalLink, Upload, Download, Folder, Shield, AlertTriangle, Type,
   Layout, Database, Check, Server, Sparkles, XCircle, CheckCircle,
   Send, HelpCircle, BookOpen, Globe, MessageSquare, Reply, Key, Clock,
-  Eye, EyeOff
+  Eye, EyeOff, Rocket, Terminal, Copy, Cpu
 } from 'lucide-react';
 import { themePresets, languages } from '../services/i18nAndTheme';
 import { layoutOptions, fontSizes } from '../services/storageService';
@@ -73,7 +73,8 @@ export const AdminSettingsView = ({
       mailboxManager: false,
       userMessages: false,
       users: false,
-      authRules: false
+      authRules: false,
+      deployGuide: false
     };
   });
 
@@ -2010,6 +2011,116 @@ export const AdminSettingsView = ({
           )}
         </div>
       )}
+
+      {/* SECTION 8.5: 完整全平台部署指南 (移入设置中心 · 包含 Cloudflare Pages 一键拉取与 zip 包上传、腾讯云、阿里云与 Docker) */}
+      <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-transparent backdrop-blur-md rounded-3xl border-2 border-emerald-300 shadow-sm overflow-hidden">
+        <button
+          onClick={() => toggleSection('deployGuide')}
+          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-emerald-50/50 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-xs">
+              <Rocket className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h2 className="text-lg font-bold text-slate-800">全平台多云部署实战指南 (Cloudflare / 腾讯云 / 阿里云 / Docker)</h2>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">全流程解析</span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Cloudflare Pages 一键拉取构建优先、离线 zip 包生成与上传、腾讯云 EdgeOne/COS 与阿里云 OSS 极速部署
+              </p>
+            </div>
+          </div>
+          {openSections.deployGuide ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+        </button>
+
+        {openSections.deployGuide && (
+          <div className="px-6 pb-6 pt-2 border-t border-emerald-200/60 space-y-6 text-xs text-slate-600">
+            {/* Cloudflare Pages Priority */}
+            <div className="p-5 bg-white rounded-2xl border border-emerald-200 space-y-3">
+              <div className="flex items-center space-x-2 text-emerald-800 font-bold text-sm">
+                <Cloud className="w-4 h-4 text-emerald-600" />
+                <span>方案 A (最高优先级 · 推荐)：Cloudflare Pages 一键 Git 仓库拉取部署</span>
+              </div>
+              <ol className="list-decimal list-inside space-y-2 text-slate-600 leading-relaxed pl-1">
+                <li>将本代码仓库推送到个人 GitHub / GitLab 仓库。</li>
+                <li>打开 <a href="https://dash.cloudflare.com" target="_blank" rel="noreferrer" className="text-emerald-600 font-bold underline">Cloudflare Dashboard</a>，进入 <strong>Workers & Pages</strong> → <strong>Create Application</strong> → <strong>Pages</strong> → <strong>Connect to Git</strong>。</li>
+                <li>选择白狐博客仓库，构建预设选择 <strong>Vite</strong>：
+                  <div className="bg-slate-900 text-slate-100 p-2.5 rounded-xl font-mono text-[11px] mt-1 space-y-0.5">
+                    <div>构建命令 (Build command): <span className="text-emerald-400">npm run build</span></div>
+                    <div>输出目录 (Output directory): <span className="text-emerald-400">dist</span></div>
+                  </div>
+                </li>
+                <li>在环境变量中配置管理员账号与密码：
+                  <div className="bg-slate-900 text-slate-100 p-2.5 rounded-xl font-mono text-[11px] mt-1 space-y-0.5">
+                    <div>VITE_ADMIN_USERNAME = <span className="text-emerald-400">fox</span></div>
+                    <div>VITE_ADMIN_PASSWORD = <span className="text-emerald-400">your_secure_password</span></div>
+                  </div>
+                </li>
+                <li>点击 <strong>Save and Deploy</strong>，等待 1 分钟即可全球秒级上线！</li>
+              </ol>
+            </div>
+
+            {/* Cloudflare Pages Direct Upload Package */}
+            <div className="p-5 bg-white rounded-2xl border border-sky-200 space-y-3">
+              <div className="flex items-center space-x-2 text-sky-800 font-bold text-sm">
+                <Upload className="w-4 h-4 text-sky-600" />
+                <span>方案 B：Cloudflare Pages 一键上传文件部署 (获取上传包的方式)</span>
+              </div>
+              <p className="leading-relaxed">
+                若不希望连接 GitHub，可使用仓库内置的打包脚本一键打包并直接拖拽上传：
+              </p>
+              <div className="bg-slate-900 text-slate-100 p-3 rounded-xl font-mono text-[11px] space-y-1">
+                <div className="text-slate-400"># 1. 在本地或服务器根目录执行打包脚本：</div>
+                <div className="text-emerald-400">npm run package:pages</div>
+                <div className="text-slate-400 mt-1"># 脚本将自动编译代码并在根目录生成标准部署压缩包：</div>
+                <div className="text-sky-300">whitefox-pages-deploy.zip</div>
+              </div>
+              <p className="leading-relaxed">
+                在 Cloudflare Pages 后台选择 <strong>Direct Upload</strong>，将生成的 <code>whitefox-pages-deploy.zip</code> 文件直接拖入网页中即可瞬间完成发布！
+              </p>
+            </div>
+
+            {/* Tencent Cloud & Alibaba Cloud */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-2">
+                <div className="font-bold text-slate-800 flex items-center space-x-1.5">
+                  <Server className="w-4 h-4 text-sky-600" />
+                  <span>腾讯云 EdgeOne / COS 静态托管</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  执行 <code>npm run build</code> 后，将 <code>dist/</code> 目录下全部内容上传至腾讯云 COS 存储桶并开启“静态网站”，或者在 EdgeOne 中配置“页面规则”缓存，即可享有国内极速节点加速。
+                </p>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-2">
+                <div className="font-bold text-slate-800 flex items-center space-x-1.5">
+                  <Database className="w-4 h-4 text-amber-600" />
+                  <span>阿里云 ESA / OSS 静态托管</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  在阿里云 OSS 创建 Bucket，读写权限设为“公共读”，上传 <code>dist/</code> 文件并开启“静态页面”，默认首页设为 <code>index.html</code>，404 错误页设为 <code>index.html</code> 即可。
+                </p>
+              </div>
+            </div>
+
+            {/* Docker Deployment */}
+            <div className="p-4 bg-white rounded-2xl border border-purple-200 space-y-2">
+              <div className="font-bold text-slate-800 flex items-center space-x-1.5">
+                <Cpu className="w-4 h-4 text-purple-600" />
+                <span>Docker & Nginx 自建服务器容器化部署</span>
+              </div>
+              <div className="bg-slate-900 text-slate-100 p-2.5 rounded-xl font-mono text-[11px]">
+                docker compose up -d --build
+              </div>
+              <p className="text-[11px] text-slate-500">
+                内置多阶段构建 Dockerfile 与高性能 gzip 静态资源缓存 nginx.conf，默认监听 80 端口。
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* SECTION 9: 注册用户消息与通知管理区 (位于底部，管理员可发布/删除/管理站内消息) */}
       {isAdmin && (

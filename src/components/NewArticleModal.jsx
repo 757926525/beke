@@ -157,16 +157,66 @@ export default function NewArticleModal({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              封面配图 URL (可填 R2 / OSS / COS 链接)
-            </label>
-            <input
-              type="url"
-              placeholder="https://..."
-              value={cover}
-              onChange={(e) => setCover(e.target.value)}
-              className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-mono"
-            />
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-600">
+                博客封面配图 (可直接上传本地图片或填网络直链)
+              </label>
+              <label className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold flex items-center space-x-1 cursor-pointer border border-emerald-200">
+                <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                <span>上传本地封面</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      const img = new Image();
+                      img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const maxDim = 1200;
+                        let width = img.width;
+                        let height = img.height;
+                        if (width > maxDim || height > maxDim) {
+                          if (width > height) {
+                            height = Math.round((height * maxDim) / width);
+                            width = maxDim;
+                          } else {
+                            width = Math.round((width * maxDim) / height);
+                            height = maxDim;
+                          }
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                        setCover(dataUrl);
+                      };
+                      img.src = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                    e.target.value = '';
+                  }}
+                  className="hidden"
+                />
+              </label>
+            </div>
+            <div className="flex items-center space-x-2">
+              {cover && (
+                <div className="w-12 h-10 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-slate-100">
+                  <img src={cover} alt="Cover preview" className="w-full h-full object-cover" />
+                </div>
+              )}
+              <input
+                type="text"
+                placeholder="https://... 或点击上方按钮上传本地封面图片"
+                value={cover}
+                onChange={(e) => setCover(e.target.value)}
+                className="flex-1 px-3.5 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-mono"
+              />
+            </div>
           </div>
 
           <div>

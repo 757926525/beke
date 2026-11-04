@@ -52,7 +52,7 @@ export const Navbar = ({
     baseTabs.push(
       { id: 'books', label: t('bookshelf'), icon: Library },
       { id: 'cloud', label: t('cloud'), icon: Cloud },
-      { id: 'download', label: t('downloader'), icon: Download },
+      { id: 'shop', label: t('shop'), icon: BookOpen },
       { id: 'gallery', label: t('gallery'), icon: ImageIcon },
       { id: 'media', label: t('player'), icon: Music }
     );
@@ -64,12 +64,11 @@ export const Navbar = ({
 
   if (!hideNonBlogForGuests) {
     baseTabs.push(
-      { id: 'bookmarks', label: t('bookmarks'), icon: Compass },
-      { id: 'guide', label: t('deploymentGuide'), icon: Rocket }
+      { id: 'bookmarks', label: t('bookmarks'), icon: Compass }
     );
   }
 
-  // 全能数据库后台与系统设置仅管理员可见
+  // 全能数据库后台、系统设置与部署指南仅管理员可见
   if (currentUser?.role === 'admin') {
     baseTabs.push({ id: 'admin', label: t('admin'), icon: Shield });
   }
