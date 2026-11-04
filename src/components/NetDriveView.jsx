@@ -9,6 +9,7 @@ import {
   UploadCloud, AlertCircle
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
+import { storeFileInVault, getFileFromVault } from '../services/indexedDbVault';
 
 export const NetDriveView = ({
   cloudConfig,
@@ -108,8 +109,13 @@ export const NetDriveView = ({
 
       let fileUrl = '';
       let thumbnail = '';
+      const fileId = 'cf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
 
-      if (file.size < 6 * 1024 * 1024) {
+      // Persist in IndexedDB Vault so large binary data persists across reloads and downloads
+      await storeFileInVault(fileId, file, { name: file.name, type: file.type, size: file.size });
+
+      // If text or small file, read DataURL for sync; else keep robust data URL representation
+      if (file.size < 3 * 1024 * 1024) {
         fileUrl = await new Promise((resolve) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
@@ -117,11 +123,11 @@ export const NetDriveView = ({
         });
         if (isImg) thumbnail = fileUrl;
       } else {
-        fileUrl = URL.createObjectURL(file);
+        fileUrl = `idb://${fileId}/${encodeURIComponent(file.name)}`;
       }
 
       newEntries.push({
-        id: 'cf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+        id: fileId,
         name: file.name,
         url: fileUrl,
         thumbnail: thumbnail || '',
@@ -172,8 +178,15 @@ export const NetDriveView = ({
     }
   };
 
-  // Download file
-  const handleDownloadFile = (file) => {
+  // Download file (with IndexedDB fallback for big files)
+  const handleDownloadFile = async (file) => {
+    if (file.url && file.url.startsWith('idb://')) {
+      const record = await getFileFromVault(file.id);
+      if (record && record.blob) {
+        downloadFile(record.blob, file.name);
+        return;
+      }
+    }
     downloadFile(file.url, file.name);
   };
 
