@@ -20,7 +20,14 @@ import {
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
 
-export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
+export const GalleryView = ({
+  photos,
+  setPhotos,
+  currentUser,
+  isAdmin,
+  onWebDAVTransfer,
+  t
+}) => {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [currentFolder, setCurrentFolder] = useState('全部');
   const [folders, setFolders] = useState(['全部', '白狐物语', '风景山水', '云端随想']);
@@ -28,6 +35,10 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
   const [newFolderName, setNewFolderName] = useState('');
   const [uploadStatus, setUploadStatus] = useState(null);
   const [selectedPhotoIds, setSelectedPhotoIds] = useState([]);
+
+  // 4-Tier View Modes: 大图 (large), 中图 (medium), 小图 (small), 详情 (list)
+  const [viewMode, setViewMode] = useState('large');
+
   const fileInputRef = useRef(null);
   const batchFileInputRef = useRef(null);
 
@@ -295,12 +306,12 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
           )}
         </div>
 
-        {/* Batch Operations Bar */}
+        {/* Batch Operations & 4-Tier View Switcher Bar */}
         <div className="bg-white/80 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center space-x-3">
             <button
               onClick={toggleSelectAll}
-              className="flex items-center space-x-1.5 text-slate-600 hover:text-slate-900 cursor-pointer font-semibold"
+              className="flex items-center space-x-1.5 text-slate-700 hover:text-slate-900 cursor-pointer font-bold"
             >
               {filteredPhotos.length > 0 && filteredPhotos.every((p) => selectedPhotoIds.includes(p.id)) ? (
                 <CheckSquare className="w-4 h-4 text-emerald-600" />
@@ -311,135 +322,301 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
             </button>
             <span className="text-slate-300">|</span>
             <span className="text-slate-400 font-mono">
-              当前文件夹「{currentFolder}」共 {filteredPhotos.length} 张图片
+              当前「{currentFolder}」共 {filteredPhotos.length} 张图片
             </span>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={handleBatchDownload}
-              disabled={selectedPhotoIds.length === 0}
-              className="px-3 py-1.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 disabled:opacity-40 border border-sky-200 font-semibold flex items-center space-x-1 cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>批量下载 ({selectedPhotoIds.length})</span>
-            </button>
+          <div className="flex items-center space-x-3">
+            {selectedPhotoIds.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleBatchDownload}
+                  className="px-2.5 py-1 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 font-semibold flex items-center space-x-1 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>批量下载 ({selectedPhotoIds.length})</span>
+                </button>
 
-            {currentUser && (
-              <button
-                onClick={handleBatchDelete}
-                disabled={selectedPhotoIds.length === 0}
-                className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-40 border border-rose-200 font-semibold flex items-center space-x-1 cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>批量删除 ({selectedPhotoIds.length})</span>
-              </button>
+                <button
+                  onClick={() => {
+                    const targets = photos.filter((p) => selectedPhotoIds.includes(p.id));
+                    if (onWebDAVTransfer) {
+                      onWebDAVTransfer(targets.map(p => ({
+                        name: `${p.title || 'photo'}.jpg`,
+                        size: '800 KB',
+                        type: 'image',
+                        url: p.url
+                      })));
+                    } else {
+                      setUploadStatus(`已将选中的 ${targets.length} 张图片加入 WebDAV 上传队列！`);
+                    }
+                  }}
+                  className="px-2.5 py-1 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 font-semibold flex items-center space-x-1 cursor-pointer"
+                  title="转存至 WebDAV 外接网盘"
+                >
+                  <span>转存至 WebDAV</span>
+                </button>
+
+                {currentUser && (
+                  <button
+                    onClick={handleBatchDelete}
+                    className="px-2.5 py-1 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-semibold flex items-center space-x-1 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>批量删除</span>
+                  </button>
+                )}
+              </div>
             )}
+
+            {/* 4-Tier View Switcher: 大图 / 中图 / 小图 / 详情 */}
+            <div className="flex items-center space-x-2">
+              <span className="text-slate-400 font-medium">显示模式:</span>
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl">
+                <button
+                  onClick={() => setViewMode('large')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                    viewMode === 'large' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  大图
+                </button>
+                <button
+                  onClick={() => setViewMode('medium')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                    viewMode === 'medium' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  中图
+                </button>
+                <button
+                  onClick={() => setViewMode('small')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                    viewMode === 'small' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  小图
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                    viewMode === 'list' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  详情
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Photos Grid - Strictly 2 Columns (每排两张，全面适应手机与各种屏幕) */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-6">
-        {filteredPhotos.map((photo) => (
-          <div
-            key={photo.id}
-            className="group bg-white/80 backdrop-blur-md rounded-2xl sm:rounded-3xl overflow-hidden border border-slate-200/80 shadow-xs flex flex-col justify-between hover:shadow-lg transition-all duration-300"
-          >
-            {/* Photo preview */}
+      {/* 4-Tier Photos Rendering */}
+      {viewMode === 'large' && (
+        <div className="grid grid-cols-2 gap-3 sm:gap-6">
+          {filteredPhotos.map((photo) => (
             <div
-              className="relative aspect-4/3 sm:aspect-16/10 overflow-hidden cursor-pointer bg-slate-100"
-              onClick={() => setSelectedPhoto(photo)}
+              key={photo.id}
+              className="group bg-white/80 backdrop-blur-md rounded-2xl sm:rounded-3xl overflow-hidden border border-slate-200/80 shadow-xs flex flex-col justify-between hover:shadow-lg transition-all duration-300"
             >
-              <img
-                src={photo.url}
-                alt={photo.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2.5 sm:p-4">
-                <div className="text-white space-y-0.5">
-                  <p className="font-bold text-xs sm:text-sm truncate">{photo.title}</p>
-                  <p className="text-[10px] text-slate-300 line-clamp-1">{photo.desc}</p>
-                </div>
-              </div>
-              {/* Batch Checkbox on Photo */}
-              <button
-                onClick={(e) => toggleSelectPhoto(photo.id, e)}
-                className="absolute top-2 left-2 z-10 p-1 rounded-lg bg-black/50 backdrop-blur-md text-white hover:bg-black/70 cursor-pointer transition-colors"
-                title={selectedPhotoIds.includes(photo.id) ? '取消勾选' : '勾选此照片'}
-              >
-                {selectedPhotoIds.includes(photo.id) ? (
-                  <CheckSquare className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <Square className="w-4 h-4 text-white/80" />
-                )}
-              </button>
-
-              <div className="absolute top-2 right-2 p-1 rounded-lg bg-black/40 backdrop-blur-md text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                <Maximize2 className="w-3 h-3" />
-              </div>
               <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCurrentFolder(photo.folder || photo.category || '全部');
-                }}
-                className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white text-[9px] sm:text-[10px] font-semibold flex items-center space-x-1 hover:bg-emerald-700/80 transition-colors cursor-pointer"
-                title="点击进入该文件夹"
+                className="relative aspect-4/3 sm:aspect-16/10 overflow-hidden cursor-pointer bg-slate-100"
+                onClick={() => setSelectedPhoto(photo)}
               >
-                <Folder className="w-2.5 h-2.5 text-emerald-300" />
-                <span>{photo.folder || photo.category || '默认'}</span>
-              </div>
-            </div>
-
-            {/* Info and Actions */}
-            <div className="p-2.5 sm:p-4 space-y-1 sm:space-y-1.5">
-              <div className="flex items-center justify-between text-[9px] sm:text-[11px] text-slate-400">
-                <span className="flex items-center space-x-1 truncate max-w-[50%]">
-                  <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-600" />
-                  <span className="truncate">{photo.location}</span>
-                </span>
-                <span className="flex items-center space-x-1">
-                  <Calendar className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                  <span>{photo.date}</span>
-                </span>
-              </div>
-              <h4 className="font-bold text-slate-800 text-xs sm:text-sm truncate">
-                {photo.title}
-              </h4>
-              <p className="text-[10px] sm:text-xs text-slate-500 line-clamp-1 leading-relaxed">
-                {photo.desc}
-              </p>
-
-              <div className="pt-1.5 sm:pt-2 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-[10px] text-emerald-600 font-semibold hidden sm:inline">
-                  双列自适应
-                </span>
-                <div className="flex items-center space-x-1 ml-auto">
-                  {/* Single Download Button */}
-                  <button
-                    onClick={(e) => handleDownloadPhoto(photo, e)}
-                    title="一键下载此图片"
-                    className="p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
-
-                  {/* Delete Button */}
-                  {canManagePhoto(photo) && (
-                    <button
-                      onClick={() => handleRemovePhoto(photo.id)}
-                      title="删除照片"
-                      className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                <img
+                  src={photo.url}
+                  alt={photo.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                <button
+                  onClick={(e) => toggleSelectPhoto(photo.id, e)}
+                  className="absolute top-2 left-2 z-10 p-1 rounded-lg bg-black/50 backdrop-blur-md text-white hover:bg-black/70 cursor-pointer transition-colors"
+                >
+                  {selectedPhotoIds.includes(photo.id) ? (
+                    <CheckSquare className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Square className="w-4 h-4 text-white/80" />
                   )}
+                </button>
+                <div className="absolute top-2 right-2 p-1 rounded-lg bg-black/40 backdrop-blur-md text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Maximize2 className="w-3 h-3" />
+                </div>
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentFolder(photo.folder || photo.category || '全部');
+                  }}
+                  className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white text-[9px] sm:text-[10px] font-semibold flex items-center space-x-1 hover:bg-emerald-700/80 transition-colors cursor-pointer"
+                >
+                  <Folder className="w-2.5 h-2.5 text-emerald-300" />
+                  <span>{photo.folder || photo.category || '默认'}</span>
+                </div>
+              </div>
+
+              <div className="p-2.5 sm:p-4 space-y-1 sm:space-y-1.5">
+                <div className="flex items-center justify-between text-[9px] sm:text-[11px] text-slate-400">
+                  <span className="flex items-center space-x-1 truncate max-w-[50%]">
+                    <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-600" />
+                    <span className="truncate">{photo.location}</span>
+                  </span>
+                  <span className="flex items-center space-x-1">
+                    <Calendar className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                    <span>{photo.date}</span>
+                  </span>
+                </div>
+                <h4 className="font-bold text-slate-800 text-xs sm:text-sm truncate">
+                  {photo.title}
+                </h4>
+                <p className="text-[10px] sm:text-xs text-slate-500 line-clamp-1 leading-relaxed">
+                  {photo.desc}
+                </p>
+
+                <div className="pt-1.5 sm:pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[10px] text-emerald-600 font-semibold hidden sm:inline">
+                    大图模式
+                  </span>
+                  <div className="flex items-center space-x-1 ml-auto">
+                    <button
+                      onClick={(e) => handleDownloadPhoto(photo, e)}
+                      title="一键下载此图片"
+                      className="p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    {canManagePhoto(photo) && (
+                      <button
+                        onClick={() => handleRemovePhoto(photo.id)}
+                        title="删除照片"
+                        className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {viewMode === 'medium' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+          {filteredPhotos.map((photo) => (
+            <div
+              key={photo.id}
+              className="bg-white rounded-2xl p-2.5 border border-slate-200 hover:border-emerald-300 shadow-xs flex flex-col justify-between space-y-2 group relative"
+            >
+              <div
+                className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 cursor-pointer"
+                onClick={() => setSelectedPhoto(photo)}
+              >
+                <img src={photo.url} alt={photo.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                <button
+                  onClick={(e) => toggleSelectPhoto(photo.id, e)}
+                  className="absolute top-1.5 left-1.5 p-1 rounded-md bg-black/50 text-white cursor-pointer"
+                >
+                  {selectedPhotoIds.includes(photo.id) ? (
+                    <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Square className="w-3.5 h-3.5 text-white/80" />
+                  )}
+                </button>
+              </div>
+              <div>
+                <p className="font-bold text-xs text-slate-800 truncate">{photo.title}</p>
+                <p className="text-[10px] text-slate-400 truncate">{photo.folder || photo.category}</p>
+              </div>
+              <div className="pt-1 border-t border-slate-100 flex items-center justify-between">
+                <button onClick={(e) => handleDownloadPhoto(photo, e)} className="p-1 text-slate-400 hover:text-emerald-600">
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+                {canManagePhoto(photo) && (
+                  <button onClick={() => handleRemovePhoto(photo.id)} className="p-1 text-slate-400 hover:text-rose-500">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {viewMode === 'small' && (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+          {filteredPhotos.map((photo) => (
+            <div
+              key={photo.id}
+              onClick={() => setSelectedPhoto(photo)}
+              className="bg-white rounded-xl p-1.5 border border-slate-200 hover:border-emerald-400 cursor-pointer flex flex-col justify-between space-y-1 relative group"
+            >
+              <div className="relative aspect-square rounded-lg overflow-hidden bg-slate-100">
+                <img src={photo.url} alt={photo.title} className="w-full h-full object-cover" />
+              </div>
+              <p className="font-semibold text-[10px] text-slate-800 truncate">{photo.title}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {viewMode === 'list' && (
+        <div className="overflow-x-auto bg-white rounded-2xl border border-slate-200">
+          <table className="w-full text-left text-xs text-slate-600">
+            <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-[10px] border-b border-slate-200">
+              <tr>
+                <th className="py-2.5 px-3">勾选</th>
+                <th className="py-2.5 px-3">缩略图与标题</th>
+                <th className="py-2.5 px-3">所属文件夹</th>
+                <th className="py-2.5 px-3">拍摄地点</th>
+                <th className="py-2.5 px-3">日期</th>
+                <th className="py-2.5 px-3 text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredPhotos.map((photo) => (
+                <tr key={photo.id} className="hover:bg-slate-50/50">
+                  <td className="py-3 px-3">
+                    <button
+                      onClick={(e) => toggleSelectPhoto(photo.id, e)}
+                      className="cursor-pointer text-slate-400 hover:text-slate-600"
+                    >
+                      {selectedPhotoIds.includes(photo.id) ? (
+                        <CheckSquare className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                    </button>
+                  </td>
+                  <td className="py-3 px-3 font-semibold text-slate-800 flex items-center space-x-2">
+                    <img src={photo.url} alt="Thumb" className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0" />
+                    <span className="truncate max-w-[200px]">{photo.title}</span>
+                  </td>
+                  <td className="py-3 px-3">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold">
+                      {photo.folder || photo.category}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3 text-slate-500">{photo.location}</td>
+                  <td className="py-3 px-3 text-slate-400">{photo.date}</td>
+                  <td className="py-3 px-3 text-right space-x-2">
+                    <button onClick={() => setSelectedPhoto(photo)} className="text-emerald-600 hover:text-emerald-700 font-bold">
+                      查看大图
+                    </button>
+                    <button onClick={(e) => handleDownloadPhoto(photo, e)} className="text-sky-600 hover:text-sky-700">
+                      下载
+                    </button>
+                    {canManagePhoto(photo) && (
+                      <button onClick={() => handleRemovePhoto(photo.id)} className="text-rose-500 hover:text-rose-700">
+                        删除
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {filteredPhotos.length === 0 && (
         <div className="p-12 text-center bg-white/50 rounded-3xl border border-dashed border-slate-200 space-y-2">

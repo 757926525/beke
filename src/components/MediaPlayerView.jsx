@@ -12,6 +12,7 @@ export const MediaPlayerView = ({
   setMediaList,
   cloudFiles,
   setCloudFiles,
+  onWebDAVTransfer,
   t
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -49,24 +50,29 @@ export const MediaPlayerView = ({
     setIsPlaying(false);
   };
 
-  // 1-Click transfer to in-site storage / NetDrive
+  // 1-Click transfer to WebDAV / Cloud NetDrive
   const handleTransferToStorage = (m, e) => {
     if (e) e.stopPropagation();
-    if (setCloudFiles) {
+    if (onWebDAVTransfer) {
+      onWebDAVTransfer([{
+        name: `${m.title}.${m.type === 'video' ? 'mp4' : 'mp3'}`,
+        size: m.size || '12.4 MB',
+        type: m.type,
+        url: m.url
+      }]);
+    } else if (setCloudFiles) {
       const newCloudFile = {
         id: 'cf-transfer-' + Date.now(),
         name: `${m.title}.${m.type === 'video' ? 'mp4' : 'mp3'}`,
         url: m.url,
-        provider: '站内本地存储',
-        bucketKey: 'local',
+        provider: '坚果云 WebDAV (推荐)',
+        bucketKey: 'jianguoyun',
         size: m.size || '3.5 MB',
         type: m.type,
         uploadedAt: new Date().toISOString().split('T')[0]
       };
       setCloudFiles((prev) => [newCloudFile, ...prev]);
-      showToast(`已成功将「${m.title}」一键转存到站内存储池与调度中枢！`);
-    } else {
-      showToast(`已将「${m.title}」转存至站内媒体库！`);
+      showToast(`已成功将「${m.title}」转存至 WebDAV 外接网盘！`);
     }
   };
 
@@ -234,14 +240,14 @@ export const MediaPlayerView = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* 1-click Transfer button */}
+            {/* 1-click Transfer to WebDAV button */}
             <button
               onClick={(e) => handleTransferToStorage(activeMedia, e)}
-              className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
-              title="转存到站内存储池与调度中枢"
+              className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200 text-xs font-bold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+              title="一键转存到 WebDAV 外接网盘"
             >
-              <FolderInput className="w-3.5 h-3.5 text-emerald-600" />
-              <span>一键转存到站内</span>
+              <HardDrive className="w-3.5 h-3.5 text-purple-600" />
+              <span>一键转存至 WebDAV</span>
             </button>
 
             {/* Aspect Ratio Switcher Pills (自适应为默认) */}

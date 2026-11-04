@@ -26,6 +26,7 @@ export const BlogList = ({
   setHeroIntro,
   browsingHistory = [],
   setBrowsingHistory,
+  onWebDAVTransfer,
   t
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,6 +67,21 @@ export const BlogList = ({
     if (navigator.clipboard) {
       navigator.clipboard.writeText(markdown);
       showToast(`《${post.title}》全文 Markdown 已复制到剪贴板！`);
+    }
+  };
+
+  // 1-Click Transfer Post to WebDAV
+  const handleTransferPostToWebDAV = (post, e) => {
+    e.stopPropagation();
+    if (onWebDAVTransfer) {
+      onWebDAVTransfer([{
+        name: `${post.title}.md`,
+        size: `${(post.content?.length || 2000) / 1024 > 1 ? ((post.content?.length || 2000) / 1024).toFixed(1) + ' KB' : '1.2 KB'}`,
+        type: 'article',
+        rawContent: `# ${post.title}\n\n作者：${post.author || 'fox'}\n日期：${post.date}\n分类：${post.category}\n\n${post.content}`
+      }]);
+    } else {
+      showToast(`《${post.title}》已加入 WebDAV 转存队列！`);
     }
   };
 
@@ -505,8 +521,15 @@ export const BlogList = ({
                         {post.category}
                       </div>
 
-                      {/* Actions (Bookmark, 1-Click Copy, Delete) */}
+                      {/* Actions (Bookmark, 1-Click Copy, WebDAV, Delete) */}
                       <div className="absolute top-3 right-3 flex items-center space-x-1.5">
+                        <button
+                          onClick={(e) => handleTransferPostToWebDAV(post, e)}
+                          title="一键转存 Markdown 至 WebDAV 外接网盘"
+                          className="p-1.5 rounded-xl bg-black/50 text-white hover:bg-purple-600 backdrop-blur-xs transition-colors cursor-pointer"
+                        >
+                          <HardDrive className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={(e) => handleCopyPost(post, e)}
                           title="一键复制文章 Markdown"

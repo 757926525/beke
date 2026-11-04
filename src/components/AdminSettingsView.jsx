@@ -105,7 +105,20 @@ export const AdminSettingsView = ({
     });
   };
 
-  // In-Site Mailbox & Letter State
+  // System-wide Verification Code Rules (随机或固定，可调过期时间)
+  const [verificationCodeConfig, setVerificationCodeConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wf_verification_code_config');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+      type: 'random', // 'random' | 'fixed'
+      fixedCode: '888666',
+      expireMinutes: 15
+    };
+  });
+
+  // In-Site Mailbox & Letter State (管理回复消息功能，可删除消息，去掉随信附带验证码)
   const [letters, setLetters] = useState(() => {
     try {
       const saved = localStorage.getItem('wf_site_letters');
@@ -117,12 +130,22 @@ export const AdminSettingsView = ({
         senderEmail: 'reader@example.com',
         senderName: '青丘书客',
         subject: '关于博客多云部署实践的交流',
-        content: '站长您好，拜读了您的多云边缘架构系列博文，请问如何获取演示站点的验证码？',
+        content: '站长您好，拜读了您的多云边缘架构系列博文，请问如何配置坚果云 WebDAV 网盘？',
         receivedAt: '2025-05-18 10:20',
+        replied: true,
+        replyContent: '您好！在坚果云网页版开启第三方应用授权生成“应用密码”，在博客网盘区填入服务器地址和密码即可！',
+        repliedAt: '2025-05-18 11:05'
+      },
+      {
+        id: 'letter-2',
+        senderEmail: 'dev@whitefox.blog',
+        senderName: '技术读者',
+        subject: '关于多端自适应播放器画幅的反馈',
+        content: '播放器的自适应画幅非常流畅，赞一个！',
+        receivedAt: '2025-05-18 14:15',
         replied: false,
         replyContent: '',
-        verificationCodeSent: '',
-        codeExpireMinutes: 10
+        repliedAt: ''
       }
     ];
   });
@@ -130,9 +153,6 @@ export const AdminSettingsView = ({
   // Reply Draft State
   const [replyingLetterId, setReplyingLetterId] = useState(null);
   const [replyText, setReplyText] = useState('');
-  const [attachCodeType, setAttachCodeType] = useState('random'); // 'random' | 'fixed' | 'none'
-  const [fixedCodeInput, setFixedCodeInput] = useState('888666');
-  const [expireDuration, setExpireDuration] = useState(15); // minutes
 
   // User Messages State (Broadcast / Direct to registered users)
   const [systemAnnouncements, setSystemAnnouncements] = useState(() => {
@@ -834,7 +854,91 @@ export const AdminSettingsView = ({
         </div>
       )}
 
-      {/* SECTION 4.6: 站内信箱与来信管理 (支持站内直接原路回复邮件、富文本编辑、随机/固定验证码与过期时长控制) */}
+      {/* SECTION 4.6: 验证码策略设置 (随机或固定，可调过期时间) */}
+      {isAdmin && (
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <button
+            onClick={() => toggleSection('verificationConfig')}
+            className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                <Key className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h2 className="text-lg font-bold text-slate-800">系统验证码策略 (随机或固定 · 可调过期时间)</h2>
+                  <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[10px] font-bold">安全控制</span>
+                </div>
+                <p className="text-xs text-slate-400">设置全站注册与校验验证码生成方式（随机6位数字或固定专用码），调节有效时长</p>
+              </div>
+            </div>
+            {openSections.verificationConfig ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+          </button>
+
+          {openSections.verificationConfig && (
+            <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">验证码生成机制</label>
+                  <select
+                    value={verificationCodeConfig.type}
+                    onChange={(e) => setVerificationCodeConfig({ ...verificationCodeConfig, type: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
+                  >
+                    <option value="random">动态随机生成 (6位数字安全码)</option>
+                    <option value="fixed">指定固定验证码 (免收邮件一键测试)</option>
+                  </select>
+                </div>
+
+                {verificationCodeConfig.type === 'fixed' && (
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">固定验证码设定</label>
+                    <input
+                      type="text"
+                      value={verificationCodeConfig.fixedCode}
+                      onChange={(e) => setVerificationCodeConfig({ ...verificationCodeConfig, fixedCode: e.target.value })}
+                      placeholder="888666"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold text-purple-700 bg-white"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1 flex items-center space-x-1">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>验证码有效时长 (分钟)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1440}
+                    value={verificationCodeConfig.expireMinutes}
+                    onChange={(e) => setVerificationCodeConfig({ ...verificationCodeConfig, expireMinutes: parseInt(e.target.value) || 15 })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem('wf_verification_code_config', JSON.stringify(verificationCodeConfig));
+                    showToast(`验证码策略已保存！当前采用【${verificationCodeConfig.type === 'random' ? '随机动态生成' : `固定码 ${verificationCodeConfig.fixedCode}`}】，有效期 ${verificationCodeConfig.expireMinutes} 分钟`);
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center space-x-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>保存验证码策略</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SECTION 4.7: 站内信箱与回复消息管理 (纯净管理回复消息功能，支持删除消息，去掉随信附带验证码) */}
       {isAdmin && (
         <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           <button
@@ -847,12 +951,12 @@ export const AdminSettingsView = ({
               </div>
               <div>
                 <div className="flex items-center space-x-2">
-                  <h2 className="text-lg font-bold text-slate-800">站内信箱与来信管理 (站内直复 + 验证码调控)</h2>
+                  <h2 className="text-lg font-bold text-slate-800">站内信箱与回复消息管理 (支持删除消息)</h2>
                   <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[10px] font-bold">
                     {letters.length} 封信件
                   </span>
                 </div>
-                <p className="text-xs text-slate-400">支持站内直接原路回复邮件、富文本撰写、附带随机或固定验证码与过期时长调节</p>
+                <p className="text-xs text-slate-400">管理访客来信与回复消息，支持富文本撰写、删除历史来信与回信记录</p>
               </div>
             </div>
             {openSections.mailboxManager ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
@@ -861,157 +965,121 @@ export const AdminSettingsView = ({
           {openSections.mailboxManager && (
             <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
               <div className="space-y-3">
-                {letters.map((letter) => (
-                  <div key={letter.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-xs text-slate-800">{letter.subject}</span>
-                        <span className="text-[11px] text-slate-400">来自: {letter.senderName} ({letter.senderEmail})</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-[10px] text-slate-400">{letter.receivedAt}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${letter.replied ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                          {letter.replied ? '已回复' : '待回复'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-slate-600 bg-white p-3 rounded-xl border border-slate-100 leading-relaxed">
-                      {letter.content}
-                    </p>
-
-                    {letter.replied && (
-                      <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 text-xs text-emerald-900 space-y-1">
-                        <div className="font-bold flex items-center justify-between">
-                          <span>站长回复记录：</span>
-                          {letter.verificationCodeSent && (
-                            <span className="font-mono text-emerald-700 bg-white px-2 py-0.5 rounded-lg border border-emerald-200">
-                              附带验证码: <strong>{letter.verificationCodeSent}</strong> (有效期 {letter.codeExpireMinutes} 分钟)
-                            </span>
-                          )}
+                {letters.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-6 text-center">暂无信箱与回复记录</p>
+                ) : (
+                  letters.map((letter) => (
+                    <div key={letter.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-xs text-slate-800">{letter.subject}</span>
+                          <span className="text-[11px] text-slate-400">来自: {letter.senderName} ({letter.senderEmail})</span>
                         </div>
-                        <p>{letter.replyContent}</p>
-                      </div>
-                    )}
-
-                    {/* Reply Action Trigger */}
-                    <div className="flex items-center justify-end space-x-2 pt-1">
-                      <button
-                        onClick={() => {
-                          setReplyingLetterId(replyingLetterId === letter.id ? null : letter.id);
-                          setReplyText('');
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold border border-sky-200 flex items-center space-x-1 cursor-pointer"
-                      >
-                        <Reply className="w-3.5 h-3.5" />
-                        <span>{replyingLetterId === letter.id ? '取消回复' : '站内原路回复此邮件'}</span>
-                      </button>
-                    </div>
-
-                    {/* Inline Reply Editor */}
-                    {replyingLetterId === letter.id && (
-                      <div className="mt-3 p-4 rounded-2xl bg-white border border-sky-200 space-y-3 shadow-xs">
-                        <div className="flex items-center justify-between text-xs font-bold text-sky-900">
-                          <span>正在向 {letter.senderEmail} 撰写原路回复</span>
-                          <span className="text-[10px] text-slate-400">支持富文本信息及验证码直发</span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[10px] text-slate-400">{letter.receivedAt}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${letter.replied ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {letter.replied ? '已回复' : '待回复'}
+                          </span>
                         </div>
+                      </div>
 
-                        <textarea
-                          rows={3}
-                          value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
-                          placeholder="请输入给访客的详细回信内容..."
-                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white"
-                        />
+                      <p className="text-xs text-slate-600 bg-white p-3 rounded-xl border border-slate-100 leading-relaxed">
+                        {letter.content}
+                      </p>
 
-                        {/* Verification Code Generator Bar */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                          <div>
-                            <label className="block text-slate-600 font-bold mb-1">随信附带验证码</label>
-                            <select
-                              value={attachCodeType}
-                              onChange={(e) => setAttachCodeType(e.target.value)}
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white"
-                            >
-                              <option value="none">不附带验证码</option>
-                              <option value="random">随机生成 6 位安全码</option>
-                              <option value="fixed">指定固定验证码</option>
-                            </select>
+                      {/* Display Reply Record with Delete option */}
+                      {letter.replied && (
+                        <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 text-xs text-emerald-900 space-y-1">
+                          <div className="font-bold flex items-center justify-between">
+                            <span>站长回复记录：</span>
+                            <span className="text-[10px] text-emerald-700">{letter.repliedAt || '刚刚'}</span>
                           </div>
-
-                          {attachCodeType === 'fixed' && (
-                            <div>
-                              <label className="block text-slate-600 font-bold mb-1">固定验证码设定</label>
-                              <input
-                                type="text"
-                                value={fixedCodeInput}
-                                onChange={(e) => setFixedCodeInput(e.target.value)}
-                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-mono"
-                              />
-                            </div>
-                          )}
-
-                          {attachCodeType !== 'none' && (
-                            <div>
-                              <label className="block text-slate-600 font-bold mb-1 flex items-center space-x-1">
-                                <Clock className="w-3.5 h-3.5 text-slate-400" />
-                                <span>过期时长 (分钟)</span>
-                              </label>
-                              <input
-                                type="number"
-                                min={1}
-                                max={1440}
-                                value={expireDuration}
-                                onChange={(e) => setExpireDuration(parseInt(e.target.value) || 15)}
-                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-mono"
-                              />
-                            </div>
-                          )}
+                          <p>{letter.replyContent}</p>
                         </div>
+                      )}
 
-                        {/* Send Reply Button */}
-                        <div className="flex justify-end pt-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!replyText.trim()) {
-                                showToast('请输入回复内容！');
-                                return;
-                              }
-                              let finalCode = '';
-                              if (attachCodeType === 'random') {
-                                finalCode = Math.floor(100000 + Math.random() * 900000).toString();
-                              } else if (attachCodeType === 'fixed') {
-                                finalCode = fixedCodeInput.trim() || '888666';
-                              }
+                      {/* Action Bar: Reply & Delete message */}
+                      <div className="flex items-center justify-end space-x-2 pt-1 border-t border-slate-200/60">
+                        <button
+                          onClick={() => {
+                            setReplyingLetterId(replyingLetterId === letter.id ? null : letter.id);
+                            setReplyText(letter.replyContent || '');
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold border border-sky-200 flex items-center space-x-1 cursor-pointer"
+                        >
+                          <Reply className="w-3.5 h-3.5" />
+                          <span>{replyingLetterId === letter.id ? '收起回复' : letter.replied ? '重新编辑回复' : '回复消息'}</span>
+                        </button>
 
-                              const updated = letters.map((l) =>
-                                l.id === letter.id
-                                  ? {
-                                      ...l,
-                                      replied: true,
-                                      replyContent: replyText,
-                                      verificationCodeSent: finalCode,
-                                      codeExpireMinutes: expireDuration
-                                    }
-                                  : l
-                              );
+                        <button
+                          onClick={() => {
+                            if (confirm(`确认删除来自 ${letter.senderName} 的这封信件与回复记录？`)) {
+                              const updated = letters.filter((l) => l.id !== letter.id);
                               setLetters(updated);
                               localStorage.setItem('wf_site_letters', JSON.stringify(updated));
-                              setReplyingLetterId(null);
-                              setReplyText('');
-                              showToast(`原路回复已成功发送至 ${letter.senderEmail}！${finalCode ? `(验证码: ${finalCode})` : ''}`);
-                            }}
-                            className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs flex items-center space-x-1.5 cursor-pointer shadow-sm"
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                            <span>确认原路发送邮件回复</span>
-                          </button>
-                        </div>
+                              showToast('信件记录已成功删除');
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 text-xs font-bold border border-rose-200 flex items-center space-x-1 cursor-pointer"
+                          title="彻底删除此信件与消息"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>删除消息</span>
+                        </button>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {/* Inline Reply Editor */}
+                      {replyingLetterId === letter.id && (
+                        <div className="mt-3 p-4 rounded-2xl bg-white border border-sky-200 space-y-3 shadow-xs">
+                          <div className="flex items-center justify-between text-xs font-bold text-sky-900">
+                            <span>向 {letter.senderEmail} 发送回复</span>
+                            <span className="text-[10px] text-slate-400">纯净消息回复与管理</span>
+                          </div>
+
+                          <textarea
+                            rows={3}
+                            value={replyText}
+                            onChange={(e) => setReplyText(e.target.value)}
+                            placeholder="请输入回复给访客的详细内容..."
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white"
+                          />
+
+                          <div className="flex justify-end pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!replyText.trim()) {
+                                  showToast('请输入回复内容！');
+                                  return;
+                                }
+
+                                const updated = letters.map((l) =>
+                                  l.id === letter.id
+                                    ? {
+                                        ...l,
+                                        replied: true,
+                                        replyContent: replyText,
+                                        repliedAt: new Date().toISOString().replace('T', ' ').slice(0, 16)
+                                      }
+                                    : l
+                                );
+                                setLetters(updated);
+                                localStorage.setItem('wf_site_letters', JSON.stringify(updated));
+                                setReplyingLetterId(null);
+                                setReplyText('');
+                                showToast(`回复消息已发送并记录至信箱！`);
+                              }}
+                              className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs flex items-center space-x-1.5 cursor-pointer shadow-sm"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              <span>确认发送回复消息</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
