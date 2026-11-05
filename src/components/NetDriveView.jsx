@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
 import { storeFileInVault, getFileFromVault } from '../services/indexedDbVault';
+import { uploadFileToObjectStorage } from '../services/cloudAdapter';
 
 export const NetDriveView = ({
   cloudConfig,
@@ -114,23 +115,39 @@ export const NetDriveView = ({
       // Persist in IndexedDB Vault so large binary data persists across reloads and downloads
       await storeFileInVault(fileId, file, { name: file.name, type: file.type, size: file.size });
 
-      // If text or small file, read DataURL for sync; else keep robust data URL representation
-      if (file.size < 3 * 1024 * 1024) {
-        fileUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.readAsDataURL(file);
-        });
-        if (isImg) thumbnail = fileUrl;
-      } else {
-        fileUrl = `idb://${fileId}/${encodeURIComponent(file.name)}`;
+      // Attempt remote object storage upload if target is R2 / COS / OSS
+      if (['r2', 'cos', 'oss'].includes(activeDriver)) {
+        const uploadRes = await uploadFileToObjectStorage(file, { backendConfig });
+        if (uploadRes && uploadRes.success && uploadRes.url) {
+          fileUrl = uploadRes.url;
+        } else if (uploadRes && !uploadRes.success) {
+          if (uploadRes.errorType === 'CORS_ERROR') {
+            alert('【对象存储跨域提醒】\n' + uploadRes.message);
+          } else if (uploadRes.message) {
+            setSyncStatus(uploadRes.message);
+          }
+        }
+      }
+
+      if (!fileUrl) {
+        // If text or small file, read DataURL for sync; else keep robust data URL representation
+        if (file.size < 3 * 1024 * 1024) {
+          fileUrl = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(file);
+          });
+          if (isImg) thumbnail = fileUrl;
+        } else {
+          fileUrl = `idb://${fileId}/${encodeURIComponent(file.name)}`;
+        }
       }
 
       newEntries.push({
         id: fileId,
         name: file.name,
         url: fileUrl,
-        thumbnail: thumbnail || '',
+        thumbnail: thumbnail || (isImg ? fileUrl : ''),
         provider: currentProviderMap[activeDriver] || '坚果云 WebDAV',
         bucketKey: activeDriver,
         size: sizeStr,

@@ -160,11 +160,17 @@ VITE_EMAIL_PROVIDER=resend
 VITE_EMAIL_API_KEY=re_1234567890abcdef
 VITE_EMAIL_SENDER=noreply@whitefox.blog
 
-# Cloudflare D1 边缘数据库与 R2 对象存储
-VITE_CF_D1_HOST=d1.cloudflare.com
-VITE_CF_D1_TOKEN=your_cf_api_token
-VITE_CF_R2_BUCKET=whitefox-assets
-VITE_CF_R2_DOMAIN=https://r2.whitefox.blog
+# Cloudflare D1 边缘数据库与 R2 对象存储 (也可在 Pages 控制台直接绑定 DB 与 BUCKET)
+VITE_CF_D1_ENABLED=true
+VITE_CF_ACCOUNT_ID=your_cloudflare_account_id
+VITE_CF_D1_DATABASE_ID=your_d1_database_uuid
+VITE_CF_API_TOKEN=your_cloudflare_api_token
+
+VITE_CF_R2_ENABLED=true
+VITE_CF_R2_BUCKET=whitefox-media
+VITE_CF_R2_ACCESS_KEY_ID=your_r2_access_key_id
+VITE_CF_R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+VITE_CF_R2_CUSTOM_DOMAIN=https://media.whitefox.blog
 
 # 坚果云 WebDAV 接口
 VITE_WEBDAV_SERVER=https://dav.jianguoyun.com/dav/

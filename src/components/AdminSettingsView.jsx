@@ -112,6 +112,10 @@ export const AdminSettingsView = ({
   const [isPullingRemote, setIsPullingRemote] = useState(false);
   const [showRemoteVaultPanel, setShowRemoteVaultPanel] = useState(false);
 
+  // Storage & Sync Health Diagnostic Suite
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
+  const [diagnosticResults, setDiagnosticResults] = useState(null);
+
   const toggleSection = (key) => {
     setOpenSections((prev) => {
       const next = { ...prev, [key]: !prev[key] };
@@ -394,6 +398,68 @@ export const AdminSettingsView = ({
     setStorageErrorMsg('');
     setBackendConfig((prev) => ({ ...prev, storageConnected: false }));
     showToast('已断开对象存储连接');
+  };
+
+  // Run comprehensive Storage and Sync Status Diagnostics
+  const handleRunDiagnostics = async () => {
+    setIsDiagnosing(true);
+    setDiagnosticResults(null);
+
+    // 1. Calculate localStorage quota & usage
+    let storageUsedBytes = 0;
+    try {
+      for (const key in localStorage) {
+        if (Object.prototype.hasOwnProperty.call(localStorage, key)) {
+          storageUsedBytes += (localStorage[key].length + key.length) * 2;
+        }
+      }
+    } catch (e) {}
+    const storageUsedMB = (storageUsedBytes / (1024 * 1024)).toFixed(2);
+    const storageQuotaMB = 5.0; // standard browser quota
+    const storageRemainingMB = Math.max(0, storageQuotaMB - parseFloat(storageUsedMB)).toFixed(2);
+    const storageHealthy = parseFloat(storageRemainingMB) > 0.5;
+
+    // 2. Test Cloudflare D1 Database Connection
+    let d1Result = { success: false, message: 'D1 数据库未连接' };
+    try {
+      const { testRealDatabaseConnection } = await import('../services/cloudAdapter');
+      d1Result = await testRealDatabaseConnection(backendConfig);
+    } catch (e) {
+      d1Result = { success: false, message: e.message };
+    }
+
+    // 3. Test Object Storage (R2 / COS / OSS) Connection & CORS
+    let r2Result = { success: false, message: '对象存储凭据未配置' };
+    try {
+      const { testRealObjectStorageConnection } = await import('../services/cloudAdapter');
+      r2Result = await testRealObjectStorageConnection(backendConfig);
+    } catch (e) {
+      r2Result = { success: false, message: e.message };
+    }
+
+    setIsDiagnosing(false);
+    setDiagnosticResults({
+      time: new Date().toLocaleTimeString(),
+      storage: {
+        healthy: storageHealthy,
+        usedMB: storageUsedMB,
+        remainingMB: storageRemainingMB,
+        message: storageHealthy
+          ? `浏览器本地存储剩余空间充裕 (${storageRemainingMB} MB 可用)`
+          : `本地存储容量偏紧 (${storageRemainingMB} MB 可用)，建议激活 D1 云端同步`
+      },
+      d1: {
+        healthy: d1Result.success,
+        message: d1Result.message || (d1Result.success ? 'Cloudflare D1 边缘数据库连通正常' : 'D1 数据库未配置或握手未通过')
+      },
+      r2: {
+        healthy: r2Result.success,
+        corsBlocked: !!r2Result.corsBlocked,
+        message: r2Result.message || (r2Result.success ? '对象存储凭证有效且 CORS 连通正常' : '对象存储未配置凭证或存在跨域限制')
+      }
+    });
+
+    showToast('存储与同步状态综合检测已完成！');
   };
 
   // Auto-reply email test sender
@@ -1238,6 +1304,103 @@ export const AdminSettingsView = ({
 
         {openSections.databaseHub && (
           <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6">
+            {/* 存储与同步状态综合检测工具 */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-50 via-indigo-50/50 to-white border border-sky-200/90 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-800">存储与同步状态全链路检测</h3>
+                    <p className="text-[11px] text-slate-500">检测对象存储 R2/COS/OSS 凭证、CORS 跨域策略、D1 数据库握手及本地容量</p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleRunDiagnostics}
+                  disabled={isDiagnosing}
+                  className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isDiagnosing ? 'animate-spin' : ''}`} />
+                  <span>{isDiagnosing ? '正在全链路检测中...' : '运行存储与同步状态检测'}</span>
+                </button>
+              </div>
+
+              {/* 可视化检测结果面板 (绿勾/红叉) */}
+              {diagnosticResults && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2">
+                  {/* 项 1: 本地存储配额 */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-700 flex items-center space-x-1">
+                        <HardDrive className="w-3.5 h-3.5 text-slate-500" />
+                        <span>浏览器本地存储</span>
+                      </span>
+                      {diagnosticResults.storage.healthy ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-rose-500" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">{diagnosticResults.storage.message}</p>
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      已用: {diagnosticResults.storage.usedMB} MB / 剩余: {diagnosticResults.storage.remainingMB} MB
+                    </div>
+                  </div>
+
+                  {/* 项 2: D1 边缘数据库 */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-700 flex items-center space-x-1">
+                        <Database className="w-3.5 h-3.5 text-sky-600" />
+                        <span>Cloudflare D1 数据库</span>
+                      </span>
+                      {diagnosticResults.d1.healthy ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-rose-500" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">{diagnosticResults.d1.message}</p>
+                    {!diagnosticResults.d1.healthy && (
+                      <button
+                        onClick={handleTestDatabase}
+                        className="text-[10px] text-sky-600 font-bold hover:underline cursor-pointer"
+                      >
+                        一键前往配置与重试 D1 &rarr;
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 项 3: 对象存储 R2 / COS / OSS */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-700 flex items-center space-x-1">
+                        <Cloud className="w-3.5 h-3.5 text-amber-600" />
+                        <span>对象存储与 CORS</span>
+                      </span>
+                      {diagnosticResults.r2.healthy ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-rose-500" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">{diagnosticResults.r2.message}</p>
+                    {!diagnosticResults.r2.healthy && (
+                      <button
+                        onClick={handleTestStorage}
+                        className="text-[10px] text-amber-600 font-bold hover:underline cursor-pointer"
+                      >
+                        {diagnosticResults.r2.corsBlocked ? '点击前往测试 CORS 连通性 &rarr;' : '一键前往存储桶配置 &rarr;'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* 数据库配置与实时状态灯 */}
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">

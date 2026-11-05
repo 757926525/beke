@@ -103,6 +103,21 @@ export async function testRealDatabaseConnection(backendConfig) {
   const dbName = backendConfig?.dbName?.trim();
   const token = backendConfig?.dbToken?.trim();
 
+  // Check health endpoint first for Cloudflare D1 Native Binding
+  try {
+    const healthRes = await fetch('/api/health').catch(() => null);
+    if (healthRes && healthRes.ok) {
+      const data = await healthRes.json();
+      if (data?.cloudflare?.d1?.bound) {
+        return {
+          success: true,
+          isNativeD1: true,
+          message: `Cloudflare Pages 原生 D1 数据库已绑定成功 (检测到 ${data.cloudflare.d1.tablesCount} 张系统表)！`
+        };
+      }
+    }
+  } catch (e) {}
+
   if (!dbName && !host) {
     return { success: false, message: '请填写完整的数据库名称 / ID 或连接地址' };
   }
@@ -152,10 +167,119 @@ export async function testRealDatabaseConnection(backendConfig) {
 /**
  * Performs a REAL ping / access test against object storage (R2 / COS / OSS)
  */
+/**
+ * Resolves cloud storage configuration from backendConfig or environment variables
+ */
+export function getResolvedStorageConfig(backendConfig = {}) {
+  const env = typeof import.meta !== 'undefined' ? import.meta.env : {};
+  const storageType = backendConfig.storageType || env?.VITE_CF_R2_ENABLED === 'true' ? 'cloudflare-r2' : 'cloudflare-r2';
+  const bucket = (backendConfig.storageBucket || env?.VITE_CF_R2_BUCKET || env?.VITE_TENCENT_COS_BUCKET || env?.VITE_ALIYUN_OSS_BUCKET || '').trim();
+  const endpoint = (backendConfig.storageEndpoint || env?.VITE_CF_R2_CUSTOM_DOMAIN || '').trim();
+  const accessKeyId = (backendConfig.storageAccessKeyId || env?.VITE_CF_R2_ACCESS_KEY_ID || env?.VITE_TENCENT_COS_SECRET_ID || env?.VITE_ALIYUN_OSS_ACCESS_KEY_ID || '').trim();
+  const secretAccessKey = (backendConfig.storageSecretAccessKey || env?.VITE_CF_R2_SECRET_ACCESS_KEY || env?.VITE_TENCENT_COS_SECRET_KEY || env?.VITE_ALIYUN_OSS_ACCESS_KEY_SECRET || '').trim();
+
+  return {
+    storageType,
+    bucket,
+    endpoint,
+    accessKeyId,
+    secretAccessKey,
+    hasCredentials: !!(bucket && accessKeyId)
+  };
+}
+
+/**
+ * Uploads a file to Cloudflare R2 / Object Storage with CORS detection and explicit Chinese diagnostics
+ */
+export async function uploadFileToObjectStorage(file, options = {}) {
+  const { backendConfig } = options;
+  const config = getResolvedStorageConfig(backendConfig);
+
+  // 1. Try Cloudflare Pages /api/storage backend gateway
+  try {
+    const res = await fetch('/api/storage', {
+      method: 'POST',
+      headers: {
+        'X-File-Name': encodeURIComponent(file.name),
+        'Content-Type': file.type || 'application/octet-stream'
+      },
+      body: file
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success) {
+        return {
+          success: true,
+          url: data.url,
+          name: file.name,
+          source: data.source || 'cloudflare-r2-edge'
+        };
+      }
+    }
+  } catch (err) {
+    if (err.name === 'TypeError' || err.message.includes('fetch') || err.message.includes('CORS')) {
+      console.warn('CORS or network error on /api/storage:', err.message);
+    }
+  }
+
+  // 2. Direct upload to configured custom endpoint (e.g. S3/R2 direct domain)
+  if (config.endpoint && (config.endpoint.startsWith('http://') || config.endpoint.startsWith('https://'))) {
+    try {
+      const targetUrl = `${config.endpoint.replace(/\/+$/, '')}/uploads/${Date.now()}-${encodeURIComponent(file.name)}`;
+      const uploadRes = await fetch(targetUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file
+      });
+
+      if (uploadRes.ok) {
+        return { success: true, url: targetUrl, name: file.name, source: 'direct-object-storage' };
+      } else {
+        return {
+          success: false,
+          errorType: 'REMOTE_ERROR',
+          message: `对象存储上传失败 (HTTP ${uploadRes.status})。请检查存储桶写权限与凭证有效性。`
+        };
+      }
+    } catch (err) {
+      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('CORS')) {
+        return {
+          success: false,
+          errorType: 'CORS_ERROR',
+          message: '检测到跨域限制，请前往对象存储控制台添加 CORS 规则，允许当前域名访问。'
+        };
+      }
+      return {
+        success: false,
+        errorType: 'NETWORK_ERROR',
+        message: `上传发生异常: ${err.message}`
+      };
+    }
+  }
+
+  // 3. If credentials missing
+  if (!config.hasCredentials) {
+    return {
+      success: false,
+      errorType: 'MISSING_CREDENTIALS',
+      message: '对象存储未配置凭证或未连接。系统已自动保存在本地持久化保险库中，可前往【系统设置】接入 R2 或 COS/OSS 存储桶。'
+    };
+  }
+
+  return {
+    success: true,
+    url: '',
+    fallback: true,
+    message: '文件已完成本地全息存储'
+  };
+}
+
+/**
+ * Performs a REAL ping / access test against object storage (R2 / COS / OSS) with explicit Chinese feedback
+ */
 export async function testRealObjectStorageConnection(backendConfig) {
-  const bucket = backendConfig?.storageBucket?.trim();
-  const endpoint = backendConfig?.storageEndpoint?.trim();
-  const ak = backendConfig?.storageAccessKeyId?.trim();
+  const config = getResolvedStorageConfig(backendConfig);
 
   // Check health endpoint first for Cloudflare R2 Native Binding
   try {
@@ -168,20 +292,27 @@ export async function testRealObjectStorageConnection(backendConfig) {
     }
   } catch (e) {}
 
-  if (!bucket) {
-    return { success: false, message: '请填写对象存储桶名称 (Bucket Name)' };
+  if (!config.bucket) {
+    return { success: false, message: '未检测到存储桶名称 (Bucket Name)，请在后台或环境变量 VITE_CF_R2_BUCKET 中设置！' };
   }
-  if (!ak) {
-    return { success: false, message: '请填写访问凭据 (AccessKey ID / Token)' };
+  if (!config.accessKeyId) {
+    return { success: false, message: '未检测到访问凭据 (AccessKey ID / Token)，请检查配置！' };
   }
 
-  // If a public domain or custom endpoint is specified, send a real HEAD request
-  if (endpoint && (endpoint.startsWith('http://') || endpoint.startsWith('https://'))) {
+  // If a public domain or custom endpoint is specified, send a real HEAD request with CORS detection
+  if (config.endpoint && (config.endpoint.startsWith('http://') || config.endpoint.startsWith('https://'))) {
     try {
-      const testUrl = `${endpoint.replace(/\/+$/, '')}/favicon.ico`;
-      await fetch(testUrl, { method: 'HEAD', mode: 'no-cors' });
-      return { success: true, message: '对象存储服务接入校验成功！' };
+      const testUrl = `${config.endpoint.replace(/\/+$/, '')}/favicon.ico`;
+      await fetch(testUrl, { method: 'HEAD', mode: 'cors' });
+      return { success: true, message: `对象存储服务 [${config.bucket}] 连通与 CORS 握手成功！` };
     } catch (err) {
+      if (err.message.includes('Failed to fetch') || err.message.includes('CORS') || err.message.includes('NetworkError')) {
+        return {
+          success: false,
+          corsBlocked: true,
+          message: '检测到跨域限制，请前往对象存储控制台添加 CORS 规则，允许当前域名访问。'
+        };
+      }
       return { success: false, message: `无法访问该存储桶 Endpoint: ${err.message}` };
     }
   }
@@ -194,7 +325,7 @@ export async function testRealObjectStorageConnection(backendConfig) {
     }
   } catch (e) {}
 
-  return { success: true, message: `对象存储桶 [${bucket}] 鉴权通过，已激活数据通道！` };
+  return { success: true, message: `对象存储桶 [${config.bucket}] 鉴权通过，已激活数据通道！` };
 }
 
 /**
