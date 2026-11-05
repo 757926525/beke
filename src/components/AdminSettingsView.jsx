@@ -1226,8 +1226,11 @@ export const AdminSettingsView = ({
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-800">全能数据库后台与管理界面接入</h2>
-              <p className="text-xs text-slate-400">支持 Cloudflare D1、PostgreSQL、MySQL、Supabase、MongoDB 等多种数据源接入与真实状态监测</p>
+              <div className="flex items-center space-x-2">
+                <h2 className="text-lg font-bold text-slate-800">全能数据库后台接入</h2>
+                <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[10px] font-bold">仅后台接入</span>
+              </div>
+              <p className="text-xs text-slate-400">支持 Cloudflare D1、PostgreSQL、MySQL、Supabase、MongoDB 等多种数据源后台专线直连与实时状态监测</p>
             </div>
           </div>
           {openSections.databaseHub ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
@@ -1271,6 +1274,53 @@ export const AdminSettingsView = ({
                 </div>
               )}
 
+              {/* 各主流数据库后台独立接入状态指示灯面板 */}
+              <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-2">
+                <span className="text-[11px] font-bold text-slate-700 block">各数据库后台接入状态监测指示灯：</span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-[11px]">
+                  {[
+                    { id: 'cloudflare-d1', name: 'Cloudflare D1', desc: '边缘 SQLite' },
+                    { id: 'supabase', name: 'Supabase', desc: 'PostgreSQL' },
+                    { id: 'mysql', name: 'MySQL', desc: '关系型集群' },
+                    { id: 'mongodb', name: 'MongoDB', desc: 'Atlas NoSQL' },
+                    { id: 'redis', name: 'Redis', desc: 'Upstash KV' },
+                    { id: 'sqlite', name: 'Local SQLite', desc: 'PocketBase' }
+                  ].map((db) => {
+                    const isCurrent = (backendConfig?.dbType || 'cloudflare-d1') === db.id;
+                    const isLive = isCurrent && dbStatus === 'connected';
+                    return (
+                      <div
+                        key={db.id}
+                        className={`p-2 rounded-xl border flex flex-col justify-between transition-all ${
+                          isLive
+                            ? 'bg-emerald-50/90 border-emerald-300 text-emerald-900 shadow-xs'
+                            : isCurrent && dbStatus === 'failed'
+                            ? 'bg-rose-50 border-rose-300 text-rose-800'
+                            : 'bg-white border-slate-200/80 text-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold truncate">{db.name}</span>
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              isLive
+                                ? 'bg-emerald-500 animate-pulse'
+                                : isCurrent && dbStatus === 'failed'
+                                ? 'bg-rose-500'
+                                : 'bg-slate-300'
+                            }`}
+                          />
+                        </div>
+                        <span className="text-[9px] text-slate-400 mt-0.5">{db.desc}</span>
+                        <span className="text-[9px] font-semibold mt-1">
+                          {isLive ? '🟢 运行中' : isCurrent && dbStatus === 'failed' ? '🔴 异常' : '⚪ 待接入'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1">数据库类型 / 协议</label>
@@ -1282,7 +1332,7 @@ export const AdminSettingsView = ({
                     }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
                   >
-                    <option value="cloudflare-d1">Cloudflare D1 (边缘 SQLite)</option>
+                    <option value="cloudflare-d1">Cloudflare D1 (边缘 SQLite - 推荐)</option>
                     <option value="supabase">Supabase / PostgreSQL</option>
                     <option value="mysql">MySQL 8.0+ / MariaDB</option>
                     <option value="mongodb">MongoDB Atlas (NoSQL)</option>
