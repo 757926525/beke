@@ -7,7 +7,7 @@ import {
   initialBookmarkZones,
   defaultCloudConfig,
   defaultSystemSettings
-} from '../data/mockData';
+} from '../data/mockData.js';
 
 // Helper for localStorage with fallback
 export const loadFromStorage = (key, fallback) => {
@@ -633,6 +633,36 @@ export const sanitizeSyncPayload = (payload) => {
     delete clean.backendConfig.dbToken;
     delete clean.backendConfig.storageSecretAccessKey;
   }
+
+  // 关键保护：过滤或压缩大 base64 图像数据，防止单个过大文件撑爆数据库 1.5MB 限制
+  // 导致多端同步中断或被 413 拦截
+  const stripOversizedDataUrls = (items) => {
+    if (!Array.isArray(items)) return items;
+    return items.map((item) => {
+      if (!item) return item;
+      const copy = { ...item };
+      // 若包含超过 150KB 的内联 Base64，且有 vaultUrl 或 fileId，改用轻量化引用
+      if (typeof copy.url === 'string' && copy.url.startsWith('data:') && copy.url.length > 150 * 1024) {
+        if (copy.vaultUrl) {
+          copy.url = copy.vaultUrl;
+        } else if (copy.id) {
+          copy.url = `vault://${copy.id}`;
+        }
+      }
+      if (typeof copy.downloadUrl === 'string' && copy.downloadUrl.startsWith('data:') && copy.downloadUrl.length > 150 * 1024) {
+        if (copy.vaultUrl) {
+          copy.downloadUrl = copy.vaultUrl;
+        } else if (copy.id) {
+          copy.downloadUrl = `vault://${copy.id}`;
+        }
+      }
+      return copy;
+    });
+  };
+
+  if (clean.photos) clean.photos = stripOversizedDataUrls(clean.photos);
+  if (clean.cloudFiles) clean.cloudFiles = stripOversizedDataUrls(clean.cloudFiles);
+  if (clean.mediaList) clean.mediaList = stripOversizedDataUrls(clean.mediaList);
 
   return clean;
 };

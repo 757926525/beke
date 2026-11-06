@@ -4,6 +4,8 @@ import {
   Upload, Trash2, Plus, Download, CheckCircle2, Video, Radio, Layers, Eye, RefreshCw,
   FolderInput, HardDrive, Check
 } from 'lucide-react';
+import { downloadFile } from '../services/documentConverter';
+import { uploadFileUniversal } from '../services/uploader';
 
 export const MediaPlayerView = ({
   currentUser,
@@ -69,7 +71,7 @@ export const MediaPlayerView = ({
   };
 
   // Local media file upload - converts to Base64 data URL for small files, or object URL with localStorage sync
-  const handleLocalMediaUpload = (e) => {
+  const handleLocalMediaUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -82,58 +84,38 @@ export const MediaPlayerView = ({
     }
 
     const sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+    showToast(`正在上传并持久化处理媒体「${file.name}」...`);
 
-    // If file is reasonably sized, read as data URL for permanent persistence
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target.result;
-      const newMediaItem = {
-        id: `media-${Date.now()}`,
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        desc: `本地上传的${isVideo ? '视频' : '音频'}媒体文件 (${sizeStr})`,
-        type: isVideo ? 'video' : 'audio',
-        aspect: isVideo ? '16:9' : '1:1',
-        url: dataUrl,
-        poster: isVideo
-          ? 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80'
-          : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
-        duration: '本地流',
-        size: sizeStr,
-        date: new Date().toISOString().split('T')[0],
-        uploadedBy: currentUser?.username || '用户',
-        userId: currentUser?.id || 'guest',
-        isLocalUpload: true
-      };
+    const uploadRes = await uploadFileUniversal(file, { compress: false });
 
-      const updated = [newMediaItem, ...mediaList];
-      setMediaList(updated);
-      setActiveMedia(newMediaItem);
-      if (isVideo) setAspectRatio('16:9');
-      showToast(`本地媒体「${file.name}」已持久保存入库，刷新页面不丢失！`);
+    const newMediaItem = {
+      id: `media-${Date.now()}`,
+      title: file.name.replace(/\.[^/.]+$/, ''),
+      desc: `上传的${isVideo ? '视频' : '音频'}媒体文件 (${sizeStr})`,
+      type: isVideo ? 'video' : 'audio',
+      aspect: isVideo ? '16:9' : '1:1',
+      url: uploadRes.url,
+      downloadUrl: uploadRes.downloadUrl || uploadRes.url,
+      vaultUrl: uploadRes.vaultUrl || uploadRes.url,
+      storage: uploadRes.storage,
+      poster: isVideo
+        ? 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80'
+        : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
+      duration: '媒体流',
+      size: sizeStr,
+      date: new Date().toISOString().split('T')[0],
+      uploadedBy: currentUser?.username || '用户',
+      userId: currentUser?.id || 'guest',
+      isLocalUpload: true,
+      updatedAt: Date.now(),
+      deleted: false
     };
 
-    reader.onerror = () => {
-      // Fallback to object URL
-      const objectUrl = URL.createObjectURL(file);
-      const fallbackItem = {
-        id: `media-${Date.now()}`,
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        desc: `本地上传的${isVideo ? '视频' : '音频'}媒体文件 (${sizeStr})`,
-        type: isVideo ? 'video' : 'audio',
-        aspect: isVideo ? '16:9' : '1:1',
-        url: objectUrl,
-        poster: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80',
-        duration: '本地流',
-        size: sizeStr,
-        date: new Date().toISOString().split('T')[0],
-        isLocalUpload: true
-      };
-      setMediaList([fallbackItem, ...mediaList]);
-      setActiveMedia(fallbackItem);
-      showToast(`本地媒体「${file.name}」载入就绪！`);
-    };
-
-    reader.readAsDataURL(file);
+    const updated = [newMediaItem, ...mediaList];
+    setMediaList(updated);
+    setActiveMedia(newMediaItem);
+    if (isVideo) setAspectRatio('16:9');
+    showToast(`媒体「${file.name}」已持久保存入库，支持永久播放与下载！`);
     e.target.value = '';
   };
 
@@ -166,13 +148,7 @@ export const MediaPlayerView = ({
   // Download media file
   const handleDownloadMedia = (m, e) => {
     if (e) e.stopPropagation();
-    const link = document.createElement('a');
-    link.href = m.url;
-    link.download = `${m.title}.${m.type === 'video' ? 'mp4' : 'mp3'}`;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadFile(m.downloadUrl || m.vaultUrl || m.url, `${m.title}.${m.type === 'video' ? 'mp4' : 'mp3'}`);
     showToast(`开始下载「${m.title}」！`);
   };
 

@@ -94,11 +94,30 @@ export async function generateDocxBlob(article) {
  * @param {string} filename
  * @param {string} mimeType
  */
+import { getFileFromVault } from './indexedDbVault';
+
 export async function downloadFile(contentOrUrl, filename, mimeType = 'application/octet-stream') {
   try {
     if (typeof contentOrUrl === 'string') {
-      // If it's a data URL or blob URL
-      if (contentOrUrl.startsWith('data:') || contentOrUrl.startsWith('blob:')) {
+      // 1. 如果是 vault://{fileId} 格式，从本地 IndexedDB 保险库读取原始 Blob 下载
+      if (contentOrUrl.startsWith('vault://')) {
+        const fileId = contentOrUrl.replace(/^vault:\/\//, '');
+        const record = await getFileFromVault(fileId);
+        if (record && record.blob) {
+          const objUrl = URL.createObjectURL(record.blob);
+          const a = document.createElement('a');
+          a.href = objUrl;
+          a.download = filename || record.name || 'download';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+          return;
+        }
+      }
+
+      // 2. 如果是 data: URL
+      if (contentOrUrl.startsWith('data:')) {
         const a = document.createElement('a');
         a.href = contentOrUrl;
         a.download = filename || 'download';
@@ -108,34 +127,58 @@ export async function downloadFile(contentOrUrl, filename, mimeType = 'applicati
         return;
       }
 
-      // If it's an HTTP/HTTPS remote URL
-      if (contentOrUrl.startsWith('http://') || contentOrUrl.startsWith('https://')) {
+      // 3. 如果是 blob: URL (尝试 fetch 或直接下载)
+      if (contentOrUrl.startsWith('blob:')) {
         try {
-          const resp = await fetch(contentOrUrl);
-          const blob = await resp.blob();
-          const objUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = objUrl;
-          a.download = filename || 'download';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(objUrl);
-          return;
-        } catch {
-          // If fetch fails (e.g. CORS), trigger direct browser download link
           const a = document.createElement('a');
           a.href = contentOrUrl;
           a.download = filename || 'download';
-          a.target = '_blank';
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
           return;
+        } catch (e) {
+          console.warn('Blob URL download error, trying fallback:', e);
         }
       }
 
-      // Fallback: raw text content
+      // 4. 如果是 HTTP/HTTPS 远程 URL 或 /api/upload 相对 URL
+      if (contentOrUrl.startsWith('http://') || contentOrUrl.startsWith('https://') || contentOrUrl.startsWith('/api/')) {
+        let downloadTargetUrl = contentOrUrl;
+        // 如果是 /api/upload 路径，自动附带 ?download=1 参数以获得 Content-Disposition: attachment 强制下载
+        if (contentOrUrl.includes('/api/upload') && !contentOrUrl.includes('download=')) {
+          downloadTargetUrl += (contentOrUrl.includes('?') ? '&' : '?') + 'download=1';
+        }
+
+        try {
+          const resp = await fetch(downloadTargetUrl, { mode: 'cors' });
+          if (resp.ok) {
+            const blob = await resp.blob();
+            const objUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objUrl;
+            a.download = filename || 'download';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+            return;
+          }
+        } catch {
+          // If fetch fails (e.g. CORS), fallback to browser direct download link
+        }
+
+        const a = document.createElement('a');
+        a.href = downloadTargetUrl;
+        a.download = filename || 'download';
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+
+      // 5. Fallback: raw text content
       const blob = new Blob([contentOrUrl], { type: mimeType });
       const objUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -144,7 +187,7 @@ export async function downloadFile(contentOrUrl, filename, mimeType = 'applicati
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(objUrl);
+      setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
       return;
     }
 
