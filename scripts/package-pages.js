@@ -9,11 +9,9 @@ const zipOutput = path.join(rootDir, 'whitefox-pages-deploy.zip');
 
 console.log('🦊 [白狐博客] 开始打包 Cloudflare Pages 一键上传包...');
 
-// 1. Check if dist exists, if not build it
-if (!fs.existsSync(distDir)) {
-  console.log('⚡ dist 产物目录不存在，正在执行 npm run build...');
-  execSync('npm run build', { stdio: 'inherit' });
-}
+// 1. Always trigger fresh production build to ensure latest dist/_worker.js & assets
+console.log('⚡ 正在执行 npm run build 生成最新前端与边缘 Worker 产物...');
+execSync('npm run build', { stdio: 'inherit' });
 
 // 2. Create archive
 const output = fs.createWriteStream(zipOutput);

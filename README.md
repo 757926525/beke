@@ -192,16 +192,51 @@ http://<服务器IP>:80
 
 无需在代码中填写敏感 UUID 或访问密钥，直接在 Cloudflare 控制台添加绑定即可彻底打通联网同步、文件持久化上传与多端下载：
 
+#### 🔧 为什么会遇到 "POST 405 Method Not Allowed"？
+- **根因：** 当使用 Cloudflare Pages **Direct Upload (直接拖拽上传静态目录或 zip 包)** 时，Pages 默认仅将文件当作静态托管，**不会自动编译 `functions/` 目录**。因此任何发往 `/api/*` 的 POST 请求都会被静态服务器拦截并返回 `405 Method Not Allowed`。
+- **本系统彻底解决方案：**
+  1. Vite 构建时通过内置插件自动生成 **`dist/_worker.js` (Cloudflare Advanced Mode)**，无论您是 Git 自动构建还是后台直接上传 Zip，`_worker.js` 都会接管 `/api/*` 请求。
+  2. 自动生成 **`dist/_routes.json`** 与 **`dist/_redirects`**，确保只有 API 请求走 Worker 边缘函数，静态资产零延迟极速缓存下发。
+
+#### 📋 Cloudflare Pages 控制台后台手动配置三步法
+
 1. **创建 D1 数据库与 R2 存储桶**：
-   - 打开 Cloudflare Dashboard -> **Storage & Databases** -> **D1 SQL Database** -> 创建名为 `whitefox-db` 的数据库。
-   - 在其 **Console** 中执行 `deploy/cloudflare-d1-schema.sql` 完成表结构初始化。
+   - 打开 [Cloudflare Dashboard](https://dash.cloudflare.com/) -> **Storage & Databases** -> **D1 SQL Database** -> 创建名为 `whitefox-db` 的数据库。
+   - 点击该数据库 -> **Console** -> 复制粘贴并执行 `deploy/cloudflare-d1-schema.sql` 完成 `site_sync` 表结构初始化。
    - 在 **Storage & Databases** -> **R2 Object Storage** 中创建名为 `whitefox-assets` 的存储桶。
-2. **在 Pages 项目后台添加原生绑定**：
-   - 打开 Pages 项目 -> **Settings** -> **Functions**。
-   - 在 **D1 database bindings** 点击添加：变量名称填 **`DB`**，选择刚创建的 `whitefox-db`。
-   - 在 **R2 bucket bindings** 点击添加：变量名称填 **`BUCKET`**，选择刚创建的 `whitefox-assets`。
-   - （可选配置 R2 CORS）：若配置了自定义域名，可在 R2 存储桶 Settings -> CORS Policy 中允许 Origin `*` 及 GET, PUT, POST, HEAD 方法。
-   - 保存并重新部署，全站博文附件、相册照片与网盘文件即可自动流式上传至 R2，并在所有浏览器与访客端正常显示与高速下载！
+2. **在 Pages 项目后台添加原生绑定 (Bindings)**：
+   - 打开 Pages 项目 (例如 `beke2`) -> **Settings** -> **Functions**。
+   - **D1 database bindings (D1 数据库绑定)**：点击 **Add binding** -> 变量名称必须填 **`DB`** -> 选择上面创建的 `whitefox-db`。
+   - **R2 bucket bindings (R2 存储桶绑定)**：点击 **Add binding** -> 变量名称必须填 **`BUCKET`** -> 选择上面创建的 `whitefox-assets`。
+3. **设置管理员环境变量 (Environment variables)**：
+   - 打开 Pages 项目 -> **Settings** -> **Environment variables**。
+   - 添加 `ADMIN_USERNAME` = `fox` (可自定义站长账号)
+   - 添加 `ADMIN_PASSWORD` = `your_strong_password` (设定站长密码)
+   - 点击保存。**重要：配置完 Binding 和环境变量后，请务必重新部署一次 (Redeploy) 使绑定生效！**
+
+#### 🧪 终端一键自测验证命令 (curl)
+
+您可在终端执行以下命令直接测试站点连通性：
+
+```bash
+# 1. 检查后端健康状态与 D1/R2 绑定状态
+curl -i https://<your-pages-domain>/api/health
+
+# 预期返回: HTTP 200, JSON 包含 d1.bound=true, r2.bound=true
+
+# 2. 测试站长登录验证 (POST 请求，不再报 405)
+curl -i -X POST https://<your-pages-domain>/api/auth \
+  -H "Content-Type: application/json" \
+  -d '{"action":"login","username":"fox","password":"your_strong_password"}'
+
+# 预期返回: HTTP 200, JSON 包含 success: true 和 30 天有效 token
+
+# 3. 测试文件上传接口
+curl -i -X POST https://<your-pages-domain>/api/upload \
+  -F "file=@README.md"
+
+# 预期返回: HTTP 201, JSON 包含 key、url 与 downloadUrl
+```
 
 ### 2. 本地开发与 CLI 部署 (wrangler.toml)
 

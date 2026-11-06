@@ -512,6 +512,11 @@ export const DeploymentGuideView = ({ siteName = 'fox', t }) => {
                   </li>
                   <li>点击 <strong>Save (保存)</strong> 并触发一次重新部署。完成后，站内数据库与存储桶状态灯将自动点亮，全站数据实现持久化与多端极速同步！</li>
                 </ol>
+
+                <div className="mt-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                  <p className="font-bold mb-1">⚡ 为什么上传/登录曾返回 405 Method Not Allowed？</p>
+                  <p>若使用 Zip/文件夹直接上传 (Direct Upload)，Pages 默认仅将文件作为纯静态托管，不会自动编译 functions 目录。现构建流程已内置 <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-200">_worker.js</code> 与 <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-200">_routes.json</code>，双模自动接管全部 POST 请求，彻底杜绝 405 错误！</p>
+                </div>
               </div>
 
               <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 space-y-2">
