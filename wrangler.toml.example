@@ -1,0 +1,35 @@
+# 白狐博客 (WhiteFox Blog) - Cloudflare Pages / Workers 配置文件模板
+# 提示：Cloudflare Pages 部署首选在 Dashboard 界面绑定 D1 与 R2；
+# 若使用 Wrangler CLI 进行本地开发或自动化部署，可参考或使用此配置文件。
+
+name = "whitefox-blog"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "dist"
+
+# 1. Cloudflare D1 边缘数据库绑定
+# 用于全站博文、相册、网盘元数据、配置信息的毫秒级多端双向同步
+[[d1_databases]]
+binding = "DB"
+database_name = "whitefox-db"
+database_id = "your-d1-database-uuid" # 替换为在 Cloudflare Dashboard 中创建的 D1 数据库 UUID
+
+# 2. Cloudflare R2 对象存储桶绑定
+# 用于博文附件、相册照片、音视频、网盘文件的跨端真实持久化上传与直链下载
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "whitefox-assets" # 替换为在 Cloudflare Dashboard 中创建的 R2 Bucket 名称
+
+# 3. 环境变量配置
+[vars]
+# 站点管理员账号与密码（亦可在 Pages 控制台 Settings -> Environment variables 中随时设定）
+ADMIN_USERNAME = "fox"
+ADMIN_PASSWORD = "your_strong_password"
+
+# 全站统一跨端同步房间标识（确保所有浏览器设备自动对齐）
+SYNC_ROOM_KEY = "whitefox-site-main"
+
+# 博客公开名称
+VITE_SITE_NAME = "fox"
+
+# 可选：R2 绑定的自定义加速域名 (如 https://assets.yourdomain.com)，留空则使用 Pages 内置反代路由 /api/upload
+# VITE_CF_R2_CUSTOM_DOMAIN = "https://assets.yourdomain.com"

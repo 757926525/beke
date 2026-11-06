@@ -6,6 +6,7 @@ import {
   X, Layers, Film, Music, FileCode, Check
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
+import { uploadFileToStorage } from '../services/uploader';
 
 export const AdminFileAndPortalView = ({
   currentUser,
@@ -60,23 +61,12 @@ export const AdminFileAndPortalView = ({
     );
   }
 
-  // Single & Batch File Upload with FileReader DataURL persistence
+  // Single & Batch File Upload with Persistent Storage
   const handleBatchUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    const readAsDataUrl = (file) =>
-      new Promise((resolve) => {
-        // For large files (> 5MB), fallback to object URL to avoid localStorage quotas
-        if (file.size > 5 * 1024 * 1024) {
-          resolve(URL.createObjectURL(file));
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = (event) => resolve(event.target.result);
-        reader.onerror = () => resolve(URL.createObjectURL(file));
-        reader.readAsDataURL(file);
-      });
+    showToast(`正在持久化上传 ${files.length} 个文件至云存储...`);
 
     const newItems = [];
     for (let i = 0; i < files.length; i++) {
@@ -88,7 +78,16 @@ export const AdminFileAndPortalView = ({
       else if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) type = 'image';
       else if (['zip', 'rar', 'tar', 'gz', '7z'].includes(ext)) type = 'archive';
 
-      const fileData = await readAsDataUrl(file);
+      let fileData = '';
+      let downloadUrl = '';
+      try {
+        const uploadRes = await uploadFileToStorage(file);
+        fileData = uploadRes.url;
+        downloadUrl = uploadRes.downloadUrl;
+      } catch (err) {
+        console.warn('Admin upload error:', err);
+        fileData = URL.createObjectURL(file);
+      }
 
       newItems.push({
         id: `admin-f-${Date.now()}-${i}`,
@@ -97,9 +96,12 @@ export const AdminFileAndPortalView = ({
         type,
         provider: '站内专享文件区',
         url: fileData,
+        downloadUrl: downloadUrl || fileData,
         uploadedBy: currentUser?.username || '站长',
         userId: currentUser?.id || 'admin',
-        uploadedAt: new Date().toISOString().split('T')[0]
+        uploadedAt: new Date().toISOString().split('T')[0],
+        updatedAt: Date.now(),
+        deleted: false
       });
     }
 
@@ -364,7 +366,7 @@ export const AdminFileAndPortalView = ({
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => downloadFile(file.url, file.name)}
+                    onClick={() => downloadFile(file.downloadUrl || file.url, file.name)}
                     className="p-1 rounded-lg text-slate-400 hover:text-sky-600 hover:bg-sky-50 cursor-pointer"
                     title="下载到本地"
                   >
@@ -673,7 +675,7 @@ export const AdminFileAndPortalView = ({
             </div>
             <div className="pt-2 flex justify-end space-x-2">
               <button
-                onClick={() => downloadFile(previewFile.url, previewFile.name)}
+                onClick={() => downloadFile(previewFile.downloadUrl || previewFile.url, previewFile.name)}
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer"
               >
                 下载此文件

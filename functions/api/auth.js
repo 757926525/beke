@@ -14,7 +14,7 @@ import { getAdminConfig, issueAdminToken, verifyAdminToken, readAdminToken, safe
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Token',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
   'Content-Type': 'application/json; charset=utf-8',
   'Cache-Control': 'no-store'
 };

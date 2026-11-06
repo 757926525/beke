@@ -110,29 +110,41 @@ export async function downloadFile(contentOrUrl, filename, mimeType = 'applicati
 
       // If it's an HTTP/HTTPS remote URL
       if (contentOrUrl.startsWith('http://') || contentOrUrl.startsWith('https://')) {
+        // 尝试通过 fetch blob 下载（支持跨域或同源）
         try {
-          const resp = await fetch(contentOrUrl);
-          const blob = await resp.blob();
-          const objUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = objUrl;
-          a.download = filename || 'download';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(objUrl);
-          return;
-        } catch {
-          // If fetch fails (e.g. CORS), trigger direct browser download link
-          const a = document.createElement('a');
-          a.href = contentOrUrl;
-          a.download = filename || 'download';
-          a.target = '_blank';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          return;
+          const resp = await fetch(contentOrUrl, { mode: 'cors' });
+          if (resp.ok) {
+            const blob = await resp.blob();
+            const objUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objUrl;
+            a.download = filename || 'download';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(objUrl), 3000);
+            return;
+          }
+        } catch (fetchErr) {
+          console.warn('Fetch blob download failed, falling back to direct anchor download:', fetchErr);
         }
+
+        // 降级 1: 若为内置 /api/upload 链接，追加 download=1 触发服务端 Content-Disposition: attachment
+        let targetUrl = contentOrUrl;
+        if (targetUrl.includes('/api/upload') && !targetUrl.includes('download=')) {
+          targetUrl += (targetUrl.includes('?') ? '&' : '?') + 'download=1';
+        }
+
+        // 降级 2: 动态创建 a 标签模拟用户点击
+        const a = document.createElement('a');
+        a.href = targetUrl;
+        a.download = filename || 'download';
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
       }
 
       // Fallback: raw text content
