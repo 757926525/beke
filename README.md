@@ -188,19 +188,28 @@ http://<服务器IP>:80
 
 白狐博客支持**Cloudflare Pages 后台原生直接绑定**与**各大外部数据库/对象存储直接接入**：
 
-### 1. Cloudflare Dashboard 原生直绑（首选推荐 · 零硬编码配置）
+### 1. Cloudflare Dashboard 原生直绑与上传下载配置（首选推荐）
 
-无需在代码或 `wrangler.toml` 中填写敏感 UUID 或访问密钥，直接在 Cloudflare 控制台添加绑定：
+无需在代码中填写敏感 UUID 或访问密钥，直接在 Cloudflare 控制台添加绑定即可彻底打通联网同步、文件持久化上传与多端下载：
 
 1. **创建 D1 数据库与 R2 存储桶**：
    - 打开 Cloudflare Dashboard -> **Storage & Databases** -> **D1 SQL Database** -> 创建名为 `whitefox-db` 的数据库。
    - 在其 **Console** 中执行 `deploy/cloudflare-d1-schema.sql` 完成表结构初始化。
-   - （可选）在 **R2 Object Storage** 中创建名为 `whitefox-assets` 的存储桶。
+   - 在 **Storage & Databases** -> **R2 Object Storage** 中创建名为 `whitefox-assets` 的存储桶。
 2. **在 Pages 项目后台添加原生绑定**：
    - 打开 Pages 项目 -> **Settings** -> **Functions**。
    - 在 **D1 database bindings** 点击添加：变量名称填 **`DB`**，选择刚创建的 `whitefox-db`。
    - 在 **R2 bucket bindings** 点击添加：变量名称填 **`BUCKET`**，选择刚创建的 `whitefox-assets`。
-   - 保存并重新部署，站内后台状态指示灯将自动识别为 **绿色已接入 (Connected)**，全站数据实现毫秒级持久化与多端极速自动同步！
+   - （可选配置 R2 CORS）：若配置了自定义域名，可在 R2 存储桶 Settings -> CORS Policy 中允许 Origin `*` 及 GET, PUT, POST, HEAD 方法。
+   - 保存并重新部署，全站博文附件、相册照片与网盘文件即可自动流式上传至 R2，并在所有浏览器与访客端正常显示与高速下载！
+
+### 2. 本地开发与 CLI 部署 (wrangler.toml)
+
+项目根目录提供了标准配置文件 `wrangler.toml` 与 `wrangler.toml.example`，支持使用 Wrangler 进行本地全栈模拟测试与部署：
+```bash
+# 启动本地开发服务与 Functions / D1 / R2 模拟
+npx wrangler pages dev dist --d1=DB=whitefox-db --r2=BUCKET=whitefox-assets
+```
 
 ### 2. 外部数据库与对象存储接入（腾讯云 / 阿里云 / Supabase / MySQL / AWS S3）
 

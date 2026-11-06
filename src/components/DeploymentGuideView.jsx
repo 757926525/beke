@@ -514,6 +514,13 @@ export const DeploymentGuideView = ({ siteName = 'fox', t }) => {
                 </ol>
               </div>
 
+              <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 space-y-2">
+                <p className="text-xs font-bold text-amber-900">第三步：CORS 跨域与下载验证排查</p>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  系统内部内置了标准 CORS 响应头和 /api/upload 流式下载通道。如果您在 R2 存储桶绑定了自定义域名并出现跨域报错，请在 Cloudflare R2 存储桶设置中的 <strong>CORS Policy</strong> 添加允许 Origin 为 <code className="font-mono bg-white px-1 py-0.5 rounded">*</code>，Methods 包含 <code className="font-mono bg-white px-1 py-0.5 rounded">GET, HEAD, POST, PUT</code> 即可。
+                </p>
+              </div>
+
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
                 <p className="text-xs font-bold text-slate-700">各大外部云平台数据库接入（Supabase / MySQL / TDSQL / PolarDB）：</p>
                 <p className="text-xs text-slate-500 leading-relaxed">

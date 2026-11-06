@@ -1,0 +1,24 @@
+# 白狐博客 (WhiteFox Blog) - Cloudflare Pages / Workers 配置文件
+name = "whitefox-blog"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "dist"
+
+# 1. Cloudflare D1 边缘数据库绑定
+# 用于全站博文、相册、网盘元数据、配置信息的毫秒级多端双向同步
+[[d1_databases]]
+binding = "DB"
+database_name = "whitefox-db"
+database_id = "your-d1-database-uuid"
+
+# 2. Cloudflare R2 对象存储桶绑定
+# 用于博文附件、相册照片、音视频、网盘文件的跨端真实持久化上传与直链下载
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "whitefox-assets"
+
+# 3. 环境变量配置
+[vars]
+ADMIN_USERNAME = "fox"
+ADMIN_PASSWORD = "your_strong_password"
+SYNC_ROOM_KEY = "whitefox-site-main"
+VITE_SITE_NAME = "fox"

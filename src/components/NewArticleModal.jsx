@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
   X, Image as ImageIcon, Video, Music, Tag, Send, HardDrive,
-  Globe, Film, Upload, Check, ChevronRight, FileText
+  Globe, Film, Upload, Check, ChevronRight, FileText, Loader2, Paperclip
 } from 'lucide-react';
+import { uploadFileToStorage } from '../services/uploader';
 
 export default function NewArticleModal({
   isOpen,
@@ -31,20 +32,38 @@ export default function NewArticleModal({
     setContent((prev) => prev ? `${prev}\n\n${text}` : text);
   };
 
-  // 1. Handle local file insert (Image / Video / Audio)
-  const handleLocalFileInsert = (type, e) => {
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState('');
+
+  // 1. Handle persistent file upload & insert (Image / Video / Audio / Document)
+  const handleLocalFileInsert = async (type, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const objectUrl = URL.createObjectURL(file);
-    if (type === 'image') {
-      insertTextAtCursor(`![${file.name}](${objectUrl})`);
-    } else if (type === 'video') {
-      insertTextAtCursor(`🎬 [视频: ${file.name}](${objectUrl})`);
-    } else if (type === 'audio') {
-      insertTextAtCursor(`🎵 [音频: ${file.name}](${objectUrl})`);
+    try {
+      setIsUploading(true);
+      setUploadNotice(`正在上传文件「${file.name}」...`);
+      const res = await uploadFileToStorage(file);
+
+      const targetUrl = res.url;
+      if (type === 'image') {
+        insertTextAtCursor(`![${file.name}](${targetUrl})`);
+      } else if (type === 'video') {
+        insertTextAtCursor(`🎬 [视频: ${file.name}](${targetUrl})`);
+      } else if (type === 'audio') {
+        insertTextAtCursor(`🎵 [音频: ${file.name}](${targetUrl})`);
+      } else {
+        insertTextAtCursor(`📦 [下载附件: ${file.name}](${targetUrl})`);
+      }
+      setUploadNotice(`「${file.name}」已成功上传并嵌入！`);
+      setTimeout(() => setUploadNotice(''), 3000);
+    } catch (err) {
+      console.error('File insert error:', err);
+      setUploadNotice(`上传失败: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
     }
-    e.target.value = '';
   };
 
   // 2. Select Cloud File from Hub
@@ -108,6 +127,13 @@ export default function NewArticleModal({
         <p className="text-xs text-slate-400 mb-5">
           支持 Markdown 排版、一键插入本地音视频图片、多云网盘文件引用、搜索中心网站引用及媒体影音文件联动。
         </p>
+
+        {uploadNotice && (
+          <div className="mb-4 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 flex items-center space-x-2">
+            {isUploading ? <Loader2 className="w-4 h-4 animate-spin text-emerald-600" /> : <Check className="w-4 h-4 text-emerald-600" />}
+            <span>{uploadNotice}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -206,6 +232,17 @@ export default function NewArticleModal({
                   type="file"
                   accept="image/*"
                   onChange={(e) => handleLocalFileInsert('image', e)}
+                  className="hidden"
+                />
+              </label>
+
+              {/* Upload & Insert any File Attachment */}
+              <label className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-2xs">
+                <Paperclip className="w-3.5 h-3.5 text-indigo-600" />
+                <span>上传并插入文件附件</span>
+                <input
+                  type="file"
+                  onChange={(e) => handleLocalFileInsert('file', e)}
                   className="hidden"
                 />
               </label>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { ExternalLink, Play, Music, Film, FileText, Download } from 'lucide-react';
+import { downloadFile } from '../services/documentConverter';
 
 /**
  * RichContentRenderer parses markdown and rich embedded blocks:
@@ -96,7 +97,8 @@ export const RichContentRenderer = ({ content = '' }) => {
         // 4. NetDrive / File Hub attachment block: 📦 [title](url)
         const fileMatch = trimmed.match(/^📦\s*\[(.*?)\]\((.*?)\)$/);
         if (fileMatch) {
-          const [, title, url] = fileMatch;
+          const [, rawTitle, url] = fileMatch;
+          const cleanTitle = rawTitle.replace(/^下载附件:\s*/, '').replace(/^调度中枢文件:\s*/, '');
           return (
             <div key={idx} className="my-3 p-3.5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between gap-3">
               <div className="flex items-center space-x-3">
@@ -104,19 +106,18 @@ export const RichContentRenderer = ({ content = '' }) => {
                   <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-slate-800">{title}</h4>
-                  <p className="text-[10px] text-slate-400">多云调度中枢资源 · 点击即可直达下载</p>
+                  <h4 className="text-xs font-bold text-slate-800">{cleanTitle}</h4>
+                  <p className="text-[10px] text-slate-400">博文云端附件 · 支持直接下载与保存</p>
                 </div>
               </div>
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center space-x-1 shadow-xs transition-colors"
+              <button
+                type="button"
+                onClick={() => downloadFile(url, cleanTitle)}
+                className="px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center space-x-1 shadow-xs transition-colors cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>获取文件</span>
-              </a>
+                <span>下载文件</span>
+              </button>
             </div>
           );
         }
