@@ -3,6 +3,7 @@ import {
   X, Image as ImageIcon, Video, Music, Tag, Send, HardDrive,
   Globe, Film, Upload, Check, ChevronRight, FileText
 } from 'lucide-react';
+import { uploadFileUniversal } from '../services/uploader';
 
 export default function NewArticleModal({
   isOpen,
@@ -31,18 +32,19 @@ export default function NewArticleModal({
     setContent((prev) => prev ? `${prev}\n\n${text}` : text);
   };
 
-  // 1. Handle local file insert (Image / Video / Audio)
-  const handleLocalFileInsert = (type, e) => {
+  // 1. Handle local file insert (Image / Video / Audio) with universal persistence
+  const handleLocalFileInsert = async (type, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const objectUrl = URL.createObjectURL(file);
+    const res = await uploadFileUniversal(file, { compress: type === 'image' });
+
     if (type === 'image') {
-      insertTextAtCursor(`![${file.name}](${objectUrl})`);
+      insertTextAtCursor(`![${file.name}](${res.url})`);
     } else if (type === 'video') {
-      insertTextAtCursor(`🎬 [视频: ${file.name}](${objectUrl})`);
+      insertTextAtCursor(`🎬 [视频: ${file.name}](${res.url})`);
     } else if (type === 'audio') {
-      insertTextAtCursor(`🎵 [音频: ${file.name}](${objectUrl})`);
+      insertTextAtCursor(`🎵 [音频: ${file.name}](${res.url})`);
     }
     e.target.value = '';
   };

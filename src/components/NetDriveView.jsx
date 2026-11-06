@@ -8,6 +8,7 @@ import {
   FileCode, Play, Music, Image as ImageIcon, Paperclip
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
+import { uploadFileUniversal } from '../services/uploader';
 
 export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloudFiles, backendConfig, t, currentUser }) => {
   const [activeDriver, setActiveDriver] = useState('r2'); // 'r2' | 'cos' | 'oss' | 'alist' | 'local'
@@ -60,6 +61,8 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
       local: '站内本地存储'
     };
 
+    setSyncStatus(`正在将 ${files.length} 个文件上传至 ${providerNames[activeDriver]}...`);
+
     const newEntries = [];
     for (const file of files) {
       const sizeStr = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
@@ -68,38 +71,28 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
       const isAud = !!file.name.match(/\.(mp3|wav|flac)$/i);
       const fileType = isVid ? 'video' : isAud ? 'audio' : isImg ? 'image' : 'document';
 
-      let fileUrl = '';
-      let thumbnail = '';
-
-      if (file.size < 6 * 1024 * 1024) {
-        fileUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.readAsDataURL(file);
-        });
-        if (isImg) {
-          thumbnail = fileUrl;
-        }
-      } else {
-        fileUrl = URL.createObjectURL(file);
-      }
+      const uploadRes = await uploadFileUniversal(file, { compress: isImg });
 
       newEntries.push({
         id: 'cf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
         name: file.name,
-        url: fileUrl,
-        thumbnail: thumbnail || '',
+        url: uploadRes.url,
+        downloadUrl: uploadRes.downloadUrl || uploadRes.url,
+        vaultUrl: uploadRes.vaultUrl || uploadRes.url,
+        thumbnail: isImg ? uploadRes.url : '',
         provider: providerNames[activeDriver] || 'Cloudflare R2',
         bucketKey: activeDriver,
         size: sizeStr,
         type: fileType,
         uploadedAt: new Date().toISOString().split('T')[0],
-        owner: currentUser?.username || 'admin'
+        owner: currentUser?.username || 'admin',
+        updatedAt: Date.now(),
+        deleted: false
       });
     }
 
     setCloudFiles([...newEntries, ...cloudFiles]);
-    setSyncStatus(`成功将 ${newEntries.length} 个文件上传并调度至 ${providerNames[activeDriver]}！`);
+    setSyncStatus(`成功将 ${newEntries.length} 个文件上传并持久化至 ${providerNames[activeDriver]}！`);
     setTimeout(() => setSyncStatus(''), 3000);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -145,7 +138,7 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
 
   // Download file using unified robust downloader
   const handleDownloadFile = (file) => {
-    downloadFile(file.url, file.name);
+    downloadFile(file.downloadUrl || file.vaultUrl || file.url, file.name);
   };
 
   // Filter files by bucket

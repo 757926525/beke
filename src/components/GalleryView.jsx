@@ -19,6 +19,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
+import { uploadFileUniversal } from '../services/uploader';
 
 export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
@@ -55,48 +56,26 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
     return false;
   };
 
-  const processAndUploadFile = (file, targetFolder) => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const maxDim = 1200;
-          let width = img.width;
-          let height = img.height;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  const processAndUploadFile = async (file, targetFolder) => {
+    const uploadRes = await uploadFileUniversal(file, { compress: true, maxDimension: 1200 });
+    const photoId = `photo-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
 
-          resolve({
-            id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-            title: file.name.replace(/\.[^/.]+$/, ""),
-            desc: `上传至文件夹「${targetFolder}」，已安全记录至云相册。`,
-            url: dataUrl,
-            category: targetFolder,
-            folder: targetFolder,
-            author: currentUser?.username || '站长',
-            userId: currentUser?.id || 'admin',
-            date: new Date().toISOString().split('T')[0],
-            location: '随拍记录'
-          });
-        };
-        img.src = event.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
+    return {
+      id: photoId,
+      title: file.name.replace(/\.[^/.]+$/, ""),
+      desc: `上传至文件夹「${targetFolder}」，已安全记录至云相册。`,
+      url: uploadRes.url,
+      downloadUrl: uploadRes.downloadUrl || uploadRes.url,
+      vaultUrl: uploadRes.vaultUrl || uploadRes.url,
+      category: targetFolder,
+      folder: targetFolder,
+      author: currentUser?.username || '站长',
+      userId: currentUser?.id || 'admin',
+      date: new Date().toISOString().split('T')[0],
+      location: '随拍记录',
+      updatedAt: Date.now(),
+      deleted: false
+    };
   };
 
   const handleUpload = async (e) => {
@@ -104,8 +83,9 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
     if (!files.length) return;
 
     const targetFolder = currentFolder === '全部' ? '白狐物语' : currentFolder;
-    const newPhotos = [];
+    setUploadStatus(`正在安全编码并上传 ${files.length} 张照片...`);
 
+    const newPhotos = [];
     for (const file of files) {
       const photoItem = await processAndUploadFile(file, targetFolder);
       newPhotos.push(photoItem);
@@ -132,7 +112,7 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
   // 1-Click Single Photo Download
   const handleDownloadPhoto = (photo, e) => {
     if (e) e.stopPropagation();
-    downloadFile(photo.url, `${photo.title || 'photo'}.jpg`, 'image/jpeg');
+    downloadFile(photo.downloadUrl || photo.url, `${photo.title || 'photo'}.jpg`, 'image/jpeg');
     setUploadStatus(`照片《${photo.title}》已启动下载！`);
     setTimeout(() => setUploadStatus(null), 3000);
   };
@@ -165,7 +145,7 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
     }
     targets.forEach((p, idx) => {
       setTimeout(() => {
-        downloadFile(p.url, `${p.title || `photo-${idx + 1}`}.jpg`, 'image/jpeg');
+        downloadFile(p.downloadUrl || p.url, `${p.title || `photo-${idx + 1}`}.jpg`, 'image/jpeg');
       }, idx * 250);
     });
     setUploadStatus(`已启动批量下载 ${targets.length} 张图片！`);
