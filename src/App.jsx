@@ -193,9 +193,10 @@ export function App() {
   // 2. 远端数据应用期间标记：当正在合并应用来自远端/其它标签页的数据时，禁止触发自身的自动 push
   const isApplyingRemote = useRef(false);
 
-  // 3. 自动同步开关状态 (React State，避免仅在 localStorage 读写导致 render 错漏)
+  // 3. 自动同步开关状态 (默认全局开启，彻底实现全自动跨设备与本地同步)
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
-    return localStorage.getItem('wf_auto_sync_enabled') === 'true';
+    const val = localStorage.getItem('wf_auto_sync_enabled');
+    return val !== 'false'; // 默认开启 true
   });
 
   // 4. 同步状态指示器 ('idle' | 'syncing' | 'success' | 'error')
@@ -299,18 +300,11 @@ export function App() {
         }
 
         const isD1Bound = Boolean(health.success && health.d1?.healthy);
+        const isR2Bound = Boolean(health.success && health.r2?.healthy);
         const hasCustomDb = Boolean(backendConfig?.dbConnected || backendConfig?.dbHost);
 
-        // 取消无数据库时的同步功能：如果未接入 D1 且未配置外部数据库，则纯本地存放，不发起云端拉取与推送
-        if (!isD1Bound && !hasCustomDb) {
-          setSyncStatus('idle');
-          setSyncStatusMessage('本地离线优先模式（未绑定数据库，数据存放在当前浏览器本地）');
-          setHydrated(true);
-          return;
-        }
-
         setSyncStatus('syncing');
-        setSyncStatusMessage('正在从数据库拉取最新数据...');
+        setSyncStatusMessage('正在自动同步全站最新数据...');
 
         const res = await pullFromCloudSyncVault(syncRoomKey, {
           customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
@@ -345,7 +339,7 @@ export function App() {
           applyMergedDataToState(merged);
 
           setSyncStatus('success');
-          setSyncStatusMessage(`数据库已同步至最新版本 (v${res.version || 1})`);
+          setSyncStatusMessage(`已同步至最新版本 (v${res.version || 1}${res.storageEngine ? ` · ${res.storageEngine}` : ''})`);
 
           setTimeout(() => {
             isApplyingRemote.current = false;
@@ -453,13 +447,6 @@ export function App() {
     // 首次 hydrated 之前，坚决不 push
     if (!hydrated) return { success: false, reason: 'not_hydrated' };
     if (isApplyingRemote.current) return { success: false, reason: 'is_applying_remote' };
-
-    // 取消无数据库时的同步功能，仅保留本地文件存放功能
-    const hasDb = Boolean(backendConfig?.dbConnected || backendConfig?.dbHost);
-    if (!hasDb && !isManual) {
-      // 本地离线优先，不向远端发起无意义的网络推送
-      return { success: true, localOnly: true };
-    }
 
     setSyncStatus('syncing');
     setSyncStatusMessage('正在同步至云端...');
@@ -674,7 +661,7 @@ export function App() {
       setCurrentUser(adminUser);
       saveToStorage(STORAGE_KEYS.AUTH, adminUser);
 
-      // 管理员在任意浏览器登录成功后，立即主动从云端 D1 / 数据库拉取全站最新数据并应用，
+      // 管理员在任意浏览器登录成功后，立即主动从云端拉取全站最新权威数据并应用，
       // 保证不同浏览器登入后的文章、配置、外观、布局与云端最新状态完全一致。
       try {
         const { pullFromCloudSyncVault } = await import('./services/cloudAdapter');
@@ -684,7 +671,12 @@ export function App() {
         });
         if (pullRes && pullRes.success && pullRes.payload) {
           isApplyingRemote.current = true;
+          // 以云端权威数据对齐本地当前状态
           applyMergedDataToState(pullRes.payload);
+          if (typeof pullRes.version === 'number') {
+            setCurrentVersion(pullRes.version);
+            localStorage.setItem(STORAGE_KEYS.SYNC_VERSION, String(pullRes.version));
+          }
           setTimeout(() => {
             isApplyingRemote.current = false;
           }, 200);

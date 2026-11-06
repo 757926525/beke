@@ -70,7 +70,8 @@ export const AdminSettingsView = ({
 
   // Auto-sync switch state
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
-    return localStorage.getItem('wf_auto_sync_enabled') === 'true';
+    const val = localStorage.getItem('wf_auto_sync_enabled');
+    return val !== 'false';
   });
 
   // Manual one-click database sync states (with live progress bar 0% -> 100%)
