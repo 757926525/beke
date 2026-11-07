@@ -327,6 +327,7 @@ export async function pullFromCloudSyncVault(vaultKey, options = {}) {
             : data.payload;
           return {
             success: true,
+            storageEngine: data.storageEngine,
             payload: versionedPayload,
             version: serverVersion,
             updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : Date.now(),
