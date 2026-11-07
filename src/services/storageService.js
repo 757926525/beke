@@ -51,6 +51,9 @@ export const STORAGE_KEYS = {
   MEDIA_LIST: 'wf_media_list',
   EMAIL_SETTINGS: 'wf_email_settings',
   MAIL_MESSAGES: 'wf_mail_messages',
+  PRODUCTS: 'wf_shop_products',
+  ORDERS: 'wf_shop_orders',
+  PAYMENT_SETTINGS: 'wf_payment_settings',
   BROWSING_HISTORY: 'wf_browsing_history',
   HERO_INTRO: 'wf_hero_intro',
   SYNC_VERSION: 'wf_sync_version',
@@ -439,12 +442,12 @@ export const fontSizes = [
   { id: 'extra', name: '特大号清晰 (20px)', class: 'text-xl' }
 ];
 
-// Helper to calculate total local & storage usage in bytes
+// Helper to calculate total local & storage usage in bytes (默认值为 0，仅真实计算用户增量上传文件与数据大小)
 export const calculateUsedStorageBytes = () => {
-  let bytes = 81.6 * 1024 * 1024; // baseline cloud media assets
+  let bytes = 0;
   try {
     for (let key in localStorage) {
-      if (localStorage.hasOwnProperty(key)) {
+      if (localStorage.hasOwnProperty(key) && key.startsWith('wf_')) {
         bytes += (localStorage[key].length * 2);
       }
     }
@@ -455,7 +458,7 @@ export const calculateUsedStorageBytes = () => {
 };
 
 export const formatBytes = (bytes) => {
-  if (bytes === 0) return '0 B';
+  if (!bytes || bytes <= 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));

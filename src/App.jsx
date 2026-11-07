@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { BlogList } from './components/BlogList';
 import { BlogPostView } from './components/BlogPostView';
+import { ShopView } from './components/ShopView';
 import { NetDriveView } from './components/NetDriveView';
 import { BookshelfView } from './components/BookshelfView';
 import { GalleryView } from './components/GalleryView';
@@ -11,6 +12,7 @@ import { DeploymentGuideView } from './components/DeploymentGuideView';
 import { AdminSettingsView } from './components/AdminSettingsView';
 import { MailHubView } from './components/MailHubView';
 import { AuthModal } from './components/AuthModal';
+import { fileProgress } from './services/fileProgress';
 import {
   initialPosts,
   initialBooks,
@@ -187,6 +189,49 @@ export function App() {
     return (raw || []).filter((u) => u.role !== 'admin' && u.id !== 'u-admin');
   });
 
+  // 商品周边专区数据状态
+  const [products, setProducts] = useState(() => loadFromStorage(STORAGE_KEYS.PRODUCTS, [
+    {
+      id: 'prod-1',
+      name: '白狐 (WhiteFox) 东方极简定制青瓷保温杯',
+      category: '周边纪念',
+      price: 129,
+      originalPrice: 169,
+      stock: 80,
+      desc: '316L 不锈钢双层抽真空保温内胆，外覆东方青瓷釉感涂层，雕刻专属白狐印鉴。',
+      images: [
+        'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80',
+        'https://images.unsplash.com/photo-1577937927133-66ef06acdf18?auto=format&fit=crop&w=600&q=80'
+      ],
+      createdAt: '2025-05-18'
+    },
+    {
+      id: 'prod-2',
+      name: '白狐全域边缘极速博客源码与多云部署包',
+      category: '源码插件',
+      price: 299,
+      originalPrice: 499,
+      stock: 999,
+      desc: '包含前后端完整开源工程、Cloudflare Pages/KV/D1/R2 一键部署脚本及 1 对 1 技术指导。',
+      images: [
+        'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=600&q=80'
+      ],
+      createdAt: '2025-05-18'
+    }
+  ]));
+
+  const [orders, setOrders] = useState(() => loadFromStorage(STORAGE_KEYS.ORDERS, []));
+  const [paymentSettings, setPaymentSettings] = useState(() => loadFromStorage(STORAGE_KEYS.PAYMENT_SETTINGS, {
+    paypalClientId: '',
+    paypalSecret: '',
+    wfCustomerId: '',
+    wfIban: '',
+    wechatMchId: '',
+    wechatApiV3Key: '',
+    alipayAppId: '',
+    alipayPrivateKey: ''
+  }));
+
   // --- 关键同步状态管理 ---
   // 1. 首次加载与 hydration 标志：在首次 pull 并 merge 完成前，严格禁止触发任何 push，防止空白新设备覆盖云端
   const [hydrated, setHydrated] = useState(false);
@@ -204,6 +249,11 @@ export function App() {
   const [syncStatus, setSyncStatus] = useState('idle');
   const [syncStatusMessage, setSyncStatusMessage] = useState('');
   const [activeStorageEngine, setActiveStorageEngine] = useState('cloudflare-kv');
+  const [progressState, setProgressState] = useState({ active: false, type: 'upload', filename: '', percent: 0 });
+
+  useEffect(() => {
+    return fileProgress.subscribe(setProgressState);
+  }, []);
 
   // 5. 版本跟踪
   const [currentVersion, setCurrentVersion] = useState(() => {
@@ -896,6 +946,32 @@ export function App() {
             />
           )}
 
+          {activeTab === 'shop' && (
+            <ShopView
+              currentUser={currentUser}
+              isAdmin={currentUser?.role === 'admin'}
+              products={products}
+              setProducts={(val) => {
+                const updated = typeof val === 'function' ? val(products) : val;
+                setProducts(updated);
+                saveToStorage(STORAGE_KEYS.PRODUCTS, updated);
+              }}
+              orders={orders}
+              setOrders={(val) => {
+                const updated = typeof val === 'function' ? val(orders) : val;
+                setOrders(updated);
+                saveToStorage(STORAGE_KEYS.ORDERS, updated);
+              }}
+              paymentSettings={paymentSettings}
+              setPaymentSettings={(val) => {
+                const updated = typeof val === 'function' ? val(paymentSettings) : val;
+                setPaymentSettings(updated);
+                saveToStorage(STORAGE_KEYS.PAYMENT_SETTINGS, updated);
+              }}
+              t={t}
+            />
+          )}
+
           {activeTab === 'home' && activePostId && activePost && (
             <BlogPostView
               post={activePost}
@@ -1072,6 +1148,27 @@ export function App() {
             />
           )}
         </main>
+
+        {/* Real-time Dynamic File Upload/Download Progress Bar (仅在用户操作时浮动出现) */}
+        {progressState.active && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white px-6 py-3.5 rounded-2xl shadow-2xl border border-slate-700 backdrop-blur-md max-w-md w-[90%] space-y-2 animate-in fade-in slide-in-from-bottom-4">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold flex items-center space-x-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span className="truncate max-w-[240px]">
+                  {progressState.type === 'download' ? '正在下载文件' : '正在上传文件'}: {progressState.filename}
+                </span>
+              </span>
+              <span className="font-mono text-emerald-400">{progressState.percent}%</span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-emerald-500 to-teal-300 h-full rounded-full transition-all duration-200"
+                style={{ width: `${progressState.percent}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <footer className={`mt-16 border-t ${darkMode ? 'border-slate-800 bg-slate-900/80 text-slate-400' : 'border-slate-200/80 bg-white/60 text-slate-500'} backdrop-blur-md py-8`}>

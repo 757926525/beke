@@ -94,7 +94,10 @@ export async function generateDocxBlob(article) {
  * @param {string} filename
  * @param {string} mimeType
  */
+import { fileProgress } from './fileProgress';
+
 export async function downloadFile(contentOrUrl, filename, mimeType = 'application/octet-stream') {
+  fileProgress.start('download', filename || '文件下载');
   try {
     if (typeof contentOrUrl === 'string') {
       // If it's a data URL or blob URL
@@ -105,6 +108,7 @@ export async function downloadFile(contentOrUrl, filename, mimeType = 'applicati
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        fileProgress.complete();
         return;
       }
 
@@ -145,6 +149,7 @@ export async function downloadFile(contentOrUrl, filename, mimeType = 'applicati
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(objUrl);
+      fileProgress.complete();
       return;
     }
 

@@ -199,7 +199,7 @@ export const BlogList = ({
   const totalCapacityBytes = heroIntro?.totalCapacityBytes || 10 * 1024 * 1024 * 1024; // 10 GB
   const usedStorageStr = formatBytes(usedStorageBytes);
   const totalStorageStr = formatBytes(totalCapacityBytes);
-  const usedPercent = Math.min(100, Math.max(1, ((usedStorageBytes / totalCapacityBytes) * 100).toFixed(1)));
+  const usedPercent = usedStorageBytes > 0 ? Math.min(100, Math.max(0.1, ((usedStorageBytes / totalCapacityBytes) * 100).toFixed(1))) : 0;
 
   // Font size class mapping
   const fontSizeClasses = {
@@ -219,8 +219,15 @@ export const BlogList = ({
         </div>
       )}
 
-      {/* Hero Intro Section - Customizable Text, Image and Live Storage Monitor */}
-      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-900 text-white p-6 sm:p-10 shadow-lg border border-emerald-700/30">
+      {/* Hero Intro Section - Customizable Text, Visual Background Image and Live Storage Monitor */}
+      <div
+        className="relative rounded-3xl overflow-hidden text-white p-6 sm:p-10 shadow-lg border border-emerald-700/30 bg-cover bg-center transition-all duration-700"
+        style={{
+          backgroundImage: heroIntro?.heroImage
+            ? `linear-gradient(to right, rgba(6, 78, 59, 0.92), rgba(15, 23, 42, 0.85)), url("${heroIntro.heroImage}")`
+            : undefined
+        }}
+      >
         <div className="relative z-10 max-w-2xl space-y-3">
           <div className="flex items-center space-x-2">
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-xs text-xs font-medium">

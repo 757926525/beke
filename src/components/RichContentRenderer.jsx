@@ -233,7 +233,45 @@ export const RichContentRenderer = ({ content = '' }) => {
           return <div key={idx} className="leading-relaxed">{parts}</div>;
         }
 
-        // 9. General paragraph with inline markdown links [title](url) rendered as clickable <a>
+        // 9. Unordered list (- or * or •)
+        if (/^[-*•]\s+/.test(trimmed)) {
+          const items = trimmed.split('\n').filter(l => l.trim().length > 0);
+          return (
+            <ul key={idx} className="list-disc list-inside space-y-1.5 my-3 pl-2 text-slate-700">
+              {items.map((it, i) => (
+                <li key={i} className="leading-relaxed">
+                  {it.replace(/^[-*•]\s+/, '')}
+                </li>
+              ))}
+            </ul>
+          );
+        }
+
+        // 10. Ordered list (1. 2. 3.)
+        if (/^\d+\.\s+/.test(trimmed)) {
+          const items = trimmed.split('\n').filter(l => l.trim().length > 0);
+          return (
+            <ol key={idx} className="list-decimal list-inside space-y-1.5 my-3 pl-2 text-slate-700">
+              {items.map((it, i) => (
+                <li key={i} className="leading-relaxed">
+                  {it.replace(/^\d+\.\s+/, '')}
+                </li>
+              ))}
+            </ol>
+          );
+        }
+
+        // 11. Code block (```code```)
+        if (trimmed.startsWith('```') && trimmed.endsWith('```')) {
+          const codeContent = trimmed.replace(/^```[a-zA-Z]*\n?/, '').replace(/\n?```$/, '');
+          return (
+            <div key={idx} className="my-4 rounded-2xl bg-slate-900 border border-slate-800 p-4 font-mono text-xs text-emerald-400 overflow-x-auto shadow-inner">
+              <pre><code>{codeContent}</code></pre>
+            </div>
+          );
+        }
+
+        // 12. General paragraph with inline markdown links [title](url) rendered as clickable <a>
         // 且若链接本身是指向图片的 URL，自动以 <img> 图片解析而非单纯链接
         const renderInlineLinks = (text) => {
           const parts = [];
@@ -285,7 +323,7 @@ export const RichContentRenderer = ({ content = '' }) => {
         };
 
         return (
-          <p key={idx} className="leading-relaxed">
+          <p key={idx} className="leading-relaxed whitespace-pre-line">
             {renderInlineLinks(trimmed)}
           </p>
         );

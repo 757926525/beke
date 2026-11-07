@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   BookOpen, Library, Image as ImageIcon, Music,
   Cloud, Shield, Moon, Sun, LogIn, LogOut,
-  ChevronDown, ChevronUp, RefreshCw, Sparkles, Mail
+  ChevronDown, ChevronUp, RefreshCw, Sparkles, Mail, ShoppingBag
 } from 'lucide-react';
 
 export const Navbar = ({
@@ -35,7 +35,8 @@ export const Navbar = ({
       { id: 'books', label: t('bookshelf'), icon: Library },
       { id: 'cloud', label: '外接备份', icon: Cloud },
       { id: 'gallery', label: t('gallery'), icon: ImageIcon },
-      { id: 'media', label: t('player'), icon: Music }
+      { id: 'media', label: t('player'), icon: Music },
+      { id: 'shop', label: '商品周边', icon: ShoppingBag }
     );
   }
 

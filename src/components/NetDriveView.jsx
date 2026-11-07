@@ -747,31 +747,92 @@ export const NetDriveView = ({
           </div>
         )}
 
-        {activeDriver === 'alist' && (
+        {activeDriver === 'nutstore' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div>
-              <label className="block text-slate-600 font-semibold mb-1">AList / WebDAV 服务地址</label>
+              <label className="block text-slate-600 font-semibold mb-1">坚果云 WebDAV 服务器 (Server)</label>
               <input
                 type="text"
-                value={cloudConfig?.alist?.endpoint || 'https://pan.whitefox.blog'}
+                value={cloudConfig?.nutstore?.server || 'https://dav.jianguoyun.com/dav/'}
                 onChange={(e) =>
                   setCloudConfig({
                     ...cloudConfig,
-                    alist: { ...cloudConfig.alist, endpoint: e.target.value }
+                    nutstore: { ...cloudConfig?.nutstore, server: e.target.value }
                   })
                 }
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
               />
             </div>
             <div>
-              <label className="block text-slate-600 font-semibold mb-1">默认挂载根路径</label>
+              <label className="block text-slate-600 font-semibold mb-1">坚果云账号 (Email)</label>
               <input
-                type="text"
-                value={cloudConfig?.alist?.basePath || '/whitefox'}
+                type="email"
+                value={cloudConfig?.nutstore?.account || 'user@example.com'}
                 onChange={(e) =>
                   setCloudConfig({
                     ...cloudConfig,
-                    alist: { ...cloudConfig.alist, basePath: e.target.value }
+                    nutstore: { ...cloudConfig?.nutstore, account: e.target.value }
+                  })
+                }
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-600 font-semibold mb-1">坚果云应用专用授权密码 (App Password)</label>
+              <input
+                type="password"
+                value={cloudConfig?.nutstore?.token || '••••••••••••'}
+                onChange={(e) =>
+                  setCloudConfig({
+                    ...cloudConfig,
+                    nutstore: { ...cloudConfig?.nutstore, token: e.target.value }
+                  })
+                }
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-600 font-semibold mb-1">备份存放目录 (Backup Folder)</label>
+              <input
+                type="text"
+                value={cloudConfig?.nutstore?.backupPath || '/我的坚果云/白狐博客备份'}
+                onChange={(e) =>
+                  setCloudConfig({
+                    ...cloudConfig,
+                    nutstore: { ...cloudConfig?.nutstore, backupPath: e.target.value }
+                  })
+                }
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+              />
+            </div>
+          </div>
+        )}
+
+        {activeDriver === 'webdav' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="block text-slate-600 font-semibold mb-1">通用 WebDAV 服务端点 (URL)</label>
+              <input
+                type="text"
+                value={cloudConfig?.webdav?.endpoint || 'https://dav.yourcloud.com/'}
+                onChange={(e) =>
+                  setCloudConfig({
+                    ...cloudConfig,
+                    webdav: { ...cloudConfig?.webdav, endpoint: e.target.value }
+                  })
+                }
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-600 font-semibold mb-1">用户名 / 账号 (User)</label>
+              <input
+                type="text"
+                value={cloudConfig?.webdav?.username || 'admin'}
+                onChange={(e) =>
+                  setCloudConfig({
+                    ...cloudConfig,
+                    webdav: { ...cloudConfig?.webdav, username: e.target.value }
                   })
                 }
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"

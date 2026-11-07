@@ -2,8 +2,9 @@ import React, { useState, useRef } from 'react';
 import {
   Play, Pause, RotateCcw, Volume2, Maximize, Smartphone, Monitor, Film, Music,
   Upload, Trash2, Plus, Download, CheckCircle2, Video, Radio, Layers, Eye, RefreshCw,
-  FolderInput, HardDrive, Check
+  FolderInput, HardDrive, Check, AlignLeft, List
 } from 'lucide-react';
+import { downloadFile } from '../services/documentConverter';
 
 export const MediaPlayerView = ({
   currentUser,
@@ -119,16 +120,11 @@ export const MediaPlayerView = ({
     }
   };
 
-  // Download media file
+  // Download media file using universal downloadFile with progress bar
   const handleDownloadMedia = (m, e) => {
     if (e) e.stopPropagation();
-    const link = document.createElement('a');
-    link.href = m.url;
-    link.download = `${m.title}.${m.type === 'video' ? 'mp4' : 'mp3'}`;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const ext = m.type === 'video' ? 'mp4' : 'mp3';
+    downloadFile(m.url, `${m.title}.${ext}`);
     showToast(`开始下载「${m.title}」！`);
   };
 
