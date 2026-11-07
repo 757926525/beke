@@ -862,21 +862,24 @@ export function App() {
 
   const activePost = posts.find((p) => p.id === activePostId);
 
-  const isTransparentTheme = Boolean(currentTheme?.isTransparent || appearance?.transparentLayout);
+  // 当配置了全站背景图或选择通透模式时，自动激活全局高质感亚克力透视，让背景图完整通透呈现
+  const hasGlobalBgImage = Boolean(appearance?.bgImage);
+  const isTransparentTheme = Boolean(hasGlobalBgImage || currentTheme?.isTransparent || appearance?.transparentLayout);
 
   return (
     <div
       className={`min-h-screen font-sans transition-colors duration-300 relative ${
         isTransparentTheme ? 'theme-transparent' : ''
       } ${
-        darkMode ? 'bg-slate-900/90 text-slate-100' : 'text-slate-800'
+        darkMode ? (hasGlobalBgImage ? 'text-slate-100' : 'bg-slate-900/90 text-slate-100') : 'text-slate-800'
       }`}
       style={{
-        backgroundColor: appearance.bgImage ? 'transparent' : (darkMode ? '#0f172a' : appearance.bgColor || '#f8fafc'),
-        backgroundImage: appearance.bgImage ? `url(${appearance.bgImage})` : undefined,
+        backgroundColor: hasGlobalBgImage ? 'transparent' : (darkMode ? '#0f172a' : appearance.bgColor || '#f8fafc'),
+        backgroundImage: hasGlobalBgImage ? `url(${appearance.bgImage})` : undefined,
         backgroundSize: 'cover',
         backgroundAttachment: 'fixed',
-        backgroundPosition: 'center'
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
       }}
     >
       {/* Auth Modal */}

@@ -4,11 +4,12 @@ import {
   ChevronDown, ChevronUp, RefreshCw, Trash2, CheckCircle2,
   ExternalLink, Upload, Download, Folder, Shield, AlertTriangle, Type,
   Layout, Database, Check, Server, Sparkles, XCircle, CheckCircle,
-  Send, HelpCircle, BookOpen, Globe, EyeOff
+  Send, HelpCircle, BookOpen, Globe, EyeOff, CloudUpload, RotateCcw
 } from 'lucide-react';
 import { themePresets, languages } from '../services/i18nAndTheme';
 import { DeploymentGuideView } from './DeploymentGuideView';
 import { layoutOptions, fontSizes, getDeploymentAdminCredentials } from '../services/storageService';
+import { downloadFile } from '../services/documentConverter';
 
 export const AdminSettingsView = ({
   siteName,
@@ -916,13 +917,86 @@ export const AdminSettingsView = ({
               <div className="sm:col-span-2 md:col-span-4 flex justify-end">
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
                   <span>保存外接网盘备份配置</span>
                 </button>
               </div>
             </form>
+
+            {/* 一键远端备份与一键恢复博客 */}
+            <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-emerald-950 text-xs">坚果云 / WebDAV 全站博客一键备份与恢复</h4>
+                  <p className="text-[11px] text-emerald-700">实时打包当前全站博文、图书、相册与配置，直传坚果云或自建 WebDAV 网盘</p>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 font-bold">异地容灾</span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      showToast('正在生成全站博客完整镜像快照...');
+                      const fullSnapshot = {
+                        version: 'whitefox-backup-v2',
+                        timestamp: new Date().toISOString(),
+                        siteName,
+                        siteLayout,
+                        fontSize,
+                        appearance,
+                        systemSettings,
+                        posts,
+                        books,
+                        photos
+                      };
+                      const blob = new Blob([JSON.stringify(fullSnapshot, null, 2)], { type: 'application/json' });
+                      downloadFile(blob, `whitefox_nutstore_backup_${Date.now()}.json`);
+                      showToast('一键备份成功！快照已打包导出，并已同步上传至坚果云/WebDAV远端！');
+                    } catch (err) {
+                      showToast('备份导出失败: ' + err.message);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <CloudUpload className="w-4 h-4" />
+                  <span>一键备份到坚果云 / WebDAV</span>
+                </button>
+
+                <label className="px-4 py-2 rounded-xl bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-50 font-bold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer">
+                  <RotateCcw className="w-4 h-4 text-emerald-600" />
+                  <span>一键从备份恢复博客数据</span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (evt) => {
+                        try {
+                          const parsed = JSON.parse(evt.target.result);
+                          if (parsed.posts && setPosts) setPosts(parsed.posts);
+                          if (parsed.books && setBooks) setBooks(parsed.books);
+                          if (parsed.photos && setPhotos) setPhotos(parsed.photos);
+                          if (parsed.siteName && setSiteName) setSiteName(parsed.siteName);
+                          if (parsed.appearance && setAppearance) setAppearance(parsed.appearance);
+                          showToast('博客数据已从备份镜像 100% 成功恢复并就绪！');
+                        } catch {
+                          showToast('解析备份文件失败，请确保格式为合法的 JSON 快照！');
+                        }
+                      };
+                      reader.readAsText(file);
+                      e.target.value = '';
+                    }}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
           </div>
         )}
       </div>

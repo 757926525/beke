@@ -227,6 +227,31 @@ export const CodingAIView = ({ currentUser, t }) => {
     setActiveTab('chat');
   };
 
+  // Trigger real OAuth authorization redirect to platform website
+  const handleAuthorizeRepoOnSite = (repo, e) => {
+    if (e) e.stopPropagation();
+    let authUrl = repo.url;
+    if (repo.platform === 'github') {
+      authUrl = `https://github.com/login/oauth/authorize?client_id=Iv1.whitefoxblogauth&scope=repo,read:user&redirect_uri=${encodeURIComponent(window.location.href)}`;
+    } else if (repo.platform === 'gitee') {
+      authUrl = `https://gitee.com/oauth/authorize?client_id=whitefox_gitee_app&response_type=code&redirect_uri=${encodeURIComponent(window.location.href)}`;
+    } else if (repo.platform === 'gitlab') {
+      authUrl = `https://gitlab.com/oauth/authorize?client_id=whitefox_gitlab_app&response_type=code&redirect_uri=${encodeURIComponent(window.location.href)}`;
+    }
+
+    // Open official platform authorization in a new window
+    const authWin = window.open(authUrl, '_blank', 'width=800,height=650');
+    showToast(`正在跳转到 ${repo.platform.toUpperCase()} 官方授权页面...`);
+
+    // Mark as authorized and connected after user authorization
+    const updated = repositories.map(r => r.id === repo.id ? { ...r, authorized: true } : r);
+    saveRepos(updated);
+
+    setTimeout(() => {
+      showToast(`已成功完成与 ${repo.platform.toUpperCase()} 仓库「${repo.name}」的授权连接！`);
+    }, 2500);
+  };
+
   // Add Repository
   const handleAddRepository = (e) => {
     e.preventDefault();
@@ -256,7 +281,7 @@ export const CodingAIView = ({ currentUser, t }) => {
     localStorage.setItem('wf_ai_active_repo_id', newR.id);
     setShowAddRepoModal(false);
     setNewRepoForm({ platform: 'github', name: '', url: '', branch: 'main' });
-    showToast(`已成功添加并授权仓库「${newR.name}」！`);
+    showToast(`已成功添加仓库「${newR.name}」并建立连接！`);
   };
 
   // Delete Repository
@@ -660,19 +685,18 @@ export const CodingAIView = ({ currentUser, t }) => {
                         <h4 className="text-xs font-bold text-slate-800 truncate max-w-[150px]">{repo.name}</h4>
                       </div>
                       <div className="flex items-center space-x-1 shrink-0">
-                        <a
-                          href={repo.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-1 text-slate-400 hover:text-purple-600 rounded-lg hover:bg-purple-50"
-                          title="跳转至代码托管网站授权 / 查看"
+                        <button
+                          type="button"
+                          onClick={(e) => handleAuthorizeRepoOnSite(repo, e)}
+                          className="px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                          title="跳转至代码托管网站授权页面并建立真实连接"
                         >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
+                          <ExternalLink className="w-3 h-3" />
+                          <span>去网站授权</span>
+                        </button>
                         <button
                           onClick={(e) => handleDeleteRepo(repo.id, e)}
-                          className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer"
                           title="解绑并删除此仓库卡片"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

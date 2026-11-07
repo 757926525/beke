@@ -31,18 +31,46 @@ export default function NewArticleModal({
     setContent((prev) => prev ? `${prev}\n\n${text}` : text);
   };
 
-  // 1. Handle local file insert (Image / Video / Audio)
+  // 1. Handle local file insert (Image / Video / Audio) with Canvas Compression for Images
   const handleLocalFileInsert = (type, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const objectUrl = URL.createObjectURL(file);
     if (type === 'image') {
-      insertTextAtCursor(`![${file.name}](${objectUrl})`);
-    } else if (type === 'video') {
-      insertTextAtCursor(`🎬 [视频: ${file.name}](${objectUrl})`);
-    } else if (type === 'audio') {
-      insertTextAtCursor(`🎵 [音频: ${file.name}](${objectUrl})`);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxDim = 1200;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          insertTextAtCursor(`![${file.name}](${compressedDataUrl})`);
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const objectUrl = URL.createObjectURL(file);
+      if (type === 'video') {
+        insertTextAtCursor(`🎬 [视频: ${file.name}](${objectUrl})`);
+      } else if (type === 'audio') {
+        insertTextAtCursor(`🎵 [音频: ${file.name}](${objectUrl})`);
+      }
     }
     e.target.value = '';
   };

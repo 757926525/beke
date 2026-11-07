@@ -33,7 +33,6 @@ export const Navbar = ({
   if (!isGuestRestricted) {
     baseTabs.push(
       { id: 'books', label: t('bookshelf'), icon: Library },
-      { id: 'cloud', label: '外接备份', icon: Cloud },
       { id: 'gallery', label: t('gallery'), icon: ImageIcon },
       { id: 'media', label: t('player'), icon: Music },
       { id: 'shop', label: '商品周边', icon: ShoppingBag }

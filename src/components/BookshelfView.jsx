@@ -161,7 +161,8 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
     const fileName = file.name.replace(/\.[^/.]+$/, '');
     const reader = new FileReader();
 
-    if (ext === 'PDF' || ext === 'EPUB') {
+    const binaryFormats = ['PDF', 'EPUB', 'MOBI', 'AZW3', 'DOC', 'DOCX', 'FB2'];
+    if (binaryFormats.includes(ext)) {
       reader.onload = (event) => {
         const dataUrl = event.target.result;
         setBookForm((prev) => ({
@@ -169,7 +170,7 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
           title: prev.title || fileName,
           format: ext,
           fileUrl: dataUrl,
-          content: `【${ext} 电子书文件已载入】\n文件名: ${file.name}\n大小: ${(file.size / 1024 / 1024).toFixed(2)} MB\n支持直接离线阅读与导出下载。`
+          content: `【${ext} 电子书/文档已载入】\n文件名: ${file.name}\n大小: ${(file.size / 1024 / 1024).toFixed(2)} MB\n支持直接阅读与导出下载。`
         }));
         showToast(`已成功载入本地 ${ext} 格式图书「${file.name}」！`);
       };
@@ -194,11 +195,11 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
     const allFiles = Array.from(e.target.files || []);
     const validFiles = allFiles.filter(f => {
       const ext = f.name.split('.').pop()?.toUpperCase();
-      return ['TXT', 'MD', 'PDF', 'EPUB', 'JSON', 'HTML', 'CSV'].includes(ext);
+      return ['TXT', 'MD', 'PDF', 'EPUB', 'MOBI', 'AZW3', 'DOC', 'DOCX', 'FB2', 'JSON', 'HTML', 'CSV'].includes(ext);
     });
 
     if (validFiles.length < allFiles.length) {
-      showToast(`已过滤不兼容文档，支持 TXT/MD/PDF/EPUB/JSON/HTML 格式图书！`);
+      showToast(`已过滤不兼容文档，支持 TXT/MD/PDF/EPUB/MOBI/AZW3/DOCX 等多种电子书格式！`);
     }
 
     if (!validFiles.length) {
@@ -837,11 +838,11 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
                 <div>
                   <label className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-xs">
                     <Upload className="w-4 h-4" />
-                    <span>选择多个 TXT 文件</span>
+                    <span>选择多个电子书文件</span>
                     <input
                       type="file"
                       multiple
-                      accept=".txt,text/plain"
+                      accept=".txt,.md,.pdf,.epub,.mobi,.azw3,.doc,.docx,.fb2,.json,.html"
                       onChange={handleBatchFilesSelect}
                       className="hidden"
                     />
@@ -929,23 +930,23 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
             </div>
 
             <form onSubmit={handleSaveBook} className="space-y-4 text-xs">
-              {/* Local TXT File Selector */}
+              {/* Local File Selector */}
               <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-emerald-900">快速读取本地 TXT 文件</span>
+                  <span className="font-bold text-emerald-900">快速读取本地电子书文件</span>
                   <label className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer font-semibold flex items-center space-x-1 shadow-xs">
                     <Upload className="w-3.5 h-3.5" />
-                    <span>选择本地 TXT</span>
+                    <span>选择本地电子书</span>
                     <input
                       type="file"
-                      accept=".txt,text/plain"
+                      accept=".txt,.md,.pdf,.epub,.mobi,.azw3,.doc,.docx,.fb2,.json,.html"
                       onChange={handleLocalFileUpload}
                       className="hidden"
                     />
                   </label>
                 </div>
                 <p className="text-[11px] text-emerald-700">
-                  支持自动解析标题、提取分章节目录，构建原汁原味的沉浸式阅读器。
+                  支持 TXT、MD、PDF、EPUB、MOBI、AZW3、DOCX 等多种格式，自动解析标题与章节目录。
                 </p>
               </div>
 

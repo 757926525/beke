@@ -219,16 +219,17 @@ export const BlogList = ({
         </div>
       )}
 
-      {/* Hero Intro Section - Customizable Text, Visual Background Image and Live Storage Monitor */}
+      {/* Hero Intro Section - 完全透明可视化背景，表面无色彩遮挡 */}
       <div
-        className="relative rounded-3xl overflow-hidden text-white p-6 sm:p-10 shadow-lg border border-emerald-700/30 bg-cover bg-center transition-all duration-700"
+        className="relative rounded-3xl overflow-hidden text-white p-6 sm:p-10 shadow-xl border border-white/20 bg-cover bg-center transition-all duration-700"
         style={{
           backgroundImage: heroIntro?.heroImage
-            ? `linear-gradient(to right, rgba(6, 78, 59, 0.92), rgba(15, 23, 42, 0.85)), url("${heroIntro.heroImage}")`
-            : undefined
+            ? `url("${heroIntro.heroImage}")`
+            : 'linear-gradient(135deg, #064e3b 0%, #022c22 100%)'
         }}
       >
-        <div className="relative z-10 max-w-2xl space-y-3">
+        {/* 轻微文字投影增强可读性，背景图片本体完全透明通透无遮挡 */}
+        <div className="relative z-10 max-w-2xl space-y-3 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
           <div className="flex items-center space-x-2">
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-xs text-xs font-medium">
               <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
@@ -349,15 +350,6 @@ export const BlogList = ({
           </div>
         </div>
 
-        {/* Decorative Hero Image with direct photo upload trigger */}
-        <div className="absolute right-0 top-0 bottom-0 w-2/5 pointer-events-none hidden md:block">
-          <div className="absolute inset-0 bg-gradient-to-r from-emerald-900 via-transparent to-transparent z-10" />
-          <img
-            src={heroIntro?.heroImage || 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=800&q=80'}
-            alt="Hero Decoration"
-            className="w-full h-full object-cover opacity-60 mix-blend-luminosity hover:opacity-90 hover:mix-blend-normal transition-all duration-700"
-          />
-        </div>
 
         <input
           type="file"
