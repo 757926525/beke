@@ -200,7 +200,41 @@ export const RichContentRenderer = ({ content = '' }) => {
           return <h1 key={idx} className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-6 mb-3">{trimmed.replace('# ', '')}</h1>;
         }
 
-        // 8. General paragraph with inline markdown links [title](url) rendered as clickable <a>
+        // 8. Markdown image inline or standalone within paragraph: ![alt](url)
+        const inlineImageRegex = /!\[(.*?)\]\((.*?)\)/g;
+        if (inlineImageRegex.test(trimmed)) {
+          const parts = [];
+          let lastIdx = 0;
+          let imgMatch;
+          const reg = /!\[(.*?)\]\((.*?)\)/g;
+          while ((imgMatch = reg.exec(trimmed)) !== null) {
+            if (imgMatch.index > lastIdx) {
+              parts.push(trimmed.substring(lastIdx, imgMatch.index));
+            }
+            const [, alt, url] = imgMatch;
+            parts.push(
+              <span key={imgMatch.index} className="block my-3">
+                <span className="block rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 shadow-xs">
+                  <img
+                    src={url}
+                    alt={alt || '文章配图'}
+                    className="w-full max-h-[500px] object-contain mx-auto"
+                    loading="lazy"
+                  />
+                </span>
+                {alt && <span className="block text-center text-[11px] text-slate-400 mt-1 italic">{alt}</span>}
+              </span>
+            );
+            lastIdx = reg.lastIndex;
+          }
+          if (lastIdx < trimmed.length) {
+            parts.push(trimmed.substring(lastIdx));
+          }
+          return <div key={idx} className="leading-relaxed">{parts}</div>;
+        }
+
+        // 9. General paragraph with inline markdown links [title](url) rendered as clickable <a>
+        // 且若链接本身是指向图片的 URL，自动以 <img> 图片解析而非单纯链接
         const renderInlineLinks = (text) => {
           const parts = [];
           const regex = /\[(.*?)\]\((.*?)\)/g;
@@ -211,18 +245,35 @@ export const RichContentRenderer = ({ content = '' }) => {
             if (match.index > lastIndex) {
               parts.push(text.substring(lastIndex, match.index));
             }
-            parts.push(
-              <a
-                key={match.index}
-                href={match[2]}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-emerald-600 font-semibold hover:underline inline-flex items-center gap-0.5 mx-0.5"
-              >
-                <span>{match[1]}</span>
-                <ExternalLink className="w-3 h-3 inline opacity-70" />
-              </a>
-            );
+            const linkText = match[1];
+            const linkUrl = match[2];
+            const isImg = /\.(png|jpe?g|webp|gif|svg)(\?[^\s]*)?$/i.test(linkUrl) || linkUrl.startsWith('data:image/');
+
+            if (isImg) {
+              parts.push(
+                <span key={match.index} className="block my-2">
+                  <img
+                    src={linkUrl}
+                    alt={linkText || '配图'}
+                    className="max-h-80 rounded-xl border border-slate-200 shadow-xs object-contain"
+                    loading="lazy"
+                  />
+                </span>
+              );
+            } else {
+              parts.push(
+                <a
+                  key={match.index}
+                  href={linkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-600 font-semibold hover:underline inline-flex items-center gap-0.5 mx-0.5"
+                >
+                  <span>{linkText}</span>
+                  <ExternalLink className="w-3 h-3 inline opacity-70" />
+                </a>
+              );
+            }
             lastIndex = regex.lastIndex;
           }
 

@@ -50,6 +50,7 @@ export const STORAGE_KEYS = {
   PHOTOS: 'wf_photos',
   MEDIA_LIST: 'wf_media_list',
   EMAIL_SETTINGS: 'wf_email_settings',
+  MAIL_MESSAGES: 'wf_mail_messages',
   BROWSING_HISTORY: 'wf_browsing_history',
   HERO_INTRO: 'wf_hero_intro',
   SYNC_VERSION: 'wf_sync_version',
@@ -173,14 +174,26 @@ export const initialMedia = (rawInitialMedia || []).map((m) => ({
 
 export const defaultEmailSettings = {
   enabled: true,
-  provider: 'smtp',
+  provider: 'resend', // 'resend' | 'sendgrid' | 'postmark' | 'mailgun' | 'smtp'
+  apiKey: '',
+  apiEndpoint: 'https://api.resend.com/emails',
   smtpHost: 'smtp.whitefox.blog',
   smtpPort: 465,
   smtpUser: 'service@whitefox.blog',
   smtpPass: '••••••••••••',
   senderName: '白狐博客官方安全中心',
   senderEmail: 'service@whitefox.blog',
+  autoReplyEnabled: true,
+  rateLimitEnabled: true,
+  maxDailyEmails: 300,
   codeExpireMinutes: 10,
+  // Cloudflare Email Routing 配置预留
+  cfEmailRouting: {
+    enabled: true,
+    routingAddress: 'contact@whitefox.blog',
+    forwardTo: 'admin@example.com',
+    webhookUrl: '/api/mail/webhook'
+  },
   emailSubject: '【白狐博客】新用户注册自动验证码',
   emailTemplate: `尊敬的白狐访客：\n\n欢迎加入白狐数字空间！您注册账号的验证码为：\n\n【 {{code}} 】\n\n该验证码在 {{expire}} 分钟内有效，请勿泄露给他人。如非本人操作，请忽略此邮件。\n\n—— 白狐 (WhiteFox) 博客团队`,
   lastSentLog: [
@@ -188,6 +201,52 @@ export const defaultEmailSettings = {
     { id: 'log-2', recipient: 'visitor@example.com', code: '392184', time: '2025-05-17 19:30:05', status: '已成功发送' }
   ]
 };
+
+export const initialMailMessages = [
+  {
+    id: 'mail-1',
+    folder: 'inbox', // 'inbox' | 'sent' | 'trash'
+    sender: 'reader@example.com',
+    recipient: 'service@whitefox.blog',
+    subject: '关于博客中 Cloudflare D1 边缘多路同步的探讨',
+    content: '站长您好，拜读了您的边缘架构博文，请问在无数据库模式下，R2 与 KV 的双写一致性是如何保障的呢？非常期待您的回复！',
+    date: '2025-05-20 14:32:00',
+    read: true,
+    isStarred: true,
+    isCodeVerify: false,
+    updatedAt: seedTimestamp,
+    deleted: false
+  },
+  {
+    id: 'mail-2',
+    folder: 'inbox',
+    sender: 'newuser@163.com',
+    recipient: 'service@whitefox.blog',
+    subject: '新用户注册身份验证码请求',
+    content: '用户请求注册验证码：668822，已由系统安全网关自动发放。',
+    date: '2025-05-20 16:10:00',
+    read: false,
+    isStarred: false,
+    isCodeVerify: true,
+    code: '668822',
+    updatedAt: seedTimestamp,
+    deleted: false
+  },
+  {
+    id: 'mail-3',
+    folder: 'sent',
+    sender: 'service@whitefox.blog',
+    recipient: 'reader@example.com',
+    subject: '回复：关于博客中 Cloudflare D1 边缘多路同步的探讨',
+    content: '您好！我们采用乐观锁与时间戳合并策略（LWW），当 D1 离线时自动切换至 KV/R2 并在重新连通时进行增量聚合，确保无缝同步。',
+    date: '2025-05-20 17:05:00',
+    read: true,
+    isStarred: false,
+    isCodeVerify: false,
+    updatedAt: seedTimestamp,
+    deleted: false
+  }
+];
 
 export const initialBookmarks = [
   {
@@ -661,6 +720,7 @@ export const mergeSyncPayloadWithTimestamp = (currentData, incomingData) => {
   const mergedCloudFiles = mergeEntityCollection(currentData.cloudFiles, incomingData.cloudFiles, true);
   const mergedBookmarks = mergeEntityCollection(currentData.bookmarks, incomingData.bookmarks, true);
   const mergedBrowsingHistory = mergeEntityCollection(currentData.browsingHistory, incomingData.browsingHistory, true);
+  const mergedMailMessages = mergeEntityCollection(currentData.mailMessages, incomingData.mailMessages, true);
 
   // Settings & appearance: take newer by payload timestamp
   const isIncomingNewer = incomingTs >= currentTs;
@@ -675,6 +735,7 @@ export const mergeSyncPayloadWithTimestamp = (currentData, incomingData) => {
     cloudFiles: mergedCloudFiles,
     bookmarks: mergedBookmarks,
     browsingHistory: mergedBrowsingHistory,
+    mailMessages: mergedMailMessages,
     // Sensitive configurations are retained locally and not blindly overwritten by stripped data
     emailSettings: currentData.emailSettings || incomingData.emailSettings || {},
     cloudConfig: currentData.cloudConfig || incomingData.cloudConfig || {},

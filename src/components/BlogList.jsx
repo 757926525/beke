@@ -26,11 +26,13 @@ export const BlogList = ({
   setHeroIntro,
   browsingHistory = [],
   setBrowsingHistory,
+  activeStorageEngine = 'cloudflare-kv',
   t
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('全部');
   const [filterBookmarkedOnly, setFilterBookmarkedOnly] = useState(false);
+  const [blogViewMode, setBlogViewMode] = useState(layout || 'grid'); // 'grid' (大图) | 'magazine' (中图) | 'minimal' (小图) | 'compact' (详情列表)
   const [showNewModal, setShowNewModal] = useState(false);
   const [editingPost, setEditingPost] = useState(null);
   const [toast, setToast] = useState('');
@@ -459,6 +461,38 @@ export const BlogList = ({
                 />
               </div>
 
+              {/* 4 种视图模式切换：大图 (grid)、中图 (magazine)、小图 (minimal)、详细列表 (compact) */}
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200/80">
+                <button
+                  onClick={() => setBlogViewMode('grid')}
+                  title="大图网格视图"
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${blogViewMode === 'grid' ? 'bg-white text-emerald-600 shadow-xs' : 'text-slate-400 hover:text-slate-700'}`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setBlogViewMode('magazine')}
+                  title="中图杂志视图"
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${blogViewMode === 'magazine' ? 'bg-white text-emerald-600 shadow-xs' : 'text-slate-400 hover:text-slate-700'}`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setBlogViewMode('minimal')}
+                  title="小图卡片视图"
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${blogViewMode === 'minimal' ? 'bg-white text-emerald-600 shadow-xs' : 'text-slate-400 hover:text-slate-700'}`}
+                >
+                  <AlignLeft className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setBlogViewMode('compact')}
+                  title="详情列表视图"
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${blogViewMode === 'compact' ? 'bg-white text-emerald-600 shadow-xs' : 'text-slate-400 hover:text-slate-700'}`}
+                >
+                  <List className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
               <button
                 onClick={() => setFilterBookmarkedOnly(!filterBookmarkedOnly)}
                 className={`p-2 rounded-xl border text-xs font-semibold transition-all flex items-center space-x-1 cursor-pointer ${
@@ -484,8 +518,8 @@ export const BlogList = ({
           </div>
 
           {/* Dynamic Layout Rendering */}
-          {/* 1. Classic Grid Layout */}
-          {layout === 'grid' && (
+          {/* 1. Classic Grid Layout (大图) */}
+          {blogViewMode === 'grid' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredPosts.map((post) => (
                 <article
@@ -501,8 +535,13 @@ export const BlogList = ({
                         alt={post.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
-                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-xs text-white text-[11px] font-semibold">
-                        {post.category}
+                      <div className="absolute top-3 left-3 flex items-center space-x-1.5">
+                        <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-xs text-white text-[11px] font-semibold">
+                          {post.category}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-500/90 text-white text-[10px] font-mono shadow-xs backdrop-blur-xs">
+                          {activeStorageEngine.includes('kv') ? 'KV存储' : activeStorageEngine.includes('d1') ? 'D1数据库' : '本地存储'}
+                        </span>
                       </div>
 
                       {/* Actions (Bookmark, 1-Click Copy, Delete) */}
@@ -582,8 +621,8 @@ export const BlogList = ({
             </div>
           )}
 
-          {/* 2. Magazine Waterfall Layout */}
-          {layout === 'magazine' && (
+          {/* 2. Magazine Waterfall Layout (中图) */}
+          {blogViewMode === 'magazine' && (
             <div className="space-y-6">
               {filteredPosts.map((post) => (
                 <article
@@ -597,8 +636,13 @@ export const BlogList = ({
                       alt={post.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
-                    <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 text-white text-[10px] font-semibold">
-                      {post.category}
+                    <div className="absolute top-3 left-3 flex items-center space-x-1.5">
+                      <span className="px-2.5 py-1 rounded-full bg-black/60 text-white text-[10px] font-semibold">
+                        {post.category}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-500/90 text-white text-[10px] font-mono shadow-xs backdrop-blur-xs">
+                        {activeStorageEngine.includes('kv') ? 'KV存储' : activeStorageEngine.includes('d1') ? 'D1数据库' : '本地存储'}
+                      </span>
                     </div>
                   </div>
                   <div className="md:col-span-7 p-6 sm:p-8 flex flex-col justify-between space-y-4">
@@ -658,8 +702,8 @@ export const BlogList = ({
             </div>
           )}
 
-          {/* 3. Minimal Stream Layout */}
-          {layout === 'minimal' && (
+          {/* 3. Minimal Stream Layout (小图) */}
+          {blogViewMode === 'minimal' && (
             <div className="space-y-3">
               {filteredPosts.map((post) => (
                 <article
@@ -671,6 +715,9 @@ export const BlogList = ({
                     <div className="flex items-center space-x-2 text-xs">
                       <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold text-[10px]">
                         {post.category}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 text-[10px] font-mono">
+                        {activeStorageEngine.includes('kv') ? 'KV' : activeStorageEngine.includes('d1') ? 'D1' : '本地'}
                       </span>
                       <span className="text-slate-400">{post.date}</span>
                     </div>
@@ -710,8 +757,8 @@ export const BlogList = ({
             </div>
           )}
 
-          {/* 4. Compact List Layout */}
-          {layout === 'compact' && (
+          {/* 4. Compact List Layout (详细列表) */}
+          {blogViewMode === 'compact' && (
             <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs divide-y divide-slate-100 overflow-hidden">
               {filteredPosts.map((post) => (
                 <div
@@ -723,6 +770,9 @@ export const BlogList = ({
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 flex-shrink-0">
                       {post.category}
+                    </span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 flex-shrink-0">
+                      {activeStorageEngine.includes('kv') ? 'KV存储' : activeStorageEngine.includes('d1') ? 'D1数据库' : '本地'}
                     </span>
                     <span className="font-semibold text-slate-800 truncate group-hover:text-emerald-600">
                       {post.title}

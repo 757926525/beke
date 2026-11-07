@@ -9,14 +9,30 @@ import {
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
 
-export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloudFiles, backendConfig, t, currentUser }) => {
-  const [activeDriver, setActiveDriver] = useState('r2'); // 'r2' | 'cos' | 'oss' | 'alist' | 'local'
+export const NetDriveView = ({
+  cloudConfig,
+  setCloudConfig,
+  cloudFiles,
+  setCloudFiles,
+  posts = [],
+  setPosts,
+  books = [],
+  setBooks,
+  photos = [],
+  setPhotos,
+  backendConfig,
+  activeStorageEngine = 'cloudflare-kv',
+  t,
+  currentUser
+}) => {
+  const [activeDriver, setActiveDriver] = useState('nutstore'); // 'nutstore' | 'webdav' | 'r2' | 'cos' | 'oss'
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
   const [copiedUrl, setCopiedUrl] = useState('');
   const [showUsageGuide, setShowUsageGuide] = useState(false);
   const [viewMode, setViewMode] = useState('detail'); // 'large' | 'medium' | 'small' | 'detail'
   const fileInputRef = useRef(null);
+  const restoreInputRef = useRef(null);
 
   // Preview file modal
   const [previewFile, setPreviewFile] = useState(null);
@@ -28,6 +44,55 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
 
   const isAdmin = currentUser?.role === 'admin';
   const isDbConnected = backendConfig?.dbConnected;
+
+  // 1-Click Backup Whole Blog snapshot to JSON
+  const handleExportBackupSnapshot = () => {
+    try {
+      const snapshot = {
+        meta: {
+          site: 'whitefox-blog',
+          exportedAt: new Date().toISOString(),
+          version: Date.now()
+        },
+        posts,
+        books,
+        photos,
+        cloudFiles
+      };
+      const jsonStr = JSON.stringify(snapshot, null, 2);
+      downloadFile(jsonStr, `白狐博客全站数据备份_${new Date().toISOString().substring(0, 10)}.json`, 'application/json');
+      setSyncStatus('全站文章、图书、相册与备份快照导出成功！');
+      setTimeout(() => setSyncStatus(''), 4000);
+    } catch (e) {
+      alert('备份导出失败: ' + e.message);
+    }
+  };
+
+  // 1-Click Restore Snapshot from local JSON file
+  const handleRestoreBackupSnapshot = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result);
+        if (!parsed || (!parsed.posts && !parsed.books)) {
+          alert('无效的备份文件！');
+          return;
+        }
+        if (parsed.posts && setPosts) setPosts(parsed.posts);
+        if (parsed.books && setBooks) setBooks(parsed.books);
+        if (parsed.photos && setPhotos) setPhotos(parsed.photos);
+        if (parsed.cloudFiles) setCloudFiles(parsed.cloudFiles);
+        setSyncStatus(`成功从「${file.name}」还原博客数据！`);
+        setTimeout(() => setSyncStatus(''), 4000);
+      } catch (err) {
+        alert('解析还原失败: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+    if (restoreInputRef.current) restoreInputRef.current.value = '';
+  };
 
   const handleSaveConfig = () => {
     try {
@@ -163,16 +228,15 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
 
   // Filter files by bucket
   const currentProviderMap = {
+    nutstore: '坚果云 Nutstore',
+    webdav: '通用 WebDAV 云盘',
     r2: 'Cloudflare R2',
-    cos: 'Tencent COS',
-    oss: 'Alibaba OSS',
-    alist: 'AList / WebDAV',
-    local: '站内本地存储'
+    cos: '腾讯云 COS',
+    oss: '阿里云 OSS'
   };
 
   const filteredFiles = cloudFiles.filter((f) => {
     if (f.bucketKey) return f.bucketKey === activeDriver;
-    // Fallback matching by provider name
     const targetName = currentProviderMap[activeDriver];
     return f.provider === targetName || (activeDriver === 'r2' && !f.provider);
   });
@@ -185,36 +249,50 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
           <div>
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold mb-2">
               <HardDrive className="w-3.5 h-3.5" />
-              <span>多云聚合 · 云盘与对象存储调度中枢</span>
+              <span>全栈容灾 · 外接备份与云盘调度管理区</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
-              网盘与多云调度中枢
+              外接备份管理区
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              集中调度与管理 Cloudflare R2、腾讯云 COS、阿里云 OSS 与 AList/WebDAV 存储桶，支持不同平台独立分区、在线查看、下载与数据库实时同步。
+              原生支持坚果云 Nutstore、标准 WebDAV 云盘及 R2/COS/OSS 对象存储；提供博客全站数据一键备份、还原与已备份文件可视化管理。
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {isDbConnected ? (
-              <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-2xl bg-emerald-100 text-emerald-800 text-xs font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>数据库实时全息同步已激活</span>
-              </span>
-            ) : (
-              <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-2xl bg-amber-100 text-amber-800 text-xs font-semibold">
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
-                <span>离线缓存模式 (未连接数据库)</span>
-              </span>
-            )}
+            {/* 1-Click Backup Button */}
+            <button
+              onClick={handleExportBackupSnapshot}
+              className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>一键备份全站数据</span>
+            </button>
+
+            {/* 1-Click Restore Button */}
+            <input
+              type="file"
+              ref={restoreInputRef}
+              onChange={handleRestoreBackupSnapshot}
+              accept=".json"
+              className="hidden"
+              id="restore-file-input"
+            />
+            <label
+              htmlFor="restore-file-input"
+              className="px-4 py-2.5 rounded-2xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+            >
+              <Upload className="w-4 h-4 text-emerald-600" />
+              <span>一键还原备份</span>
+            </label>
 
             <button
               onClick={handleManualSync}
               disabled={isSyncing}
-              className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-2 shadow-xs transition-colors"
+              className="px-3.5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? '同步中...' : isDbConnected ? '执行数据库与多云全息同步' : '同步多云状态'}</span>
+              <span>{isSyncing ? '同步中...' : '同步状态'}</span>
             </button>
           </div>
         </div>
@@ -227,15 +305,15 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
         )}
       </div>
 
-      {/* Cloud Providers Selection Cards (不同平台独立选区 - 仅管理员可见) */}
+      {/* Cloud Providers Selection Cards (不同外接平台与网盘选区) */}
       {isAdmin && (
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
+            { id: 'nutstore', name: '坚果云 Nutstore', icon: HardDrive, desc: '高安全 WebDAV 自动增量备份' },
+            { id: 'webdav', name: '通用 WebDAV 云盘', icon: Server, desc: 'Nextcloud / 群晖 / 自建网盘' },
             { id: 'r2', name: 'Cloudflare R2', icon: Cloud, desc: '0 出站费边缘存储' },
-            { id: 'cos', name: '腾讯云 COS', icon: Server, desc: '国内极速 CDN 存储' },
-            { id: 'oss', name: '阿里云 OSS', icon: Database, desc: '高可用对象存储' },
-            { id: 'alist', name: 'AList / WebDAV', icon: HardDrive, desc: '多网盘聚合挂载' },
-            { id: 'local', name: '站内存储池', icon: FolderPlus, desc: '本地视频转存与媒体' },
+            { id: 'cos', name: '腾讯云 COS', icon: Database, desc: '国内极速 CDN 归档' },
+            { id: 'oss', name: '阿里云 OSS', icon: FolderPlus, desc: '高可用容灾存储' }
           ].map((p) => {
             const Icon = p.icon;
             const isSelected = activeDriver === p.id;

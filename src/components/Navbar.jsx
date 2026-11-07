@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   BookOpen, Library, Image as ImageIcon, Music,
   Cloud, Shield, Moon, Sun, LogIn, LogOut,
-  ChevronDown, ChevronUp, RefreshCw, Sparkles
+  ChevronDown, ChevronUp, RefreshCw, Sparkles, Mail
 } from 'lucide-react';
 
 export const Navbar = ({
@@ -33,10 +33,17 @@ export const Navbar = ({
   if (!isGuestRestricted) {
     baseTabs.push(
       { id: 'books', label: t('bookshelf'), icon: Library },
-      { id: 'cloud', label: t('cloud'), icon: Cloud },
+      { id: 'cloud', label: '外接备份', icon: Cloud },
       { id: 'gallery', label: t('gallery'), icon: ImageIcon },
-      { id: 'media', label: t('player'), icon: Music },
-      { id: 'ai-coding', label: 'AI编程', icon: Sparkles }
+      { id: 'media', label: t('player'), icon: Music }
+    );
+  }
+
+  // AI 编程区与智能信件管理区严格仅管理员可见
+  if (currentUser?.role === 'admin') {
+    baseTabs.push(
+      { id: 'ai-coding', label: 'AI编程', icon: Sparkles },
+      { id: 'mail-hub', label: '信件中心', icon: Mail }
     );
   }
 

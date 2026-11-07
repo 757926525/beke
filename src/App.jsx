@@ -9,6 +9,7 @@ import { CodingAIView } from './components/CodingAIView';
 import { MediaPlayerView } from './components/MediaPlayerView';
 import { DeploymentGuideView } from './components/DeploymentGuideView';
 import { AdminSettingsView } from './components/AdminSettingsView';
+import { MailHubView } from './components/MailHubView';
 import { AuthModal } from './components/AuthModal';
 import {
   initialPosts,
@@ -16,6 +17,7 @@ import {
   initialPhotos,
   initialMedia,
   initialBookmarks,
+  initialMailMessages,
   initialCloudConfig,
   initialCloudFiles,
   initialUsers,
@@ -96,6 +98,7 @@ export function App() {
   ]));
   const [systemSettings, setSystemSettings] = useState(() => loadFromStorage(STORAGE_KEYS.SYSTEM_SETTINGS, defaultSystemSettings));
   const [emailSettings, setEmailSettings] = useState(() => loadFromStorage(STORAGE_KEYS.EMAIL_SETTINGS, defaultEmailSettings));
+  const [mailMessages, setMailMessages] = useState(() => loadFromStorage(STORAGE_KEYS.MAIL_MESSAGES, initialMailMessages));
   const [searchProxy, setSearchProxy] = useState(() => loadFromStorage(STORAGE_KEYS.SEARCH_PROXY, defaultSearchProxy));
   const [backendConfig, setBackendConfig] = useState(() => loadFromStorage(STORAGE_KEYS.BACKEND_CONFIG, defaultBackendConfig));
 
@@ -200,6 +203,7 @@ export function App() {
   // 4. 同步状态指示器 ('idle' | 'syncing' | 'success' | 'error')
   const [syncStatus, setSyncStatus] = useState('idle');
   const [syncStatusMessage, setSyncStatusMessage] = useState('');
+  const [activeStorageEngine, setActiveStorageEngine] = useState('cloudflare-kv');
 
   // 5. 版本跟踪
   const [currentVersion, setCurrentVersion] = useState(() => {
@@ -383,6 +387,8 @@ export function App() {
         cloudFiles,
         bookmarks,
         browsingHistory,
+        mailMessages,
+        emailSettings,
         appearance,
         systemSettings,
         siteName,
@@ -403,7 +409,7 @@ export function App() {
     });
 
     return () => unsubscribe();
-  }, [posts, books, photos, mediaList, cloudFiles, bookmarks, browsingHistory, appearance, systemSettings, siteName, siteLayout, fontSize, lang, themeId, currentVersion]);
+  }, [posts, books, photos, mediaList, cloudFiles, bookmarks, browsingHistory, mailMessages, emailSettings, appearance, systemSettings, siteName, siteLayout, fontSize, lang, themeId, currentVersion]);
 
   // -------------------------------------------------------------
   // 核心逻辑 3: 本地修改持久化 & 更新本地 updatedAt / wf_last_local_change
@@ -431,7 +437,8 @@ export function App() {
   useEffect(() => { saveToStorage(STORAGE_KEYS.SYSTEM_SETTINGS, systemSettings); recordLocalChange(); }, [systemSettings]);
   useEffect(() => { saveToStorage(STORAGE_KEYS.SEARCH_PROXY, searchProxy); }, [searchProxy]);
   useEffect(() => { saveToStorage(STORAGE_KEYS.BACKEND_CONFIG, backendConfig); }, [backendConfig]);
-  useEffect(() => { saveToStorage(STORAGE_KEYS.EMAIL_SETTINGS, emailSettings); }, [emailSettings]);
+  useEffect(() => { saveToStorage(STORAGE_KEYS.EMAIL_SETTINGS, emailSettings); recordLocalChange(); }, [emailSettings]);
+  useEffect(() => { saveToStorage(STORAGE_KEYS.MAIL_MESSAGES, mailMessages); recordLocalChange(); }, [mailMessages]);
   useEffect(() => { saveToStorage(STORAGE_KEYS.POSTS, posts); recordLocalChange(); }, [posts]);
   useEffect(() => { saveToStorage(STORAGE_KEYS.BOOKS, books); recordLocalChange(); }, [books]);
   useEffect(() => { saveToStorage(STORAGE_KEYS.PHOTOS, photos); recordLocalChange(); }, [photos]);
@@ -461,6 +468,7 @@ export function App() {
       cloudFiles,
       bookmarks,
       browsingHistory,
+      mailMessages,
       appearance,
       systemSettings,
       siteName,
@@ -514,7 +522,10 @@ export function App() {
 
       if (pushRes.success) {
         setSyncStatus('success');
-        setSyncStatusMessage(`同步成功 (版本 v${pushRes.version})`);
+        if (pushRes.storageEngine) {
+          setActiveStorageEngine(pushRes.storageEngine);
+        }
+        setSyncStatusMessage(`同步成功 (版本 v${pushRes.version}${pushRes.storageEngine ? ` · ${pushRes.storageEngine}` : ''})`);
         if (typeof pushRes.version === 'number') {
           setCurrentVersion(pushRes.version);
         }
@@ -532,21 +543,21 @@ export function App() {
   };
 
   // -------------------------------------------------------------
-  // 核心逻辑 5: 节流自动同步 (仅在有写操作时触发，最低 60 秒一次，解决流量耗费)
+  // 核心逻辑 5: 操作触发防抖同步 (无任何定时轮询，仅在用户发生实际修改/操作时触发防抖推送到云端)
   // -------------------------------------------------------------
   useEffect(() => {
-    // 检查开启状态、hydration 状态及是否有用户实际写操作
+    // 严格检查开启状态、hydration 状态及是否有用户实际写操作 (无操作绝不轮询)
     if (!autoSyncEnabled || !hydrated || isApplyingRemote.current || !hasUserDirtyChange.current) {
       return;
     }
 
-    // 最低 1 分钟 (60000ms) 自动同步一次
+    // 用户操作后防抖 1.5 秒自动同步，既保证即时保存又避免高频发包，绝不使用固定定时轮询
     const timer = setTimeout(() => {
       if (hasUserDirtyChange.current) {
         hasUserDirtyChange.current = false;
         executePushToCloud(false);
       }
-    }, 60000);
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, [
@@ -559,6 +570,8 @@ export function App() {
     cloudFiles,
     bookmarks,
     browsingHistory,
+    mailMessages,
+    emailSettings,
     appearance,
     systemSettings,
     siteName,
@@ -878,6 +891,7 @@ export function App() {
               setHeroIntro={setHeroIntro}
               browsingHistory={browsingHistory}
               setBrowsingHistory={setBrowsingHistory}
+              activeStorageEngine={activeStorageEngine}
               t={t}
             />
           )}
@@ -922,6 +936,7 @@ export function App() {
               }}
               currentUser={currentUser}
               isAdmin={currentUser?.role === 'admin'}
+              activeStorageEngine={activeStorageEngine}
               t={t}
             />
           )}
@@ -935,9 +950,16 @@ export function App() {
                 const updated = typeof newFilesOrFn === 'function' ? newFilesOrFn(cloudFiles) : newFilesOrFn;
                 setCloudFiles((updated || []).map((f) => ({ ...f, updatedAt: f.updatedAt || Date.now(), deleted: Boolean(f.deleted) })));
               }}
+              posts={posts}
+              setPosts={setPosts}
+              books={books}
+              setBooks={setBooks}
+              photos={photos}
+              setPhotos={setPhotos}
               currentUser={currentUser}
               isAdmin={currentUser?.role === 'admin'}
               backendConfig={backendConfig}
+              activeStorageEngine={activeStorageEngine}
               t={t}
             />
           )}
@@ -970,9 +992,22 @@ export function App() {
             />
           )}
 
-          {activeTab === 'ai-coding' && (
+          {activeTab === 'ai-coding' && currentUser?.role === 'admin' && (
             <CodingAIView
               currentUser={currentUser}
+              t={t}
+            />
+          )}
+
+          {activeTab === 'mail-hub' && currentUser?.role === 'admin' && (
+            <MailHubView
+              emailSettings={emailSettings}
+              setEmailSettings={setEmailSettings}
+              mailMessages={mailMessages}
+              setMailMessages={setMailMessages}
+              currentUser={currentUser}
+              isAdmin={currentUser?.role === 'admin'}
+              activeStorageEngine={activeStorageEngine}
               t={t}
             />
           )}

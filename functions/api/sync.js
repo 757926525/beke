@@ -85,10 +85,35 @@ export async function onRequestGet(context) {
   const url = new URL(request.url);
   const syncKey = resolveSyncKey(url.searchParams.get('key') || request.headers.get('X-Sync-Key'), env);
 
+  const kv = env?.KV || env?.WHITEFOX_KV;
   const db = env?.DB;
   const bucket = env?.BUCKET || env?.R2_BUCKET;
 
-  // 1. 优先从 D1 数据库拉取
+  // 1. 最高优先级：若绑定了 KV (env.KV)，博客文章、配置、浏览记录优先从 KV 读取
+  if (kv) {
+    try {
+      const kvKey = `site_sync:${syncKey}`;
+      const rawText = await kv.get(kvKey);
+      if (rawText) {
+        const data = JSON.parse(rawText);
+        return new Response(JSON.stringify({
+          success: true,
+          storageEngine: 'cloudflare-kv',
+          syncKey,
+          version: data.version || 1,
+          updatedAt: data.updatedAt || Date.now(),
+          payload: data.payload
+        }), {
+          status: 200,
+          headers: CORS_HEADERS
+        });
+      }
+    } catch (err) {
+      console.warn('KV read error, falling back to D1:', err.message);
+    }
+  }
+
+  // 2. 次优先级：从 D1 数据库拉取
   if (db) {
     try {
       const query = `SELECT sync_key, payload, version, updated_at FROM site_sync WHERE sync_key = ? LIMIT 1`;
@@ -119,7 +144,7 @@ export async function onRequestGet(context) {
     }
   }
 
-  // 2. 无 D1 或 D1 中暂无数据时，自适应回退从 R2 对象存储中读取
+  // 3. 次次优先级：从 R2 对象存储中读取
   if (bucket) {
     try {
       const r2Key = `site_sync/${syncKey}.json`;
@@ -236,10 +261,37 @@ export async function onRequestPost(context) {
   }
 
   const payloadString = typeof rawPayload === 'string' ? rawPayload : JSON.stringify(rawPayload);
+  const kv = env?.KV || env?.WHITEFOX_KV;
   const db = env?.DB;
   const bucket = env?.BUCKET || env?.R2_BUCKET;
 
-  // 方式 A: 若配置了 Cloudflare D1 数据库，写入 D1
+  // 方式 A: 若配置了 Cloudflare KV，博客文章、配置信息等优先写入 KV
+  let savedToKV = false;
+  if (kv) {
+    try {
+      const kvKey = `site_sync:${syncKey}`;
+      const currentMeta = await kv.get(kvKey + ':meta', { type: 'json' });
+      if (currentMeta && currentMeta.version >= version) {
+        return new Response(JSON.stringify({
+          success: false,
+          conflict: true,
+          currentVersion: currentMeta.version,
+          message: 'Conflict detected in KV: Server has newer version.'
+        }), {
+          status: 409,
+          headers: CORS_HEADERS
+        });
+      }
+
+      await kv.put(kvKey, JSON.stringify({ version, updatedAt, payload: rawPayload }));
+      await kv.put(kvKey + ':meta', JSON.stringify({ version, updatedAt }));
+      savedToKV = true;
+    } catch (err) {
+      console.warn('KV write failed, attempting D1/R2:', err.message);
+    }
+  }
+
+  // 方式 B: 若配置了 Cloudflare D1 数据库，写入 D1
   if (db) {
     try {
       await db.prepare(`
@@ -291,11 +343,11 @@ export async function onRequestPost(context) {
 
       return new Response(JSON.stringify({
         success: true,
-        storageEngine: 'cloudflare-d1',
+        storageEngine: savedToKV ? 'cloudflare-kv+d1' : 'cloudflare-d1',
         syncKey,
         version,
         updatedAt,
-        message: 'Sync payload persisted to Cloudflare D1 successfully'
+        message: 'Sync payload persisted to Cloudflare D1 (and KV) successfully'
       }), {
         status: 200,
         headers: CORS_HEADERS
@@ -303,6 +355,20 @@ export async function onRequestPost(context) {
     } catch (err) {
       console.warn('D1 write failed, attempting R2/memory fallback:', err.message);
     }
+  }
+
+  if (savedToKV) {
+    return new Response(JSON.stringify({
+      success: true,
+      storageEngine: 'cloudflare-kv',
+      syncKey,
+      version,
+      updatedAt,
+      message: 'Sync payload persisted to Cloudflare KV successfully'
+    }), {
+      status: 200,
+      headers: CORS_HEADERS
+    });
   }
 
   // 方式 B: 无 D1 数据库但有 R2 对象存储桶，持久化写入 R2

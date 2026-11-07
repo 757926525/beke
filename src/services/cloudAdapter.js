@@ -495,6 +495,7 @@ export async function pushToCloudSyncVault(payload, options = {}) {
       version: nextVersion,
       updatedAt: nowMs,
       remoteSynced: remoteSuccess,
+      storageEngine: remoteResData?.storageEngine || null,
       error: remoteSuccess ? null : (lastError ? lastError.message : '云端同步请求未成功')
     };
   } catch (e) {

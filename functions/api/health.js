@@ -21,8 +21,26 @@ export async function onRequestOptions() {
 export async function onRequestGet(context) {
   const { env } = context;
 
+  const kvBound = Boolean(env && (env.KV || env.WHITEFOX_KV));
   const d1Bound = Boolean(env && env.DB);
   const r2Bound = Boolean(env && (env.BUCKET || env.R2_BUCKET));
+
+  let kvHealthy = false;
+  let kvMessage = '';
+
+  if (kvBound) {
+    try {
+      const kv = env.KV || env.WHITEFOX_KV;
+      await kv.list({ limit: 1 });
+      kvHealthy = true;
+      kvMessage = 'Cloudflare KV 键值存储绑定就绪 (KV bound)';
+    } catch (e) {
+      kvHealthy = false;
+      kvMessage = `Cloudflare KV 已绑定但探测报错: ${e.message}`;
+    }
+  } else {
+    kvMessage = '未在 Cloudflare Pages 绑定 KV (变量名需为 "KV")';
+  }
 
   let d1Healthy = false;
   let d1Message = '';
@@ -64,6 +82,11 @@ export async function onRequestGet(context) {
     platform: 'Cloudflare Pages',
     timestamp: Date.now(),
     adminUsername: adminUsername || undefined,
+    kv: {
+      bound: kvBound,
+      healthy: kvHealthy,
+      message: kvMessage
+    },
     d1: {
       bound: d1Bound,
       healthy: d1Healthy,
