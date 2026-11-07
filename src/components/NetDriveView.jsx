@@ -15,6 +15,7 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
   const [syncStatus, setSyncStatus] = useState('');
   const [copiedUrl, setCopiedUrl] = useState('');
   const [showUsageGuide, setShowUsageGuide] = useState(false);
+  const [viewMode, setViewMode] = useState('detail'); // 'large' | 'medium' | 'small' | 'detail'
   const fileInputRef = useRef(null);
 
   // Preview file modal
@@ -25,7 +26,19 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
   const [newFileUrl, setNewFileUrl] = useState('');
   const [newFileSize, setNewFileSize] = useState('1.5 MB');
 
+  const isAdmin = currentUser?.role === 'admin';
   const isDbConnected = backendConfig?.dbConnected;
+
+  const handleSaveConfig = () => {
+    try {
+      localStorage.setItem('wf_cloud_config', JSON.stringify(cloudConfig || {}));
+      setSyncStatus('云盘与存储桶接入配置已成功保存！');
+      setTimeout(() => setSyncStatus(''), 3000);
+    } catch {
+      setSyncStatus('配置保存完成');
+      setTimeout(() => setSyncStatus(''), 3000);
+    }
+  };
 
   const handleManualSync = () => {
     setIsSyncing(true);
@@ -214,42 +227,44 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
         )}
       </div>
 
-      {/* Cloud Providers Selection Cards (不同平台独立选区) */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {[
-          { id: 'r2', name: 'Cloudflare R2', icon: Cloud, desc: '0 出站费边缘存储' },
-          { id: 'cos', name: '腾讯云 COS', icon: Server, desc: '国内极速 CDN 存储' },
-          { id: 'oss', name: '阿里云 OSS', icon: Database, desc: '高可用对象存储' },
-          { id: 'alist', name: 'AList / WebDAV', icon: HardDrive, desc: '多网盘聚合挂载' },
-          { id: 'local', name: '站内存储池', icon: FolderPlus, desc: '本地视频转存与媒体' },
-        ].map((p) => {
-          const Icon = p.icon;
-          const isSelected = activeDriver === p.id;
-          const count = cloudFiles.filter((f) => (f.bucketKey ? f.bucketKey === p.id : f.provider === currentProviderMap[p.id])).length;
-          return (
-            <button
-              key={p.id}
-              onClick={() => setActiveDriver(p.id)}
-              className={`p-4 rounded-2xl border text-left transition-all relative ${
-                isSelected
-                  ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
-                  : 'bg-white/80 hover:bg-white border-slate-200'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Icon className={`w-4 h-4 ${isSelected ? 'text-emerald-600' : 'text-slate-500'}`} />
-                  <span className="font-bold text-xs text-slate-800">{p.name}</span>
+      {/* Cloud Providers Selection Cards (不同平台独立选区 - 仅管理员可见) */}
+      {isAdmin && (
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {[
+            { id: 'r2', name: 'Cloudflare R2', icon: Cloud, desc: '0 出站费边缘存储' },
+            { id: 'cos', name: '腾讯云 COS', icon: Server, desc: '国内极速 CDN 存储' },
+            { id: 'oss', name: '阿里云 OSS', icon: Database, desc: '高可用对象存储' },
+            { id: 'alist', name: 'AList / WebDAV', icon: HardDrive, desc: '多网盘聚合挂载' },
+            { id: 'local', name: '站内存储池', icon: FolderPlus, desc: '本地视频转存与媒体' },
+          ].map((p) => {
+            const Icon = p.icon;
+            const isSelected = activeDriver === p.id;
+            const count = cloudFiles.filter((f) => (f.bucketKey ? f.bucketKey === p.id : f.provider === currentProviderMap[p.id])).length;
+            return (
+              <button
+                key={p.id}
+                onClick={() => setActiveDriver(p.id)}
+                className={`p-4 rounded-2xl border text-left transition-all relative ${
+                  isSelected
+                    ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
+                    : 'bg-white/80 hover:bg-white border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Icon className={`w-4 h-4 ${isSelected ? 'text-emerald-600' : 'text-slate-500'}`} />
+                    <span className="font-bold text-xs text-slate-800">{p.name}</span>
+                  </div>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
+                    {count}
+                  </span>
                 </div>
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
-                  {count}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-400 mt-1">{p.desc}</p>
-            </button>
-          );
-        })}
-      </div>
+                <p className="text-[10px] text-slate-400 mt-1">{p.desc}</p>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Direct File Management & Upload Bar for Selected Provider */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
@@ -263,9 +278,42 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
               可直接在此区域新增文件直链、在线预览查看、下载或删除，支持与博客文章及媒体影音互相引用
             </p>
           </div>
-          <span className="text-xs font-mono text-slate-500 bg-slate-100 px-3 py-1 rounded-xl self-start sm:self-auto">
-            已调度文件: {filteredFiles.length} 项
-          </span>
+          <div className="flex items-center space-x-2">
+            {/* 4 View Modes */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl space-x-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('large')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${viewMode === 'large' ? 'bg-white text-emerald-700 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                大图
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('medium')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${viewMode === 'medium' ? 'bg-white text-emerald-700 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                中图
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('small')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${viewMode === 'small' ? 'bg-white text-emerald-700 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                小图
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('detail')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${viewMode === 'detail' ? 'bg-white text-emerald-700 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                详细列表
+              </button>
+            </div>
+            <span className="text-xs font-mono text-slate-500 bg-slate-100 px-3 py-1 rounded-xl self-start sm:self-auto">
+              已调度: {filteredFiles.length} 项
+            </span>
+          </div>
         </div>
 
         {/* Dual Mode: Direct Computer Upload OR Manual External CDN / URL Insertion */}
@@ -341,14 +389,14 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
           </form>
         </div>
 
-        {/* Files Table for Current Provider */}
-        <div className="overflow-x-auto">
-          {filteredFiles.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 space-y-2">
-              <Folder className="w-10 h-10 mx-auto text-slate-300 stroke-[1.5]" />
-              <p className="text-xs">该存储平台暂无归档文件，请在上方直接添加或通过站内媒体一键转存</p>
-            </div>
-          ) : (
+        {/* Files Content for Current Provider according to viewMode */}
+        {filteredFiles.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 space-y-2">
+            <Folder className="w-10 h-10 mx-auto text-slate-300 stroke-[1.5]" />
+            <p className="text-xs">该存储平台暂无归档文件，请在上方直接上传或添加直链</p>
+          </div>
+        ) : viewMode === 'detail' ? (
+          <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-600">
               <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-[10px] border-b border-slate-200">
                 <tr>
@@ -390,7 +438,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                     <td className="py-3 px-3 text-slate-400 font-mono">{file.size}</td>
                     <td className="py-3 px-3 text-slate-400">{file.uploadedAt}</td>
                     <td className="py-3 px-3 text-right space-x-2">
-                      {/* View / Preview */}
                       <button
                         onClick={() => setPreviewFile(file)}
                         className="text-sky-600 hover:text-sky-700 inline-block p-1"
@@ -398,7 +445,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                       >
                         <Eye className="w-3.5 h-3.5" />
                       </button>
-                      {/* Download */}
                       <button
                         onClick={() => handleDownloadFile(file)}
                         className="text-emerald-600 hover:text-emerald-700 inline-block p-1"
@@ -406,7 +452,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                       >
                         <Download className="w-3.5 h-3.5" />
                       </button>
-                      {/* Copy Link */}
                       <button
                         onClick={() => handleCopy(file.url)}
                         className="text-slate-500 hover:text-emerald-600 inline-block p-1"
@@ -414,7 +459,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </button>
-                      {/* Open Link */}
                       <a
                         href={file.url}
                         target="_blank"
@@ -424,7 +468,6 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
-                      {/* Delete */}
                       <button
                         onClick={() => handleDeleteFile(file.id, file.name)}
                         className="text-rose-500 hover:text-rose-700 inline-block p-1"
@@ -437,16 +480,95 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
                 ))}
               </tbody>
             </table>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div
+            className={`grid gap-4 ${
+              viewMode === 'large'
+                ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
+                : viewMode === 'medium'
+                ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'
+                : 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6'
+            }`}
+          >
+            {filteredFiles.map((file) => (
+              <div
+                key={file.id}
+                className="bg-slate-50 rounded-2xl p-3 border border-slate-200/80 hover:border-emerald-500 hover:shadow-md transition-all flex flex-col justify-between group"
+              >
+                <div>
+                  <div
+                    onClick={() => setPreviewFile(file)}
+                    className="cursor-pointer aspect-video bg-white rounded-xl overflow-hidden flex items-center justify-center border border-slate-100 relative group-hover:scale-[1.02] transition-transform mb-2"
+                  >
+                    {file.thumbnail || (file.type === 'image' && file.url) ? (
+                      <img src={file.thumbnail || file.url} alt={file.name} className="w-full h-full object-cover" />
+                    ) : file.type === 'video' ? (
+                      <div className="w-full h-full bg-indigo-50 flex items-center justify-center text-indigo-600">
+                        <Play className="w-8 h-8" />
+                      </div>
+                    ) : file.type === 'audio' ? (
+                      <div className="w-full h-full bg-pink-50 flex items-center justify-center text-pink-600">
+                        <Music className="w-8 h-8" />
+                      </div>
+                    ) : (
+                      <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-500">
+                        <FileText className="w-8 h-8" />
+                      </div>
+                    )}
+                  </div>
+                  <h4 className="text-xs font-bold text-slate-800 line-clamp-1">{file.name}</h4>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                    <span>{file.size}</span>
+                    <span>{file.uploadedAt}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end space-x-1 mt-2 pt-2 border-t border-slate-100">
+                  <button
+                    onClick={() => handleDownloadFile(file)}
+                    className="p-1 rounded-lg text-emerald-600 hover:bg-emerald-50"
+                    title="下载文件"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleCopy(file.url)}
+                    className="p-1 rounded-lg text-slate-500 hover:bg-slate-200"
+                    title="复制链接"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteFile(file.id, file.name)}
+                    className="p-1 rounded-lg text-rose-500 hover:bg-rose-50"
+                    title="删除"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Driver Configuration Card */}
-      <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-        <h2 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
-          <Key className="w-4 h-4 text-emerald-600" />
-          <span>当前选区接入配置 ({currentProviderMap[activeDriver]})</span>
-        </h2>
+      {/* Driver Configuration Card (管理员可见并具备保存配置按钮) */}
+      {isAdmin && (
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+              <Key className="w-4 h-4 text-emerald-600" />
+              <span>当前选区接入配置 ({currentProviderMap[activeDriver]})</span>
+            </h2>
+            <button
+              onClick={handleSaveConfig}
+              className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>保存配置</span>
+            </button>
+          </div>
 
         {activeDriver === 'r2' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -584,88 +706,91 @@ export const NetDriveView = ({ cloudConfig, setCloudConfig, cloudFiles, setCloud
           <div className="p-3 bg-emerald-50 text-emerald-800 rounded-xl text-xs space-y-1">
             <span className="font-bold">站内本地存储池说明：</span>
             <p className="text-[11px] leading-relaxed">
-              站内存储池用于保存本地上传的音视频、书籍文档及媒体转存记录。在连接后台主数据库后，站内池文件将自动同步至云端。
+              站内存储池用于保存本地上传的音视频、书籍文档及媒体转存记录。在连接后台主数据库或边缘存储后，站内池文件将自动同步至云端。
             </p>
           </div>
         )}
-      </div>
+        </div>
+      )}
 
-      {/* Detailed Step-by-Step Multi-Cloud & NetDrive Usage Guide */}
-      <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <button
-          onClick={() => setShowUsageGuide(!showUsageGuide)}
-          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-800">网盘与多云调度中枢 · 详细配置与使用实战指南</h2>
-              <p className="text-xs text-slate-400">涵盖 Cloudflare R2、腾讯云 COS、阿里云 OSS 与 AList/WebDAV 挂载全流程步骤</p>
-            </div>
-          </div>
-          {showUsageGuide ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-        </button>
-
-        {showUsageGuide && (
-          <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6 text-xs text-slate-600">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 space-y-3">
-                <div className="flex items-center space-x-2 text-emerald-800 font-bold">
-                  <Cloud className="w-4 h-4 text-emerald-600" />
-                  <span>1. Cloudflare R2 极速配置指南 (推荐：0 出站流量费)</span>
-                </div>
-                <ol className="list-decimal list-inside space-y-1.5 text-slate-600 leading-relaxed pl-1">
-                  <li>登录 Cloudflare 控制台，进入「<strong>R2</strong>」标签页。</li>
-                  <li>点击「<strong>Create bucket</strong>」，填写 Bucket 名称（如 <code className="bg-white px-1.5 py-0.5 rounded border text-emerald-700">whitefox-assets</code>）。</li>
-                  <li>在 Bucket 设置中的「<strong>Public access</strong>」开启「<strong>Custom Domains</strong>」绑定你的域名（如 <code className="bg-white px-1.5 py-0.5 rounded border text-emerald-700">r2.yourdomain.com</code>）。</li>
-                  <li>在上方输入框填入 Bucket 名称与自定义域名，即可直接在博客文章、媒体库中插入高速免流图片与视频资源。</li>
-                </ol>
+      {/* Detailed Step-by-Step Multi-Cloud & NetDrive Usage Guide (管理员可见) */}
+      {isAdmin && (
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <button
+            onClick={() => setShowUsageGuide(!showUsageGuide)}
+            className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                <BookOpen className="w-5 h-5" />
               </div>
-
-              <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 space-y-3">
-                <div className="flex items-center space-x-2 text-blue-800 font-bold">
-                  <Server className="w-4 h-4 text-blue-600" />
-                  <span>2. 腾讯云 COS 存储桶挂载指南</span>
-                </div>
-                <ol className="list-decimal list-inside space-y-1.5 text-slate-600 leading-relaxed pl-1">
-                  <li>登录腾讯云控制台，进入「<strong>对象存储 COS</strong>」控制台。</li>
-                  <li>新建存储桶，访问权限建议选择「<strong>公有读私有写</strong>」，选择就近地域（如广州 <code className="bg-white px-1.5 py-0.5 rounded border text-blue-700">ap-guangzhou</code>）。</li>
-                  <li>在「<strong>域名管理</strong>」中可绑定自定义加速 CDN 域名（如 <code className="bg-white px-1.5 py-0.5 rounded border text-blue-700">cos.yourdomain.com</code>）。</li>
-                  <li>在「<strong>安全设置 → 跨域访问 CORS</strong>」中允许白狐博客域名跨域发起 GET/PUT 请求。</li>
-                </ol>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 space-y-3">
-                <div className="flex items-center space-x-2 text-orange-800 font-bold">
-                  <Database className="w-4 h-4 text-orange-600" />
-                  <span>3. 阿里云 OSS 高可用对象存储指南</span>
-                </div>
-                <ol className="list-decimal list-inside space-y-1.5 text-slate-600 leading-relaxed pl-1">
-                  <li>进入阿里云「<strong>OSS 管理控制台</strong>」，创建 Bucket，读写权限设为「<strong>公共读</strong>」。</li>
-                  <li>获取 Endpoint（例如：<code className="bg-white px-1.5 py-0.5 rounded border text-orange-700">oss-cn-hangzhou.aliyuncs.com</code>）。</li>
-                  <li>在「<strong>传输管理 → 域名管理</strong>」绑定自定义域名并配置 HTTPS 证书。</li>
-                  <li>在「<strong>数据安全 → 跨域设置 CORS</strong>」添加博客网站域名，允许 Header <code className="bg-white px-1.5 py-0.5 rounded border text-orange-700">*</code>。</li>
-                </ol>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 space-y-3">
-                <div className="flex items-center space-x-2 text-purple-800 font-bold">
-                  <HardDrive className="w-4 h-4 text-purple-600" />
-                  <span>4. AList / WebDAV 个人多网盘挂载指南</span>
-                </div>
-                <ol className="list-decimal list-inside space-y-1.5 text-slate-600 leading-relaxed pl-1">
-                  <li>部署好 AList 并挂载你的百度网盘、阿里云盘、OneDrive 或本地存储。</li>
-                  <li>在 AList 管理端设置允许 WebDAV 访问与公网 CORS 跨域。</li>
-                  <li>输入 AList 服务域名（如 <code className="bg-white px-1.5 py-0.5 rounded border text-purple-700">https://pan.yourdomain.com</code>）与根挂载目录。</li>
-                  <li>点击「<strong>同步多云状态</strong>」即可自动抓取网盘各级目录并在白狐博客中即时检索。</li>
-                </ol>
+              <div>
+                <h2 className="text-base font-bold text-slate-800">网盘与多云调度中枢 · 详细配置与使用实战指南</h2>
+                <p className="text-xs text-slate-400">涵盖 Cloudflare R2、腾讯云 COS、阿里云 OSS 与 AList/WebDAV 挂载全流程步骤</p>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+            {showUsageGuide ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+          </button>
+
+          {showUsageGuide && (
+            <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6 text-xs text-slate-600">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 space-y-3">
+                  <div className="flex items-center space-x-2 text-emerald-800 font-bold">
+                    <Cloud className="w-4 h-4 text-emerald-600" />
+                    <span>1. Cloudflare R2 极速配置指南 (推荐：0 出站流量费)</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-600 leading-relaxed pl-1">
+                    <li>登录 Cloudflare 控制台，进入「<strong>R2</strong>」标签页。</li>
+                    <li>点击「<strong>Create bucket</strong>」，填写 Bucket 名称（如 <code className="bg-white px-1.5 py-0.5 rounded border text-emerald-700">whitefox-assets</code>）。</li>
+                    <li>在 Bucket 设置中的「<strong>Public access</strong>」开启「<strong>Custom Domains</strong>」绑定你的域名（如 <code className="bg-white px-1.5 py-0.5 rounded border text-emerald-700">r2.yourdomain.com</code>）。</li>
+                    <li>在上方输入框填入 Bucket 名称与自定义域名，即可直接在博客文章、媒体库中插入高速免流图片与视频资源。</li>
+                  </ol>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 space-y-3">
+                  <div className="flex items-center space-x-2 text-blue-800 font-bold">
+                    <Server className="w-4 h-4 text-blue-600" />
+                    <span>2. 腾讯云 COS 存储桶挂载指南</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-600 leading-relaxed pl-1">
+                    <li>登录腾讯云控制台，进入「<strong>对象存储 COS</strong>」控制台。</li>
+                    <li>新建存储桶，访问权限建议选择「<strong>公有读私有写</strong>」，选择就近地域（如广州 <code className="bg-white px-1.5 py-0.5 rounded border text-blue-700">ap-guangzhou</code>）。</li>
+                    <li>在「<strong>域名管理</strong>」中可绑定自定义加速 CDN 域名（如 <code className="bg-white px-1.5 py-0.5 rounded border text-blue-700">cos.yourdomain.com</code>）。</li>
+                    <li>在「<strong>安全设置 → 跨域访问 CORS</strong>」中允许白狐博客域名跨域发起 GET/PUT 请求。</li>
+                  </ol>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 space-y-3">
+                  <div className="flex items-center space-x-2 text-orange-800 font-bold">
+                    <Database className="w-4 h-4 text-orange-600" />
+                    <span>3. 阿里云 OSS 高可用对象存储指南</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-600 leading-relaxed pl-1">
+                    <li>进入阿里云「<strong>OSS 管理控制台</strong>」，创建 Bucket，读写权限设为「<strong>公共读</strong>」。</li>
+                    <li>获取 Endpoint（例如：<code className="bg-white px-1.5 py-0.5 rounded border text-orange-700">oss-cn-hangzhou.aliyuncs.com</code>）。</li>
+                    <li>在「<strong>传输管理 → 域名管理</strong>」绑定自定义域名并配置 HTTPS 证书。</li>
+                    <li>在「<strong>数据安全 → 跨域设置 CORS</strong>」添加博客网站域名，允许 Header <code className="bg-white px-1.5 py-0.5 rounded border text-orange-700">*</code>。</li>
+                  </ol>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 space-y-3">
+                  <div className="flex items-center space-x-2 text-purple-800 font-bold">
+                    <HardDrive className="w-4 h-4 text-purple-600" />
+                    <span>4. AList / WebDAV 个人多网盘挂载指南</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-600 leading-relaxed pl-1">
+                    <li>部署好 AList 并挂载你的百度网盘、阿里云盘、OneDrive 或本地存储。</li>
+                    <li>在 AList 管理端设置允许 WebDAV 访问与公网 CORS 跨域。</li>
+                    <li>输入 AList 服务域名（如 <code className="bg-white px-1.5 py-0.5 rounded border text-purple-700">https://pan.yourdomain.com</code>）与根挂载目录。</li>
+                    <li>点击「<strong>同步多云状态</strong>」即可自动抓取网盘各级目录并在白狐博客中即时检索。</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Online Preview Modal */}
       {previewFile && (

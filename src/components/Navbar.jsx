@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import {
-  BookOpen, Library, Image as ImageIcon, Music, Compass,
-  Download, Cloud, Shield, Moon, Sun, LogIn, LogOut,
-  ChevronDown, ChevronUp, Rocket
+  BookOpen, Library, Image as ImageIcon, Music,
+  Cloud, Shield, Moon, Sun, LogIn, LogOut,
+  ChevronDown, ChevronUp, RefreshCw, Sparkles
 } from 'lucide-react';
 
 export const Navbar = ({
@@ -18,26 +18,27 @@ export const Navbar = ({
   headerCollapsed,
   setHeaderCollapsed,
   currentTheme,
+  onManualSync,
+  isSyncing,
+  systemSettings,
   t
 }) => {
-  // Navigation tabs - all dynamic through translation function t()
+  // Navigation tabs - 隐私开关模式下未登录访客仅展示博客文章
+  const isGuestRestricted = Boolean(systemSettings?.hideNonBlogForGuests && !currentUser);
+
   const baseTabs = [
-    { id: 'home', label: t('blog'), icon: BookOpen },
-    { id: 'books', label: t('bookshelf'), icon: Library },
-    { id: 'cloud', label: t('cloud'), icon: Cloud },
-    { id: 'download', label: t('downloader'), icon: Download },
-    { id: 'gallery', label: t('gallery'), icon: ImageIcon },
-    { id: 'media', label: t('player'), icon: Music },
+    { id: 'home', label: t('blog'), icon: BookOpen }
   ];
 
-  if (currentUser?.role === 'admin') {
-    baseTabs.push({ id: 'admin-portal', label: t('adminPortal'), icon: Shield, badge: '专属' });
+  if (!isGuestRestricted) {
+    baseTabs.push(
+      { id: 'books', label: t('bookshelf'), icon: Library },
+      { id: 'cloud', label: t('cloud'), icon: Cloud },
+      { id: 'gallery', label: t('gallery'), icon: ImageIcon },
+      { id: 'media', label: t('player'), icon: Music },
+      { id: 'ai-coding', label: 'AI编程', icon: Sparkles }
+    );
   }
-
-  baseTabs.push(
-    { id: 'bookmarks', label: t('bookmarks'), icon: Compass },
-    { id: 'guide', label: t('deploymentGuide'), icon: Rocket }
-  );
 
   // 全能数据库后台与系统设置仅管理员可见
   if (currentUser?.role === 'admin') {
@@ -68,8 +69,13 @@ export const Navbar = ({
                 <span className="font-extrabold text-base sm:text-lg text-slate-800 tracking-tight capitalize">
                   {siteName}
                 </span>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  博客系统
+                {/* 页眉博客系统四个字改为同步状态灯 */}
+                <span
+                  className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
+                  title="云端自动同步状态正常"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>同步就绪</span>
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 hidden sm:block">
@@ -80,6 +86,19 @@ export const Navbar = ({
 
           {/* Clean Top Action Bar: Only Avatar/User, DarkMode, Logout / Login, and Collapse Toggle */}
           <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* 页眉增加手动同步按钮 */}
+            {onManualSync && (
+              <button
+                onClick={onManualSync}
+                disabled={isSyncing}
+                className="px-2.5 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                title="手动执行全站云端同步"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span className="hidden md:inline">手动同步</span>
+              </button>
+            )}
+
             {/* Header Collapse / Expand Toggle Button */}
             <button
               onClick={() => setHeaderCollapsed(!headerCollapsed)}

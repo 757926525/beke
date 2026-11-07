@@ -71,7 +71,7 @@ export const RichContentRenderer = ({ content = '' }) => {
           );
         }
 
-        // 3. Image block: ![alt](url)
+        // 3. Image block: ![alt](url) or HTML <img> or raw image url
         const imageMatch = trimmed.match(/^!\[(.*?)\]\((.*?)\)$/);
         if (imageMatch) {
           const [, alt, url] = imageMatch;
@@ -80,8 +80,9 @@ export const RichContentRenderer = ({ content = '' }) => {
               <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 shadow-sm">
                 <img
                   src={url}
-                  alt={alt}
+                  alt={alt || '插入的图片'}
                   className="w-full max-h-[500px] object-contain mx-auto"
+                  loading="lazy"
                 />
               </div>
               {alt && (
@@ -89,6 +90,21 @@ export const RichContentRenderer = ({ content = '' }) => {
                   {alt}
                 </p>
               )}
+            </div>
+          );
+        }
+
+        // 3.1 Raw image url line (e.g. https://...jpg / png / webp / gif) or data:image
+        const isRawImageLine = /^(https?:\/\/[^\s]+?\.(png|jpe?g|webp|gif|svg)(\?[^\s]*)?|data:image\/[a-zA-Z]+;base64,[^\s]+)$/i.test(trimmed);
+        if (isRawImageLine) {
+          return (
+            <div key={idx} className="my-4 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 shadow-sm">
+              <img
+                src={trimmed}
+                alt="插入的图片"
+                className="w-full max-h-[500px] object-contain mx-auto"
+                loading="lazy"
+              />
             </div>
           );
         }

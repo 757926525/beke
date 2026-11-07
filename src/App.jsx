@@ -5,10 +5,8 @@ import { BlogPostView } from './components/BlogPostView';
 import { NetDriveView } from './components/NetDriveView';
 import { BookshelfView } from './components/BookshelfView';
 import { GalleryView } from './components/GalleryView';
-import { BrowserAndBookmarksView } from './components/BrowserAndBookmarksView';
+import { CodingAIView } from './components/CodingAIView';
 import { MediaPlayerView } from './components/MediaPlayerView';
-import { AdminFileAndPortalView } from './components/AdminFileAndPortalView';
-import { DownloaderView } from './components/DownloaderView';
 import { DeploymentGuideView } from './components/DeploymentGuideView';
 import { AdminSettingsView } from './components/AdminSettingsView';
 import { AuthModal } from './components/AuthModal';
@@ -192,9 +190,6 @@ export function App() {
 
   // 2. 远端数据应用期间标记：当正在合并应用来自远端/其它标签页的数据时，禁止触发自身的自动 push
   const isApplyingRemote = useRef(false);
-  const localChangeAtStartup = useRef(
-    parseInt(localStorage.getItem(STORAGE_KEYS.LAST_LOCAL_CHANGE) || '0', 10) || 0
-  );
 
   // 3. 自动同步开关状态 (默认全局开启，彻底实现全自动跨设备与本地同步)
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
@@ -253,14 +248,14 @@ export function App() {
   };
 
   // -------------------------------------------------------------
-  // 核心逻辑 1: 首次加载时从可用的云端持久化存储拉取并合并数据
+  // 核心逻辑 1: 初次加载检测（有数据库时才向云端拉取；无数据库时仅保留本地文件，取消无库同步）
   // -------------------------------------------------------------
   useEffect(() => {
     let isCancelled = false;
 
     async function initialHydrationPull() {
       try {
-        const { probePlatformNativeBindings, pullFromCloudSyncVault, pushToCloudSyncVault } = await import('./services/cloudAdapter');
+        const { probePlatformNativeBindings, pullFromCloudSyncVault } = await import('./services/cloudAdapter');
         const health = await probePlatformNativeBindings();
 
         // 如果 Cloudflare Pages 传回了 ADMIN_USERNAME，动态对齐管理员名称
@@ -302,6 +297,10 @@ export function App() {
           // 非 Pages 环境（本地开发）无 /api/auth，保持本地凭据模式
         }
 
+        const isD1Bound = Boolean(health.success && health.d1?.healthy);
+        const isR2Bound = Boolean(health.success && health.r2?.healthy);
+        const hasCustomDb = Boolean(backendConfig?.dbConnected || backendConfig?.dbHost);
+
         setSyncStatus('syncing');
         setSyncStatusMessage('正在自动同步全站最新数据...');
 
@@ -331,36 +330,18 @@ export function App() {
             lang,
             themeId,
             version: currentVersion,
-            updatedAt: localChangeAtStartup.current
+            updatedAt: parseInt(localStorage.getItem(STORAGE_KEYS.LAST_LOCAL_CHANGE) || '0', 10)
           };
 
           const merged = mergeSyncPayloadWithTimestamp(localSnapshot, res.payload);
           applyMergedDataToState(merged);
-          setTimeout(() => {
-            isApplyingRemote.current = false;
-          }, 300);
 
           setSyncStatus('success');
           setSyncStatusMessage(`已同步至最新版本 (v${res.version || 1}${res.storageEngine ? ` · ${res.storageEngine}` : ''})`);
 
-          // If this browser had a real local edit newer than the fetched snapshot,
-          // persist the merged result instead of leaving those edits stranded locally.
-          if (autoSyncEnabled && localSnapshot.updatedAt > (res.updatedAt || 0)) {
-            const pushRes = await pushToCloudSyncVault(merged, {
-              vaultKey: syncRoomKey,
-              customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
-              authToken: backendConfig?.dbToken,
-              currentVersion: Math.max(currentVersion, res.version || 0)
-            });
-            if (pushRes.success) {
-              setCurrentVersion(pushRes.version);
-              localStorage.setItem(STORAGE_KEYS.SYNC_VERSION, String(pushRes.version));
-              setSyncStatusMessage(`本地更新已合并并推送 (版本 v${pushRes.version})`);
-            } else {
-              setSyncStatus('error');
-              setSyncStatusMessage(pushRes.error || '本地合并结果尚未推送到云端');
-            }
-          }
+          setTimeout(() => {
+            isApplyingRemote.current = false;
+          }, 300);
         } else {
           setSyncStatus('idle');
           setSyncStatusMessage('数据库通道就绪');
@@ -427,8 +408,11 @@ export function App() {
   // -------------------------------------------------------------
   // 核心逻辑 3: 本地修改持久化 & 更新本地 updatedAt / wf_last_local_change
   // -------------------------------------------------------------
+  const hasUserDirtyChange = useRef(false);
+
   const recordLocalChange = () => {
     if (!isApplyingRemote.current) {
+      hasUserDirtyChange.current = true;
       localStorage.setItem(STORAGE_KEYS.LAST_LOCAL_CHANGE, String(Date.now()));
     }
   };
@@ -548,17 +532,21 @@ export function App() {
   };
 
   // -------------------------------------------------------------
-  // 核心逻辑 5: 防抖自动同步 (1500ms，依赖完备，卸载清理)
+  // 核心逻辑 5: 节流自动同步 (仅在有写操作时触发，最低 60 秒一次，解决流量耗费)
   // -------------------------------------------------------------
   useEffect(() => {
-    // 检查开启状态与 hydration 状态
-    if (!autoSyncEnabled || !hydrated || isApplyingRemote.current) {
+    // 检查开启状态、hydration 状态及是否有用户实际写操作
+    if (!autoSyncEnabled || !hydrated || isApplyingRemote.current || !hasUserDirtyChange.current) {
       return;
     }
 
+    // 最低 1 分钟 (60000ms) 自动同步一次
     const timer = setTimeout(() => {
-      executePushToCloud(false);
-    }, 1500);
+      if (hasUserDirtyChange.current) {
+        hasUserDirtyChange.current = false;
+        executePushToCloud(false);
+      }
+    }, 60000);
 
     return () => clearTimeout(timer);
   }, [
@@ -856,40 +844,12 @@ export function App() {
           setHeaderCollapsed={setHeaderCollapsed}
           currentTheme={currentTheme}
           onSync={handleSyncD1}
+          onManualSync={handleSyncD1}
+          isSyncing={syncStatus === 'syncing'}
           syncStatus={syncStatus}
+          systemSettings={systemSettings}
           t={t}
         />
-
-        {/* Global Floating Sync Status Indicator */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
-          <div className="flex items-center justify-between text-[11px] py-1 px-3 rounded-xl bg-white/70 border border-slate-200/60 shadow-xs backdrop-blur-xs text-slate-600">
-            <div className="flex items-center space-x-2">
-              <span className={`w-2 h-2 rounded-full ${
-                syncStatus === 'syncing' ? 'bg-amber-500 animate-ping' :
-                syncStatus === 'success' ? 'bg-emerald-500' :
-                syncStatus === 'error' ? 'bg-rose-500' : 'bg-slate-400'
-              }`} />
-              <span className="font-medium">
-                {syncStatus === 'syncing' ? '云端同步中...' :
-                 syncStatus === 'success' ? '云端数据已同步 (实时畅通)' :
-                 syncStatus === 'error' ? '同步连接受限' : '云端待命'}
-              </span>
-              {syncStatusMessage && (
-                <span className="text-slate-400 border-l border-slate-200 pl-2 ml-1 hidden sm:inline">
-                  {syncStatusMessage}
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center space-x-2 text-slate-500 font-mono text-[10px]">
-              <span>通道: 全站云端主通道</span>
-              <span>版本: v{currentVersion}</span>
-              <span className={`px-1.5 py-0.2 rounded text-[9px] font-semibold ${autoSyncEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
-                {autoSyncEnabled ? '自动同步开启' : '手动同步'}
-              </span>
-            </div>
-          </div>
-        </div>
 
         {/* Main Content Area */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -982,10 +942,6 @@ export function App() {
             />
           )}
 
-          {activeTab === 'download' && (
-            <DownloaderView currentUser={currentUser} t={t} />
-          )}
-
           {activeTab === 'gallery' && (
             <GalleryView
               photos={photos.filter((p) => !p.deleted)}
@@ -1014,33 +970,11 @@ export function App() {
             />
           )}
 
-          {activeTab === 'admin-portal' && currentUser?.role === 'admin' && (
-            <AdminFileAndPortalView
+          {activeTab === 'ai-coding' && (
+            <CodingAIView
               currentUser={currentUser}
-              isAdmin={currentUser?.role === 'admin'}
-              cloudFiles={cloudFiles.filter((f) => !f.deleted)}
-              setCloudFiles={setCloudFiles}
               t={t}
             />
-          )}
-
-          {activeTab === 'bookmarks' && (
-            <BrowserAndBookmarksView
-              bookmarks={bookmarks.filter((b) => !b.deleted)}
-              setBookmarks={(newBookmarksOrFn) => {
-                const updated = typeof newBookmarksOrFn === 'function' ? newBookmarksOrFn(bookmarks) : newBookmarksOrFn;
-                setBookmarks((updated || []).map((b) => ({ ...b, updatedAt: b.updatedAt || Date.now(), deleted: Boolean(b.deleted) })));
-              }}
-              currentUser={currentUser}
-              isAdmin={currentUser?.role === 'admin'}
-              searchProxy={searchProxy}
-              setSearchProxy={setSearchProxy}
-              t={t}
-            />
-          )}
-
-          {activeTab === 'guide' && (
-            <DeploymentGuideView siteName={siteName} t={t} />
           )}
 
           {activeTab === 'admin' && currentUser?.role === 'admin' && (

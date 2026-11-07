@@ -4,9 +4,10 @@ import {
   ChevronDown, ChevronUp, RefreshCw, Trash2, CheckCircle2,
   ExternalLink, Upload, Download, Folder, Shield, AlertTriangle, Type,
   Layout, Database, Check, Server, Sparkles, XCircle, CheckCircle,
-  Send, HelpCircle, BookOpen, Globe
+  Send, HelpCircle, BookOpen, Globe, EyeOff
 } from 'lucide-react';
 import { themePresets, languages } from '../services/i18nAndTheme';
+import { DeploymentGuideView } from './DeploymentGuideView';
 import { layoutOptions, fontSizes, getDeploymentAdminCredentials } from '../services/storageService';
 
 export const AdminSettingsView = ({
@@ -49,25 +50,44 @@ export const AdminSettingsView = ({
   setBrowsingHistory,
   heroIntro,
   setHeroIntro,
-  autoSyncEnabled,
-  setAutoSyncEnabled,
   t
 }) => {
   const isAdmin = currentUser?.role === 'admin';
   const deploymentAdmin = getDeploymentAdminCredentials();
 
-  // Accordion collapsed state for each section
+  // Accordion collapsed state for each section - Theme placed first
   const [openSections, setOpenSections] = useState({
+    theme: true,
     siteBasic: true,
     languages: true,
     layoutFont: true,
-    cfEdgeSync: true,
-    theme: true,
-    backendConnections: true,
+    webdavBackup: true,
     databaseHub: true,
-    autoReplyEmail: true,
+    autoReplyEmail: false,
     users: false,
-    authRules: false
+    authRules: true,
+    deploymentGuide: false
+  });
+
+  // External WebDAV backup credentials (4 fields: username, server, port, password)
+  const [webdavConfig, setWebdavConfig] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('wf_webdav_backup_config') || '{}');
+    } catch {
+      return {};
+    }
+  });
+
+  const handleSaveWebdavConfig = (e) => {
+    e.preventDefault();
+    localStorage.setItem('wf_webdav_backup_config', JSON.stringify(webdavConfig));
+    showToast('外接网盘 (坚果云/WebDAV) 备份配置已成功保存！');
+  };
+
+  // Auto-sync switch state
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
+    const val = localStorage.getItem('wf_auto_sync_enabled');
+    return val !== 'false';
   });
 
   // Manual one-click database sync states (with live progress bar 0% -> 100%)
@@ -444,7 +464,216 @@ export const AdminSettingsView = ({
         </div>
       </div>
 
-      {/* SECTION 1: 网站基本信息与名称设定 (默认 fox，可修改) */}
+      {/* SECTION 1: 主题配色与本地图片上传 (头像/背景/Hero) - 置于最顶层 */}
+      <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <button
+          onClick={() => toggleSection('theme')}
+          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+              <Palette className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">主题调色与全站图片设定 (头像/背景/Hero)</h2>
+              <p className="text-xs text-slate-400">支持本地照片上传、URL 设定、预设主题调色与全景背景图清晰呈现</p>
+            </div>
+          </div>
+          {openSections.theme ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+        </button>
+
+        {openSections.theme && (
+          <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6">
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">
+                精选主题调色板
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                {themePresets.map((th) => {
+                  const isSelected = currentTheme.id === th.id;
+                  return (
+                    <button
+                      key={th.id}
+                      onClick={() => {
+                        setCurrentTheme(th);
+                        setAppearance({ ...appearance, themeId: th.id });
+                        showToast(`已切换主题：${th.name}`);
+                      }}
+                      className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-400/20 shadow-sm'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2 mb-2">
+                        <span className="w-4 h-4 rounded-full border border-black/10" style={{ backgroundColor: th.primary }} />
+                        <span className="text-xs font-bold text-slate-700">{th.name.split(' ')[0]}</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400">{th.name.split(' ')[1] || ''}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">
+                  自定义背景底色 (调色板)
+                </label>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="color"
+                    value={appearance.bgColor || '#f8fafc'}
+                    onChange={(e) => setAppearance({ ...appearance, bgColor: e.target.value })}
+                    className="w-10 h-10 rounded-xl cursor-pointer border border-slate-200 p-0.5"
+                  />
+                  <input
+                    type="text"
+                    value={appearance.bgColor || '#f8fafc'}
+                    onChange={(e) => setAppearance({ ...appearance, bgColor: e.target.value })}
+                    className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono"
+                    placeholder="#f8fafc"
+                  />
+                  <button
+                    onClick={() => setAppearance({ ...appearance, bgColor: '#f8fafc', bgImage: '' })}
+                    className="px-3 py-2 rounded-xl text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 cursor-pointer"
+                  >
+                    重置默认
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-600">
+                    全站全景背景照片 (支持本地上传或 URL，清晰展现)
+                  </label>
+                  {appearance.bgImage && (
+                    <button
+                      type="button"
+                      onClick={() => setAppearance({ ...appearance, bgImage: '' })}
+                      className="text-xs text-rose-500 hover:underline cursor-pointer"
+                    >
+                      清空背景图
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center space-x-2">
+                  {appearance.bgImage && (
+                    <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shrink-0">
+                      <img src={appearance.bgImage} alt="Bg preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    value={appearance.bgImage || ''}
+                    onChange={(e) => setAppearance({ ...appearance, bgImage: e.target.value })}
+                    placeholder="https://... 或点击本地上传"
+                    className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                  />
+                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 text-xs font-semibold flex items-center space-x-1 shrink-0">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>本地上传</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleLocalImageUpload('bgImage', e)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-600">
+                    全站站长头像 (本地上传或 URL)
+                  </label>
+                  {appearance.avatarImage && (
+                    <button
+                      type="button"
+                      onClick={() => setAppearance({ ...appearance, avatarImage: '' })}
+                      className="text-xs text-rose-500 hover:underline cursor-pointer"
+                    >
+                      恢复默认
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center space-x-2">
+                  <img
+                    src={appearance.avatarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=100&q=80'}
+                    alt="Avatar Preview"
+                    className="w-10 h-10 rounded-2xl object-cover border border-slate-200 shadow-xs shrink-0"
+                  />
+                  <input
+                    type="text"
+                    value={appearance.avatarImage || ''}
+                    onChange={(e) => setAppearance({ ...appearance, avatarImage: e.target.value })}
+                    placeholder="https://... 头像地址"
+                    className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                  />
+                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 text-xs font-semibold flex items-center space-x-1 shrink-0">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>本地上传</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleLocalImageUpload('avatarImage', e)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-600">
+                    首页介绍区 Hero 背景封面 (本地上传或 URL)
+                  </label>
+                  {appearance.heroImage && (
+                    <button
+                      type="button"
+                      onClick={() => setAppearance({ ...appearance, heroImage: '' })}
+                      className="text-xs text-rose-500 hover:underline cursor-pointer"
+                    >
+                      恢复默认
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center space-x-2">
+                  <img
+                    src={appearance.heroImage || 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=100&q=80'}
+                    alt="Hero Preview"
+                    className="w-10 h-10 rounded-2xl object-cover border border-slate-200 shadow-xs shrink-0"
+                  />
+                  <input
+                    type="text"
+                    value={appearance.heroImage || ''}
+                    onChange={(e) => setAppearance({ ...appearance, heroImage: e.target.value })}
+                    placeholder="https://... Hero 照片地址"
+                    className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                  />
+                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 text-xs font-semibold flex items-center space-x-1 shrink-0">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>本地上传</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleLocalImageUpload('heroImage', e)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 2: 网站基本信息与名称设定 */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
         <button
           onClick={() => toggleSection('siteBasic')}
@@ -494,7 +723,7 @@ export const AdminSettingsView = ({
         )}
       </div>
 
-      {/* SECTION 2: 全球主流语言切换 (i18n Multi-Language Switcher) */}
+      {/* SECTION 3: 全球主流语言切换 */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
         <button
           onClick={() => toggleSection('languages')}
@@ -543,7 +772,7 @@ export const AdminSettingsView = ({
         )}
       </div>
 
-      {/* SECTION 3: 全站布局切换与全局字号调节 */}
+      {/* SECTION 4: 全站布局切换与全局字号调节 */}
       <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
         <button
           onClick={() => toggleSection('layoutFont')}
@@ -625,7 +854,421 @@ export const AdminSettingsView = ({
         )}
       </div>
 
-      {/* SECTION 4: 自动回复验证码邮箱管理区 (仅管理员可见 + 完整使用指南) */}
+      {/* SECTION 5: 外接网盘备份 (替代原“站内存储池”，支持坚果云/WebDAV，4个输入参数) */}
+      <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <button
+          onClick={() => toggleSection('webdavBackup')}
+          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+              <HardDrive className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">外接网盘备份 (坚果云 / WebDAV 远端容灾)</h2>
+              <p className="text-xs text-slate-400">配置第三方网盘（坚果云、Nextcloud 或自有 WebDAV）实现全站数据安全异地备份</p>
+            </div>
+          </div>
+          {openSections.webdavBackup ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+        </button>
+
+        {openSections.webdavBackup && (
+          <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
+            <form onSubmit={handleSaveWebdavConfig} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">网盘用户名 (Username)</label>
+                <input
+                  type="text"
+                  placeholder="例如: your-account@fox.com"
+                  value={webdavConfig.username || ''}
+                  onChange={(e) => setWebdavConfig({ ...webdavConfig, username: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">服务器地址 (Server Address)</label>
+                <input
+                  type="text"
+                  placeholder="dav.jianguoyun.com"
+                  value={webdavConfig.server || ''}
+                  onChange={(e) => setWebdavConfig({ ...webdavConfig, server: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">端口号 (Port)</label>
+                <input
+                  type="text"
+                  placeholder="443"
+                  value={webdavConfig.port || '443'}
+                  onChange={(e) => setWebdavConfig({ ...webdavConfig, port: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">应用授权密码 (Password)</label>
+                <input
+                  type="password"
+                  placeholder="坚果云/WebDAV 应用授权密码"
+                  value={webdavConfig.password || ''}
+                  onChange={(e) => setWebdavConfig({ ...webdavConfig, password: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+                />
+              </div>
+              <div className="sm:col-span-2 md:col-span-4 flex justify-end">
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>保存外接网盘备份配置</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 5: 多样化数据库后台与界面接入 */}
+      <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <button
+          onClick={() => toggleSection('databaseHub')}
+          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">全能数据库后台与管理界面接入</h2>
+              <p className="text-xs text-slate-400">支持 Cloudflare D1、PostgreSQL、MySQL、Supabase、MongoDB 等多种数据源接入与真实状态监测</p>
+            </div>
+          </div>
+          {openSections.databaseHub ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+        </button>
+
+        {openSections.databaseHub && (
+          <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6">
+            {/* 数据库配置与实时状态灯 */}
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                <div className="flex items-center space-x-2">
+                  <Server className="w-4 h-4 text-sky-600" />
+                  <span className="text-xs font-bold text-slate-700">主数据库接入配置</span>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <span className="text-[11px] text-slate-500 font-medium">接入状态灯：</span>
+                  {dbStatus === 'connected' ? (
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>已成功接入 (Connected)</span>
+                    </span>
+                  ) : dbStatus === 'failed' ? (
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-rose-500" />
+                      <span>连接失败 (Connection Failed)</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-slate-400" />
+                      <span>未连接 (Offline / Disconnected)</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {dbErrorMsg && (
+                <div className="p-3 bg-rose-50 text-rose-700 rounded-xl text-xs border border-rose-200 flex items-center space-x-2">
+                  <XCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                  <span>{dbErrorMsg}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">数据库类型 / 协议</label>
+                  <select
+                    value={backendConfig?.dbType || 'cloudflare-d1'}
+                    onChange={(e) => {
+                      setBackendConfig({ ...backendConfig, dbType: e.target.value });
+                      setDbStatus('idle');
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                  >
+                    <option value="cloudflare-d1">Cloudflare D1 (Pages 原生绑定 / 边缘 SQL)</option>
+                    <option value="supabase">Supabase / PostgreSQL</option>
+                    <option value="mysql">MySQL 8.0+ / MariaDB</option>
+                    <option value="tencent-tdsql">腾讯云 TDSQL / 云原生数据库</option>
+                    <option value="aliyun-polardb">阿里云 PolarDB / RDS</option>
+                    <option value="mongodb">MongoDB Atlas (NoSQL)</option>
+                    <option value="redis">Redis / Upstash (Key-Value)</option>
+                    <option value="sqlite">Local SQLite / PocketBase</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">数据库地址 / Endpoint</label>
+                  <input
+                    type="text"
+                    value={backendConfig?.dbHost || ''}
+                    placeholder="如 d1.cloudflare.com 或 pg.example.com"
+                    onChange={(e) => {
+                      setBackendConfig({ ...backendConfig, dbHost: e.target.value });
+                      setDbStatus('idle');
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">数据库名 / Schema</label>
+                  <input
+                    type="text"
+                    value={backendConfig?.dbName || ''}
+                    placeholder="whitefox_blog_db"
+                    onChange={(e) => {
+                      setBackendConfig({ ...backendConfig, dbName: e.target.value });
+                      setDbStatus('idle');
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">访问凭据 / Token / Key</label>
+                  <input
+                    type="password"
+                    value={backendConfig?.dbToken || ''}
+                    placeholder="输入接入密钥或密码"
+                    onChange={(e) => setBackendConfig({ ...backendConfig, dbToken: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleTestDatabase}
+                    disabled={isTestingDb}
+                    className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingDb ? 'animate-spin' : ''}`} />
+                    <span>{isTestingDb ? '正在测试数据库连接与握手...' : '测试并激活数据库接入'}</span>
+                  </button>
+                  {dbStatus === 'connected' && (
+                    <button
+                      onClick={handleDisconnectDb}
+                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold cursor-pointer"
+                    >
+                      断开连接
+                    </button>
+                  )}
+                </div>
+
+                {dbStatus === 'connected' && (
+                  <span className="text-xs text-emerald-600 font-semibold flex items-center space-x-1">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>握手正常 · 数据库通道已就绪</span>
+                  </span>
+                )}
+              </div>
+
+              {/* 手动一键数据库全量同步控制台与实时进度条 */}
+              <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-3.5 shadow-lg border border-slate-800">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2">
+                    <RefreshCw className={`w-4 h-4 text-emerald-400 ${isSyncingAll ? 'animate-spin' : ''}`} />
+                    <span className="text-xs font-bold tracking-wide">全库跨设备双向同步中枢 (0% ~ 100% 进度可见)</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    {/* Auto-Sync switch replacing old import/export buttons */}
+                    <div className="flex items-center space-x-2 bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700">
+                      <span className="text-[11px] text-slate-300 font-semibold">自动同步:</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={autoSyncEnabled}
+                          onChange={(e) => {
+                            const enabled = e.target.checked;
+                            setAutoSyncEnabled(enabled);
+                            localStorage.setItem('wf_auto_sync_enabled', enabled ? 'true' : 'false');
+                            showToast(enabled ? '全站自动同步已开启（节流机制：有修改时最低1分钟自动同步一次，有效节省流量）' : '已关闭自动同步');
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-slate-700 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                      </label>
+                    </div>
+
+                    <button
+                      onClick={handleManualFullDatabaseSync}
+                      disabled={isSyncingAll}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white text-xs font-bold shadow-md flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
+                    >
+                      <Database className="w-3.5 h-3.5" />
+                      <span>{isSyncingAll ? '正在全量同步中...' : '手动一键全量数据库同步'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 实时进度条与状态显示 */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] text-slate-300">
+                    <span className="font-mono">{syncStatusStep || (lastSyncResult ? `上次同步完成于 ${lastSyncResult.time}` : '就绪，点击上方按钮开始一键全量同步')}</span>
+                    <span className="font-bold text-emerald-400 font-mono">{syncProgress}%</span>
+                  </div>
+                  <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700/60">
+                    <div
+                      className="bg-gradient-to-r from-emerald-400 via-teal-400 to-sky-400 h-full rounded-full transition-all duration-300 ease-out shadow-sm"
+                      style={{ width: `${syncProgress}%` }}
+                    />
+                  </div>
+                </div>
+
+                {lastSyncResult && (
+                  <div className="flex flex-wrap items-center justify-between text-[11px] bg-slate-800/80 p-2.5 rounded-xl border border-slate-700 text-slate-300">
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>全量同步已达成：已向云端数据库写入 <strong>{lastSyncResult.totalItems}</strong> 项站内实体记录</span>
+                    </div>
+                    <span className="text-slate-400 font-mono text-[10px]">协议: {lastSyncResult.dbType} · 多设备实时可见</span>
+                  </div>
+                )}
+                <div className="flex items-center space-x-2 text-emerald-800 font-bold text-xs">
+                  <Database className="w-4 h-4 text-emerald-600" />
+                  <span>核心解析：接入数据库对白狐博客最实际的作用</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-slate-600 leading-relaxed">
+                  <div className="p-2.5 rounded-xl bg-white/80 border border-emerald-100 space-y-1">
+                    <div className="font-bold text-emerald-700">1. 全球多端无缝协同</div>
+                    <p>摆脱单台浏览器缓存限制，站长在手机、平板与不同电脑上发布的博文、相册、书架和系统设置瞬间全球多端一致。</p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white/80 border border-emerald-100 space-y-1">
+                    <div className="font-bold text-emerald-700">2. 访客互动与海量评论沉淀</div>
+                    <p>访客发表的每一条评论和点赞直写数据库，无需重新构建部署静态页面即可实时呈现互动，真正实现动态社区化。</p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white/80 border border-emerald-100 space-y-1">
+                    <div className="font-bold text-emerald-700">3. 跨云调度索引与高可用容灾</div>
+                    <p>集中存储 Cloudflare R2、腾讯云 COS、阿里云 OSS 的文件索引，即使更换服务器或 CDN 边缘节点，所有资产元数据永不丢失。</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 对象存储接入状态与测试 */}
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                <div className="flex items-center space-x-2">
+                  <Cloud className="w-4 h-4 text-amber-600" />
+                  <span className="text-xs font-bold text-slate-700">对象存储后台接入 (R2 / 腾讯云 COS / 阿里云 OSS)</span>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <span className="text-[11px] text-slate-500 font-medium">鉴权状态灯：</span>
+                  {storageStatus === 'connected' ? (
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>存储桶鉴权通过</span>
+                    </span>
+                  ) : storageStatus === 'failed' ? (
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-rose-500" />
+                      <span>鉴权未通过</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-slate-400" />
+                      <span>未接入</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {storageErrorMsg && (
+                <div className="p-3 bg-rose-50 text-rose-700 rounded-xl text-xs border border-rose-200 flex items-center space-x-2">
+                  <XCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                  <span>{storageErrorMsg}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">存储平台</label>
+                  <select
+                    value={backendConfig?.storageType || 'cloudflare-r2'}
+                    onChange={(e) => {
+                      setBackendConfig({ ...backendConfig, storageType: e.target.value });
+                      setStorageStatus('idle');
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                  >
+                    <option value="cloudflare-r2">Cloudflare R2 (Pages 原生绑定 / 免出站流量费)</option>
+                    <option value="tencent-cos">腾讯云 COS (国内极速)</option>
+                    <option value="aliyun-oss">阿里云 OSS (稳定生态)</option>
+                    <option value="aws-s3">Amazon S3 (全球存储)</option>
+                    <option value="qiniu">七牛云 Kodo (对象存储)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">存储桶名称 (Bucket Name)</label>
+                  <input
+                    type="text"
+                    value={backendConfig?.storageBucket || ''}
+                    placeholder="whitefox-assets"
+                    onChange={(e) => {
+                      setBackendConfig({ ...backendConfig, storageBucket: e.target.value });
+                      setStorageStatus('idle');
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">AccessKey ID / 令牌</label>
+                  <input
+                    type="text"
+                    value={backendConfig?.storageAccessKeyId || ''}
+                    placeholder="输入 AccessKey 或 Token"
+                    onChange={(e) => {
+                      setBackendConfig({ ...backendConfig, storageAccessKeyId: e.target.value });
+                      setStorageStatus('idle');
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleTestStorage}
+                    disabled={isTestingStorage}
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingStorage ? 'animate-spin' : ''}`} />
+                    <span>{isTestingStorage ? '正在验证存储鉴权...' : '测试对象存储直连'}</span>
+                  </button>
+                  {storageStatus === 'connected' && (
+                    <button
+                      onClick={handleDisconnectStorage}
+                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold cursor-pointer"
+                    >
+                      断开连接
+                    </button>
+                  )}
+                </div>
+
+                {storageStatus === 'connected' && (
+                  <span className="text-xs text-emerald-600 font-semibold flex items-center space-x-1">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>对象存储桶连接正常 · 读写与下载权限畅通</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 7: 自动回复验证码邮箱管理区 (仅管理员可见 + 完整使用指南) */}
       {isAdmin && (
         <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           <button
@@ -821,577 +1464,6 @@ export const AdminSettingsView = ({
         </div>
       )}
 
-      {/* SECTION 5: 多样化数据库后台与界面接入 */}
-      <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <button
-          onClick={() => toggleSection('databaseHub')}
-          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold">
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-800">全能数据库后台与管理界面接入</h2>
-              <p className="text-xs text-slate-400">支持 Cloudflare D1、PostgreSQL、MySQL、Supabase、MongoDB 等多种数据源接入与真实状态监测</p>
-            </div>
-          </div>
-          {openSections.databaseHub ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-        </button>
-
-        {openSections.databaseHub && (
-          <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6">
-            {/* 数据库配置与实时状态灯 */}
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                <div className="flex items-center space-x-2">
-                  <Server className="w-4 h-4 text-sky-600" />
-                  <span className="text-xs font-bold text-slate-700">主数据库接入配置</span>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <span className="text-[11px] text-slate-500 font-medium">接入状态灯：</span>
-                  {dbStatus === 'connected' ? (
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>已成功接入 (Connected)</span>
-                    </span>
-                  ) : dbStatus === 'failed' ? (
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-rose-500" />
-                      <span>连接失败 (Connection Failed)</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-slate-400" />
-                      <span>未连接 (Offline / Disconnected)</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {dbErrorMsg && (
-                <div className="p-3 bg-rose-50 text-rose-700 rounded-xl text-xs border border-rose-200 flex items-center space-x-2">
-                  <XCircle className="w-4 h-4 shrink-0 text-rose-500" />
-                  <span>{dbErrorMsg}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">数据库类型 / 协议</label>
-                  <select
-                    value={backendConfig?.dbType || 'cloudflare-d1'}
-                    onChange={(e) => {
-                      setBackendConfig({ ...backendConfig, dbType: e.target.value });
-                      setDbStatus('idle');
-                    }}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
-                  >
-                    <option value="cloudflare-d1">Cloudflare D1 (Pages 原生绑定 / 边缘 SQL)</option>
-                    <option value="supabase">Supabase / PostgreSQL</option>
-                    <option value="mysql">MySQL 8.0+ / MariaDB</option>
-                    <option value="tencent-tdsql">腾讯云 TDSQL / 云原生数据库</option>
-                    <option value="aliyun-polardb">阿里云 PolarDB / RDS</option>
-                    <option value="mongodb">MongoDB Atlas (NoSQL)</option>
-                    <option value="redis">Redis / Upstash (Key-Value)</option>
-                    <option value="sqlite">Local SQLite / PocketBase</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">数据库地址 / Endpoint</label>
-                  <input
-                    type="text"
-                    value={backendConfig?.dbHost || ''}
-                    placeholder="如 d1.cloudflare.com 或 pg.example.com"
-                    onChange={(e) => {
-                      setBackendConfig({ ...backendConfig, dbHost: e.target.value });
-                      setDbStatus('idle');
-                    }}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">数据库名 / Schema</label>
-                  <input
-                    type="text"
-                    value={backendConfig?.dbName || ''}
-                    placeholder="whitefox_blog_db"
-                    onChange={(e) => {
-                      setBackendConfig({ ...backendConfig, dbName: e.target.value });
-                      setDbStatus('idle');
-                    }}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">访问凭据 / Token / Key</label>
-                  <input
-                    type="password"
-                    value={backendConfig?.dbToken || ''}
-                    placeholder="输入接入密钥或密码"
-                    onChange={(e) => setBackendConfig({ ...backendConfig, dbToken: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={handleTestDatabase}
-                    disabled={isTestingDb}
-                    className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingDb ? 'animate-spin' : ''}`} />
-                    <span>{isTestingDb ? '正在测试数据库连接与握手...' : '测试并激活数据库接入'}</span>
-                  </button>
-                  {dbStatus === 'connected' && (
-                    <button
-                      onClick={handleDisconnectDb}
-                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold cursor-pointer"
-                    >
-                      断开连接
-                    </button>
-                  )}
-                </div>
-
-                {/* 无遮挡背景图透明度模式开关 */}
-                <div className="mb-2 p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Sparkles className="w-4 h-4 text-emerald-600" />
-                    <div>
-                      <span className="text-xs font-bold text-slate-800">无遮挡透明区块模式 (Transparent Glass)</span>
-                      <p className="text-[10px] text-slate-500">让页面博文、组件与卡片呈现半透明亚克力玻璃效果，使背景图全景无遮挡</p>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(appearance.transparentLayout)}
-                      onChange={(e) => {
-                        const val = e.target.checked;
-                        setAppearance({ ...appearance, transparentLayout: val });
-                        showToast(val ? '已开启无遮挡透明亚克力背景模式！' : '已恢复默认标准卡片模式');
-                      }}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
-                  </label>
-                </div>
-
-                {dbStatus === 'connected' && (
-                  <span className="text-xs text-emerald-600 font-semibold flex items-center space-x-1">
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    <span>握手正常 · 数据库通道已就绪</span>
-                  </span>
-                )}
-              </div>
-
-              {/* 手动一键数据库全量同步控制台与实时进度条 */}
-              <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-3.5 shadow-lg border border-slate-800">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center space-x-2">
-                    <RefreshCw className={`w-4 h-4 text-emerald-400 ${isSyncingAll ? 'animate-spin' : ''}`} />
-                    <span className="text-xs font-bold tracking-wide">全库跨设备双向同步中枢 (0% ~ 100% 进度可见)</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    {/* Auto-Sync switch replacing old import/export buttons */}
-                    <div className="flex items-center space-x-2 bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700">
-                      <span className="text-[11px] text-slate-300 font-semibold">自动同步:</span>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={autoSyncEnabled}
-                          onChange={(e) => {
-                            const enabled = e.target.checked;
-                            setAutoSyncEnabled(enabled);
-                            showToast(enabled ? '全站数据库自动同步已开启' : '已关闭自动同步');
-                          }}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-slate-700 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
-                      </label>
-                    </div>
-
-                    <button
-                      onClick={handleManualFullDatabaseSync}
-                      disabled={isSyncingAll}
-                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white text-xs font-bold shadow-md flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
-                    >
-                      <Database className="w-3.5 h-3.5" />
-                      <span>{isSyncingAll ? '正在全量同步中...' : '手动一键全量数据库同步'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* 实时进度条与状态显示 */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] text-slate-300">
-                    <span className="font-mono">{syncStatusStep || (lastSyncResult ? `上次同步完成于 ${lastSyncResult.time}` : '就绪，点击上方按钮开始一键全量同步')}</span>
-                    <span className="font-bold text-emerald-400 font-mono">{syncProgress}%</span>
-                  </div>
-                  <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700/60">
-                    <div
-                      className="bg-gradient-to-r from-emerald-400 via-teal-400 to-sky-400 h-full rounded-full transition-all duration-300 ease-out shadow-sm"
-                      style={{ width: `${syncProgress}%` }}
-                    />
-                  </div>
-                </div>
-
-                {lastSyncResult && (
-                  <div className="flex flex-wrap items-center justify-between text-[11px] bg-slate-800/80 p-2.5 rounded-xl border border-slate-700 text-slate-300">
-                    <div className="flex items-center space-x-2">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>全量同步已达成：已向云端数据库写入 <strong>{lastSyncResult.totalItems}</strong> 项站内实体记录</span>
-                    </div>
-                    <span className="text-slate-400 font-mono text-[10px]">协议: {lastSyncResult.dbType} · 多设备实时可见</span>
-                  </div>
-                )}
-                <div className="flex items-center space-x-2 text-emerald-800 font-bold text-xs">
-                  <Database className="w-4 h-4 text-emerald-600" />
-                  <span>核心解析：接入数据库对白狐博客最实际的作用</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-slate-600 leading-relaxed">
-                  <div className="p-2.5 rounded-xl bg-white/80 border border-emerald-100 space-y-1">
-                    <div className="font-bold text-emerald-700">1. 全球多端无缝协同</div>
-                    <p>摆脱单台浏览器缓存限制，站长在手机、平板与不同电脑上发布的博文、相册、书架和系统设置瞬间全球多端一致。</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-white/80 border border-emerald-100 space-y-1">
-                    <div className="font-bold text-emerald-700">2. 访客互动与海量评论沉淀</div>
-                    <p>访客发表的每一条评论和点赞直写数据库，无需重新构建部署静态页面即可实时呈现互动，真正实现动态社区化。</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-white/80 border border-emerald-100 space-y-1">
-                    <div className="font-bold text-emerald-700">3. 跨云调度索引与高可用容灾</div>
-                    <p>集中存储 Cloudflare R2、腾讯云 COS、阿里云 OSS 的文件索引，即使更换服务器或 CDN 边缘节点，所有资产元数据永不丢失。</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 对象存储接入状态与测试 */}
-            <div className="space-y-4 pt-4 border-t border-slate-100">
-              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                <div className="flex items-center space-x-2">
-                  <Cloud className="w-4 h-4 text-amber-600" />
-                  <span className="text-xs font-bold text-slate-700">对象存储后台接入 (R2 / 腾讯云 COS / 阿里云 OSS)</span>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <span className="text-[11px] text-slate-500 font-medium">鉴权状态灯：</span>
-                  {storageStatus === 'connected' ? (
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>存储桶鉴权通过</span>
-                    </span>
-                  ) : storageStatus === 'failed' ? (
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-rose-500" />
-                      <span>鉴权未通过</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold">
-                      <span className="w-2 h-2 rounded-full bg-slate-400" />
-                      <span>未接入</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {storageErrorMsg && (
-                <div className="p-3 bg-rose-50 text-rose-700 rounded-xl text-xs border border-rose-200 flex items-center space-x-2">
-                  <XCircle className="w-4 h-4 shrink-0 text-rose-500" />
-                  <span>{storageErrorMsg}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">存储平台</label>
-                  <select
-                    value={backendConfig?.storageType || 'cloudflare-r2'}
-                    onChange={(e) => {
-                      setBackendConfig({ ...backendConfig, storageType: e.target.value });
-                      setStorageStatus('idle');
-                    }}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
-                  >
-                    <option value="cloudflare-r2">Cloudflare R2 (Pages 原生绑定 / 免出站流量费)</option>
-                    <option value="tencent-cos">腾讯云 COS (国内极速)</option>
-                    <option value="aliyun-oss">阿里云 OSS (稳定生态)</option>
-                    <option value="aws-s3">Amazon S3 (全球存储)</option>
-                    <option value="qiniu">七牛云 Kodo (对象存储)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">存储桶名称 (Bucket Name)</label>
-                  <input
-                    type="text"
-                    value={backendConfig?.storageBucket || ''}
-                    placeholder="whitefox-assets"
-                    onChange={(e) => {
-                      setBackendConfig({ ...backendConfig, storageBucket: e.target.value });
-                      setStorageStatus('idle');
-                    }}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">AccessKey ID / 令牌</label>
-                  <input
-                    type="text"
-                    value={backendConfig?.storageAccessKeyId || ''}
-                    placeholder="输入 AccessKey 或 Token"
-                    onChange={(e) => {
-                      setBackendConfig({ ...backendConfig, storageAccessKeyId: e.target.value });
-                      setStorageStatus('idle');
-                    }}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={handleTestStorage}
-                    disabled={isTestingStorage}
-                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingStorage ? 'animate-spin' : ''}`} />
-                    <span>{isTestingStorage ? '正在验证存储鉴权...' : '测试对象存储直连'}</span>
-                  </button>
-                  {storageStatus === 'connected' && (
-                    <button
-                      onClick={handleDisconnectStorage}
-                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold cursor-pointer"
-                    >
-                      断开连接
-                    </button>
-                  )}
-                </div>
-
-                {storageStatus === 'connected' && (
-                  <span className="text-xs text-emerald-600 font-semibold flex items-center space-x-1">
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    <span>对象存储桶连接正常 · 读写与下载权限畅通</span>
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SECTION 6: 主题配色与本地图片上传 (背景/头像/Hero照片) */}
-      <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <button
-          onClick={() => toggleSection('theme')}
-          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-              <Palette className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-800">主题调色与本地图片设定 (头像/背景/Hero)</h2>
-              <p className="text-xs text-slate-400">支持本地图片一键上传、URL 链接设定与调色板自由选取</p>
-            </div>
-          </div>
-          {openSections.theme ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-        </button>
-
-        {openSections.theme && (
-          <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-6">
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">
-                一键主题配色按键 (默认翡翠绿白)
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                {themePresets.map((th) => {
-                  const isSelected = currentTheme.id === th.id;
-                  return (
-                    <button
-                      key={th.id}
-                      onClick={() => {
-                        setCurrentTheme(th);
-                        setAppearance({ ...appearance, themeId: th.id });
-                        showToast(`已切换主题：${th.name}`);
-                      }}
-                      className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
-                        isSelected
-                          ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-400/20 shadow-sm'
-                          : 'border-slate-200 hover:border-slate-300 bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-2 mb-2">
-                        <span className="w-4 h-4 rounded-full border border-black/10" style={{ backgroundColor: th.primary }} />
-                        <span className="text-xs font-bold text-slate-700">{th.name.split(' ')[0]}</span>
-                      </div>
-                      <span className="text-[11px] text-slate-400">{th.name.split(' ')[1] || ''}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  自定义背景底色 (调色板)
-                </label>
-                <div className="flex items-center space-x-3">
-                  <input
-                    type="color"
-                    value={appearance.bgColor || '#f8fafc'}
-                    onChange={(e) => setAppearance({ ...appearance, bgColor: e.target.value })}
-                    className="w-10 h-10 rounded-xl cursor-pointer border border-slate-200 p-0.5"
-                  />
-                  <input
-                    type="text"
-                    value={appearance.bgColor || '#f8fafc'}
-                    onChange={(e) => setAppearance({ ...appearance, bgColor: e.target.value })}
-                    className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono"
-                    placeholder="#f8fafc"
-                  />
-                  <button
-                    onClick={() => setAppearance({ ...appearance, bgColor: '#f8fafc', bgImage: '' })}
-                    className="px-3 py-2 rounded-xl text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 cursor-pointer"
-                  >
-                    重置默认
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-600">
-                    自定义全站背景照片 (本地上传或 URL)
-                  </label>
-                  {appearance.bgImage && (
-                    <button
-                      type="button"
-                      onClick={() => setAppearance({ ...appearance, bgImage: '' })}
-                      className="text-xs text-rose-500 hover:underline cursor-pointer"
-                    >
-                      清空背景图
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center space-x-2">
-                  {appearance.bgImage && (
-                    <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shrink-0">
-                      <img src={appearance.bgImage} alt="Bg preview" className="w-full h-full object-cover" />
-                    </div>
-                  )}
-                  <input
-                    type="text"
-                    value={appearance.bgImage || ''}
-                    onChange={(e) => setAppearance({ ...appearance, bgImage: e.target.value })}
-                    placeholder="https://... 或点击本地上传"
-                    className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs"
-                  />
-                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 text-xs font-semibold flex items-center space-x-1 shrink-0">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>本地上传</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleLocalImageUpload('bgImage', e)}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-600">
-                    自定义全站头像 (本地上传或 URL)
-                  </label>
-                  {appearance.avatarImage && (
-                    <button
-                      type="button"
-                      onClick={() => setAppearance({ ...appearance, avatarImage: '' })}
-                      className="text-xs text-rose-500 hover:underline cursor-pointer"
-                    >
-                      恢复默认
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center space-x-2">
-                  <img
-                    src={appearance.avatarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=100&q=80'}
-                    alt="Avatar Preview"
-                    className="w-10 h-10 rounded-2xl object-cover border border-slate-200 shadow-xs shrink-0"
-                  />
-                  <input
-                    type="text"
-                    value={appearance.avatarImage || ''}
-                    onChange={(e) => setAppearance({ ...appearance, avatarImage: e.target.value })}
-                    placeholder="https://... 头像地址"
-                    className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs"
-                  />
-                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 text-xs font-semibold flex items-center space-x-1 shrink-0">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>本地上传</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleLocalImageUpload('avatarImage', e)}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-600">
-                    首页介绍区照片 (Hero 封面 - 本地上传或 URL)
-                  </label>
-                  {appearance.heroImage && (
-                    <button
-                      type="button"
-                      onClick={() => setAppearance({ ...appearance, heroImage: '' })}
-                      className="text-xs text-rose-500 hover:underline cursor-pointer"
-                    >
-                      恢复默认
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center space-x-2">
-                  <img
-                    src={appearance.heroImage || 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=100&q=80'}
-                    alt="Hero Preview"
-                    className="w-10 h-10 rounded-2xl object-cover border border-slate-200 shadow-xs shrink-0"
-                  />
-                  <input
-                    type="text"
-                    value={appearance.heroImage || ''}
-                    onChange={(e) => setAppearance({ ...appearance, heroImage: e.target.value })}
-                    placeholder="https://... Hero 照片地址"
-                    className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs"
-                  />
-                  <label className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 cursor-pointer text-slate-600 text-xs font-semibold flex items-center space-x-1 shrink-0">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>本地上传</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleLocalImageUpload('heroImage', e)}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* SECTION 7: 用户管理列表 (仅管理员可见) */}
       {isAdmin && (
         <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
@@ -1482,7 +1554,7 @@ export const AdminSettingsView = ({
         </div>
       )}
 
-      {/* SECTION 8: 注册控制与环境变量密码预设 (仅管理员可见) */}
+      {/* SECTION 8: 注册和隐私 (包含全站隐私开关与仅限邮箱注册) */}
       {isAdmin && (
         <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           <button
@@ -1494,8 +1566,8 @@ export const AdminSettingsView = ({
                 <Lock className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-slate-800">注册控制与环境变量密码预设 (仅管理员可见)</h2>
-                <p className="text-xs text-slate-400">开启/关闭全站新用户注册，配置环境变量安全密码策略</p>
+                <h2 className="text-lg font-bold text-slate-800">注册和隐私 (站长专属控制)</h2>
+                <p className="text-xs text-slate-400">开启全站隐私保护（未注册游客仅可看博客）、仅限邮箱注册与注册开放策略</p>
               </div>
             </div>
             {openSections.authRules ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
@@ -1503,10 +1575,59 @@ export const AdminSettingsView = ({
 
           {openSections.authRules && (
             <div className="px-6 pb-6 pt-2 border-t border-slate-100 space-y-4">
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
-                <div>
-                  <span className="text-xs font-bold text-slate-700">开放新用户注册</span>
-                  <p className="text-[11px] text-slate-400">关闭后仅管理员可登录，阻断外部注册</p>
+              {/* 全站隐私开关 */}
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                <div className="space-y-0.5">
+                  <div className="flex items-center space-x-2">
+                    <EyeOff className="w-4 h-4 text-purple-600" />
+                    <span className="text-xs font-bold text-slate-800">全站隐私开关 (未注册访客仅看博客)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">开启后，未登录的外部访客仅能浏览博客文章，网盘、书架、影音、相册、AI编程等分区将严格对游客隐藏</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(systemSettings.hideNonBlogForGuests)}
+                    onChange={(e) => {
+                      const val = e.target.checked;
+                      setSystemSettings({ ...systemSettings, hideNonBlogForGuests: val });
+                      showToast(val ? '全站隐私保护已激活！未登录访客仅可浏览博客文章' : '全站隐私模式已解除');
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+
+              {/* 仅限邮箱注册 */}
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                <div className="space-y-0.5">
+                  <div className="flex items-center space-x-2">
+                    <Mail className="w-4 h-4 text-teal-600" />
+                    <span className="text-xs font-bold text-slate-800">仅限邮箱注册 (强制邮箱身份验证)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">开启后新用户注册必须提供有效邮箱并验证，杜绝虚假机器人批量注水</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(systemSettings.emailOnlyRegistration)}
+                    onChange={(e) => {
+                      const val = e.target.checked;
+                      setSystemSettings({ ...systemSettings, emailOnlyRegistration: val });
+                      showToast(val ? '已开启仅限邮箱注册！' : '已放开纯用户名注册模式');
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                </label>
+              </div>
+
+              {/* 开放新用户注册 */}
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-slate-800">开放新用户注册</span>
+                  <p className="text-[11px] text-slate-500">关闭后仅管理员可登录，阻断外部注册通道</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -1523,11 +1644,11 @@ export const AdminSettingsView = ({
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
                 <div className="space-y-1">
                   <div>
-                    <span className="font-bold">部署管理员变量直通：</span>
-                    管理员账号与密码在部署时由环境变量 <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">VITE_ADMIN_USERNAME</code> 与 <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">VITE_ADMIN_PASSWORD</code> 控制。
+                    <span className="font-bold">部署管理员凭据：</span>
+                    管理员账号由环境变量 <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">VITE_ADMIN_USERNAME</code> 与 <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">VITE_ADMIN_PASSWORD</code> 控制。
                   </div>
                   <div className="text-[11px] text-amber-700">
-                    在部署平台（Cloudflare Pages / 腾讯云 / 阿里云 / Docker）中设置后，连通数据库后可在手机、电脑等多设备使用该部署账号秒级直接登录！
+                    在部署平台（Cloudflare Pages / 腾讯云 / 阿里云 / Docker）中设置后，可在手机、电脑等多设备使用该部署账号秒级直接登录并保持全局一致！
                   </div>
                 </div>
               </div>
@@ -1535,6 +1656,31 @@ export const AdminSettingsView = ({
           )}
         </div>
       )}
+
+      {/* SECTION 9: 部署指南 (移入设置中心最底部) */}
+      <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <button
+          onClick={() => toggleSection('deploymentGuide')}
+          className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50/50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">系统部署与运维指南 (Cloudflare Pages / 腾讯云 / 阿里云 / Docker)</h2>
+              <p className="text-xs text-slate-400">详细的边缘云平台接入、数据库绑定与自动化构建操作指南</p>
+            </div>
+          </div>
+          {openSections.deploymentGuide ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+        </button>
+
+        {openSections.deploymentGuide && (
+          <div className="px-6 pb-6 pt-2 border-t border-slate-100">
+            <DeploymentGuideView siteName={siteName} t={t} />
+          </div>
+        )}
+      </div>
     </div>
   );
 };
