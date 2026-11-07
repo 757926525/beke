@@ -49,6 +49,8 @@ export const AdminSettingsView = ({
   setBrowsingHistory,
   heroIntro,
   setHeroIntro,
+  autoSyncEnabled,
+  setAutoSyncEnabled,
   t
 }) => {
   const isAdmin = currentUser?.role === 'admin';
@@ -66,12 +68,6 @@ export const AdminSettingsView = ({
     autoReplyEmail: true,
     users: false,
     authRules: false
-  });
-
-  // Auto-sync switch state
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
-    const val = localStorage.getItem('wf_auto_sync_enabled');
-    return val !== 'false';
   });
 
   // Manual one-click database sync states (with live progress bar 0% -> 100%)
@@ -1010,7 +1006,6 @@ export const AdminSettingsView = ({
                           onChange={(e) => {
                             const enabled = e.target.checked;
                             setAutoSyncEnabled(enabled);
-                            localStorage.setItem('wf_auto_sync_enabled', enabled ? 'true' : 'false');
                             showToast(enabled ? '全站数据库自动同步已开启' : '已关闭自动同步');
                           }}
                           className="sr-only peer"

@@ -4,11 +4,10 @@
  *
  * 核心特性：
  * 1. 有数据库时优先使用 Cloudflare D1 (env.DB) 乐观锁参数化存储；
- * 2. 无数据库但有对象存储时，自适应回退到 Cloudflare R2 (env.BUCKET / env.R2_BUCKET) 或 KV/内存存储，
- *    彻底实现“无论有无数据库，都能自动跨设备跨浏览器同步”！
- * 3. 严格保护写入鉴权（站长 Token / SYNC_BEARER_TOKEN）；
- * 4. 1.5MB Payload 大小限制保护；
- * 5. 跨设备版本号乐观锁与冲突探测机制。
+ * 2. 无数据库但有对象存储时，使用 Cloudflare R2 (env.BUCKET / env.R2_BUCKET) 条件写入；
+ * 3. 没有持久化存储时明确返回错误，不把 Worker 内存误报为跨设备同步。
+ * 4. 严格保护写入鉴权（站长 Token / SYNC_BEARER_TOKEN）；
+ * 5. 1.5MB Payload 大小限制保护。
  */
 
 import { getAdminConfig, verifyAdminToken, readAdminToken } from '../_lib/auth.js';
@@ -18,8 +17,56 @@ const MAX_PAYLOAD_BYTES = 1.5 * 1024 * 1024; // 1.5MB
 // 全站唯一的默认同步房间：同一个项目的所有设备/浏览器共用同一份记录
 const DEFAULT_SYNC_KEY = 'whitefox-site-main';
 
-// 内存中继回退缓存（当既无 D1 又无 R2 时提供当前 Worker 进程内的状态共享）
-const memoryVaultStore = new Map();
+function normalizeSyncNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+async function readR2SyncRecord(bucket, key) {
+  const object = await bucket.get(key);
+  if (!object) return null;
+
+  const data = JSON.parse(await object.text());
+  return {
+    ...data,
+    version: normalizeSyncNumber(object.customMetadata?.version, normalizeSyncNumber(data.version, 1)),
+    updatedAt: normalizeSyncNumber(object.customMetadata?.updatedAt, normalizeSyncNumber(data.updatedAt, Date.now())),
+    etag: object.etag
+  };
+}
+
+async function writeR2SyncRecord(bucket, key, record) {
+  const serialized = JSON.stringify(record);
+
+  // R2 checks these ETag conditions atomically with the write. Retry when another
+  // request wins the race, and never replace a record with an equal/older version.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const current = await readR2SyncRecord(bucket, key);
+    if (current && current.version >= record.version) {
+      return { success: false, conflict: true, currentVersion: current.version };
+    }
+
+    const onlyIf = current
+      ? { etagMatches: current.etag }
+      : { etagDoesNotMatch: '*' };
+    const stored = await bucket.put(key, serialized, {
+      onlyIf,
+      customMetadata: {
+        version: String(record.version),
+        updatedAt: String(record.updatedAt)
+      }
+    });
+
+    if (stored) return { success: true };
+  }
+
+  const latest = await readR2SyncRecord(bucket, key);
+  return {
+    success: false,
+    conflict: true,
+    currentVersion: latest ? latest.version : 0
+  };
+}
 
 /**
  * 解析最终使用的房间密钥。
@@ -68,8 +115,8 @@ async function verifyWriteAuth(request, env) {
   if (admin.configured) {
     return verifyAdminToken(env, readAdminToken(request));
   }
-  // 既没有配置 Bearer 也没有配置管理员密码：保持开放写入模式
-  return !serverToken;
+  // 没有配置任何服务端写入凭据时必须 fail closed。
+  return false;
 }
 
 export async function onRequestGet(context) {
@@ -88,7 +135,9 @@ export async function onRequestGet(context) {
   const db = env?.DB;
   const bucket = env?.BUCKET || env?.R2_BUCKET;
 
-  // 1. 优先从 D1 数据库拉取
+  let d1Record = null;
+
+  // 1. 从 D1 数据库拉取；暂不立即返回，以便与 R2 降级副本比较版本。
   if (db) {
     try {
       const query = `SELECT sync_key, payload, version, updated_at FROM site_sync WHERE sync_key = ? LIMIT 1`;
@@ -102,58 +151,51 @@ export async function onRequestGet(context) {
           parsedPayload = result.payload;
         }
 
-        return new Response(JSON.stringify({
-          success: true,
+        d1Record = {
           storageEngine: 'cloudflare-d1',
           syncKey: result.sync_key,
-          version: result.version,
-          updatedAt: result.updated_at,
+          version: normalizeSyncNumber(result.version),
+          updatedAt: normalizeSyncNumber(result.updated_at, Date.now()),
           payload: parsedPayload
-        }), {
-          status: 200,
-          headers: CORS_HEADERS
-        });
+        };
       }
     } catch (err) {
       console.warn('D1 query failed, checking fallback:', err.message);
     }
   }
 
-  // 2. 无 D1 或 D1 中暂无数据时，自适应回退从 R2 对象存储中读取
+  let r2Record = null;
+
+  // 2. 读取 R2 副本，即使 D1 有记录也要比较版本，避免降级写入被旧 D1 数据遮蔽。
   if (bucket) {
     try {
       const r2Key = `site_sync/${syncKey}.json`;
-      const object = await bucket.get(r2Key);
-      if (object) {
-        const text = await object.text();
-        const data = JSON.parse(text);
-        return new Response(JSON.stringify({
-          success: true,
+      const data = await readR2SyncRecord(bucket, r2Key);
+      if (data) {
+        r2Record = {
           storageEngine: 'cloudflare-r2',
           syncKey,
-          version: data.version || 1,
-          updatedAt: data.updatedAt || Date.now(),
+          version: data.version,
+          updatedAt: data.updatedAt,
           payload: data.payload
-        }), {
-          status: 200,
-          headers: CORS_HEADERS
-        });
+        };
       }
     } catch (err) {
       console.warn('R2 sync read error:', err.message);
     }
   }
 
-  // 3. 内存缓存回退 (Worker 进程内存)
-  if (memoryVaultStore.has(syncKey)) {
-    const memData = memoryVaultStore.get(syncKey);
+  // Keep D1 as the tie-breaker; a higher-version R2 record wins during failover.
+  const latestRecord = [d1Record, r2Record]
+    .filter(Boolean)
+    .reduce((latest, candidate) => (
+      !latest || candidate.version > latest.version ? candidate : latest
+    ), null);
+
+  if (latestRecord) {
     return new Response(JSON.stringify({
       success: true,
-      storageEngine: 'memory-relay',
-      syncKey,
-      version: memData.version || 1,
-      updatedAt: memData.updatedAt || Date.now(),
-      payload: memData.payload
+      ...latestRecord
     }), {
       status: 200,
       headers: CORS_HEADERS
@@ -241,6 +283,32 @@ export async function onRequestPost(context) {
 
   // 方式 A: 若配置了 Cloudflare D1 数据库，写入 D1
   if (db) {
+    if (bucket) {
+      try {
+        const r2Current = await readR2SyncRecord(bucket, `site_sync/${syncKey}.json`);
+        if (r2Current && r2Current.version >= version) {
+          return new Response(JSON.stringify({
+            success: false,
+            conflict: true,
+            currentVersion: r2Current.version,
+            message: 'Conflict detected: R2 has a newer or equal version. Please pull and merge first.'
+          }), {
+            status: 409,
+            headers: CORS_HEADERS
+          });
+        }
+      } catch (err) {
+        console.warn('R2 version check failed before D1 write:', err.message);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Could not verify the R2 sync version. Please retry after storage recovers.'
+        }), {
+          status: 503,
+          headers: CORS_HEADERS
+        });
+      }
+    }
+
     try {
       await db.prepare(`
         CREATE TABLE IF NOT EXISTS site_sync (
@@ -277,15 +345,24 @@ export async function onRequestPost(context) {
         });
       }
 
-      // 同步一份快照给 R2（如果有），提供双重容灾保障
+      // 同步一份快照给 R2（如果有），并通过 ETag 条件避免旧请求覆盖新版本。
       if (bucket) {
         try {
           const r2Key = `site_sync/${syncKey}.json`;
-          await bucket.put(r2Key, JSON.stringify({ version, updatedAt, payload: rawPayload }), {
-            customMetadata: { version: String(version), updatedAt: String(updatedAt) }
-          });
+          const mirrored = await writeR2SyncRecord(bucket, r2Key, { version, updatedAt, payload: rawPayload });
+          if (!mirrored.success) {
+            return new Response(JSON.stringify({
+              success: false,
+              conflict: true,
+              currentVersion: mirrored.currentVersion,
+              message: 'Conflict detected while updating the R2 replica. Please pull and merge first.'
+            }), {
+              status: 409,
+              headers: CORS_HEADERS
+            });
+          }
         } catch (e) {
-          // ignore
+          console.warn('R2 mirror write failed:', e.message);
         }
       }
 
@@ -301,7 +378,7 @@ export async function onRequestPost(context) {
         headers: CORS_HEADERS
       });
     } catch (err) {
-      console.warn('D1 write failed, attempting R2/memory fallback:', err.message);
+      console.warn('D1 write failed, attempting R2 fallback:', err.message);
     }
   }
 
@@ -309,38 +386,23 @@ export async function onRequestPost(context) {
   if (bucket) {
     try {
       const r2Key = `site_sync/${syncKey}.json`;
-      // 检查版本防旧覆盖
-      const existing = await bucket.get(r2Key);
-      if (existing) {
-        try {
-          const meta = existing.customMetadata || {};
-          const currentVersion = parseInt(meta.version || '0', 10);
-          if (currentVersion >= version) {
-            return new Response(JSON.stringify({
-              success: false,
-              conflict: true,
-              currentVersion,
-              message: 'Conflict detected in R2: Storage has newer version. Please pull and merge first.'
-            }), {
-              status: 409,
-              headers: CORS_HEADERS
-            });
-          }
-        } catch (e) {
-          // continue
-        }
-      }
-
-      await bucket.put(r2Key, JSON.stringify({
+      const stored = await writeR2SyncRecord(bucket, r2Key, {
         version,
         updatedAt,
         payload: rawPayload
-      }), {
-        customMetadata: {
-          version: String(version),
-          updatedAt: String(updatedAt)
-        }
       });
+
+      if (!stored.success) {
+        return new Response(JSON.stringify({
+          success: false,
+          conflict: true,
+          currentVersion: stored.currentVersion,
+          message: 'Conflict detected in R2. Please pull and merge before retrying.'
+        }), {
+          status: 409,
+          headers: CORS_HEADERS
+        });
+      }
 
       return new Response(JSON.stringify({
         success: true,
@@ -358,35 +420,14 @@ export async function onRequestPost(context) {
     }
   }
 
-  // 方式 C: 内存持久化保底（无数据库也无 R2 对象存储的环境）
-  const existingMem = memoryVaultStore.get(syncKey);
-  if (existingMem && existingMem.version >= version) {
-    return new Response(JSON.stringify({
-      success: false,
-      conflict: true,
-      currentVersion: existingMem.version,
-      message: 'Conflict detected: Memory relay has newer version.'
-    }), {
-      status: 409,
-      headers: CORS_HEADERS
-    });
-  }
-
-  memoryVaultStore.set(syncKey, {
-    version,
-    updatedAt,
-    payload: rawPayload
-  });
-
+  // No durable store means no cross-device sync. Do not report a memory-only
+  // write as success because Workers do not share durable process memory.
   return new Response(JSON.stringify({
-    success: true,
-    storageEngine: 'memory-relay',
-    syncKey,
-    version,
-    updatedAt,
-    message: 'Sync payload persisted to server relay memory'
+    success: false,
+    notConfigured: true,
+    error: 'Cloud sync storage is unavailable. Bind a D1 database (DB) or R2 bucket (BUCKET).'
   }), {
-    status: 200,
+    status: 503,
     headers: CORS_HEADERS
   });
 }

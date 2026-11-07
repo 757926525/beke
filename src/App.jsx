@@ -192,6 +192,9 @@ export function App() {
 
   // 2. 远端数据应用期间标记：当正在合并应用来自远端/其它标签页的数据时，禁止触发自身的自动 push
   const isApplyingRemote = useRef(false);
+  const localChangeAtStartup = useRef(
+    parseInt(localStorage.getItem(STORAGE_KEYS.LAST_LOCAL_CHANGE) || '0', 10) || 0
+  );
 
   // 3. 自动同步开关状态 (默认全局开启，彻底实现全自动跨设备与本地同步)
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
@@ -250,14 +253,14 @@ export function App() {
   };
 
   // -------------------------------------------------------------
-  // 核心逻辑 1: 初次加载检测（有数据库时才向云端拉取；无数据库时仅保留本地文件，取消无库同步）
+  // 核心逻辑 1: 首次加载时从可用的云端持久化存储拉取并合并数据
   // -------------------------------------------------------------
   useEffect(() => {
     let isCancelled = false;
 
     async function initialHydrationPull() {
       try {
-        const { probePlatformNativeBindings, pullFromCloudSyncVault } = await import('./services/cloudAdapter');
+        const { probePlatformNativeBindings, pullFromCloudSyncVault, pushToCloudSyncVault } = await import('./services/cloudAdapter');
         const health = await probePlatformNativeBindings();
 
         // 如果 Cloudflare Pages 传回了 ADMIN_USERNAME，动态对齐管理员名称
@@ -299,10 +302,6 @@ export function App() {
           // 非 Pages 环境（本地开发）无 /api/auth，保持本地凭据模式
         }
 
-        const isD1Bound = Boolean(health.success && health.d1?.healthy);
-        const isR2Bound = Boolean(health.success && health.r2?.healthy);
-        const hasCustomDb = Boolean(backendConfig?.dbConnected || backendConfig?.dbHost);
-
         setSyncStatus('syncing');
         setSyncStatusMessage('正在自动同步全站最新数据...');
 
@@ -332,18 +331,36 @@ export function App() {
             lang,
             themeId,
             version: currentVersion,
-            updatedAt: parseInt(localStorage.getItem(STORAGE_KEYS.LAST_LOCAL_CHANGE) || '0', 10)
+            updatedAt: localChangeAtStartup.current
           };
 
           const merged = mergeSyncPayloadWithTimestamp(localSnapshot, res.payload);
           applyMergedDataToState(merged);
+          setTimeout(() => {
+            isApplyingRemote.current = false;
+          }, 300);
 
           setSyncStatus('success');
           setSyncStatusMessage(`已同步至最新版本 (v${res.version || 1}${res.storageEngine ? ` · ${res.storageEngine}` : ''})`);
 
-          setTimeout(() => {
-            isApplyingRemote.current = false;
-          }, 300);
+          // If this browser had a real local edit newer than the fetched snapshot,
+          // persist the merged result instead of leaving those edits stranded locally.
+          if (autoSyncEnabled && localSnapshot.updatedAt > (res.updatedAt || 0)) {
+            const pushRes = await pushToCloudSyncVault(merged, {
+              vaultKey: syncRoomKey,
+              customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
+              authToken: backendConfig?.dbToken,
+              currentVersion: Math.max(currentVersion, res.version || 0)
+            });
+            if (pushRes.success) {
+              setCurrentVersion(pushRes.version);
+              localStorage.setItem(STORAGE_KEYS.SYNC_VERSION, String(pushRes.version));
+              setSyncStatusMessage(`本地更新已合并并推送 (版本 v${pushRes.version})`);
+            } else {
+              setSyncStatus('error');
+              setSyncStatusMessage(pushRes.error || '本地合并结果尚未推送到云端');
+            }
+          }
         } else {
           setSyncStatus('idle');
           setSyncStatusMessage('数据库通道就绪');
