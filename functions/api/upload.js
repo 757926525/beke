@@ -64,7 +64,42 @@ export async function onRequestGet(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const key = url.searchParams.get('key');
+  const action = url.searchParams.get('action'); // 'list' | null
   const isDownload = url.searchParams.get('download') === '1';
+
+  // 1. Workers 处理文件列表查询：有 D1 优先读 D1，无 D1 降级读 KV
+  if (action === 'list') {
+    if (env?.DB) {
+      try {
+        await ensureD1Tables(env.DB);
+        const { results } = await env.DB.prepare('SELECT * FROM files_metadata ORDER BY created_at DESC LIMIT 100').all();
+        return new Response(JSON.stringify({ success: true, source: 'd1', files: results || [] }), {
+          status: 200,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      } catch (err) {
+        console.warn('D1 files list failed, falling back to KV:', err.message);
+      }
+    }
+
+    const kv = env?.KV || env?.WHITEFOX_KV;
+    if (kv) {
+      try {
+        const cached = await kv.get('files_metadata_cache', 'json');
+        return new Response(JSON.stringify({ success: true, source: 'kv', files: cached || [] }), {
+          status: 200,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      } catch (kvErr) {
+        console.warn('KV files list failed:', kvErr.message);
+      }
+    }
+
+    return new Response(JSON.stringify({ success: true, source: 'empty', files: [] }), {
+      status: 200,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+    });
+  }
 
   if (!key) {
     return new Response(JSON.stringify({ error: 'Missing file key' }), {
@@ -75,20 +110,45 @@ export async function onRequestGet(context) {
 
   const bucket = env?.BUCKET || env?.R2_BUCKET;
 
-  // 1. 优先从 R2 检索
+  // 1. 优先从 R2 检索（支持视频流式 Range 请求与大文件流式下载）
   if (bucket) {
     try {
-      const object = await bucket.get(key);
+      const rangeHeader = request.headers.get('range');
+      let range;
+      if (rangeHeader) {
+        const parts = rangeHeader.replace(/bytes=/, '').split('-');
+        range = {
+          offset: parseInt(parts[0], 10),
+          length: parts[1] ? parseInt(parts[1], 10) - parseInt(parts[0], 10) + 1 : undefined
+        };
+      }
+
+      const object = await bucket.get(key, { range });
       if (object) {
         const headers = new Headers(CORS_HEADERS);
         object.writeHttpMetadata(headers);
         headers.set('etag', object.httpEtag);
+        headers.set('Accept-Ranges', 'bytes');
         headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-        if (isDownload) {
-          const filename = encodeURIComponent(key.split('/').pop() || 'download');
-          headers.set('Content-Disposition', `attachment; filename="${filename}"`);
+
+        // 正确的 Content-Type 补充，杜绝图片与音视频渲染失败
+        const ext = key.split('.').pop()?.toLowerCase();
+        const mimeMap = {
+          png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml',
+          mp4: 'video/mp4', webm: 'video/webm', mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
+          pdf: 'application/pdf', epub: 'application/epub+zip', txt: 'text/plain; charset=utf-8'
+        };
+        if (ext && mimeMap[ext] && !headers.get('Content-Type')) {
+          headers.set('Content-Type', mimeMap[ext]);
         }
-        return new Response(object.body, { headers });
+
+        if (isDownload) {
+          const rawFilename = key.split('/').pop() || 'download';
+          headers.set('Content-Disposition', `attachment; filename="${encodeURIComponent(rawFilename)}"`);
+        }
+
+        const status = rangeHeader ? 206 : 200;
+        return new Response(object.body, { status, headers });
       }
     } catch (err) {
       console.warn('R2 read failed, checking D1:', err.message);

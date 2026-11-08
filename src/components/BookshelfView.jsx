@@ -61,10 +61,21 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
     }
   };
 
-  // Download book function (TXT format)
+  // Download book function (支持优先从存储桶原格式流式下载，降级导出 TXT)
   const handleDownloadBook = (book, e) => {
     if (e) e.stopPropagation();
     try {
+      const ext = (book.format || 'TXT').toLowerCase();
+
+      // 如果有存储桶/远端 URL，优先触发流式下载
+      if (book.fileUrl && !book.fileUrl.startsWith('data:')) {
+        const downloadUrl = book.fileUrl.includes('?') ? `${book.fileUrl}&download=1` : `${book.fileUrl}?download=1`;
+        window.open(downloadUrl, '_blank');
+        showToast(`已开始从存储桶流式下载《${book.title}》(${book.format || 'TXT'})！`);
+        return;
+      }
+
+      // 纯文本内容降级导出
       let bookText = `# ${book.title}\n作者：${book.author}\n分类：${book.category}\n\n简介：\n${book.description || ''}\n\n`;
       if (book.chapters && book.chapters.length > 0) {
         book.chapters.forEach((chap, idx) => {
@@ -74,8 +85,8 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
         bookText += book.content;
       }
 
-      downloadFile(bookText, `${book.title}_白狐书架.txt`, 'text/plain;charset=utf-8');
-      showToast(`《${book.title}》TXT 文件已成功开始下载！`);
+      downloadFile(bookText, `${book.title}_白狐书架.${ext === 'txt' ? 'txt' : ext}`, 'text/plain;charset=utf-8');
+      showToast(`《${book.title}》文件已成功开始下载！`);
     } catch (err) {
       console.error(err);
       showToast('电子书下载导出失败，请重试');

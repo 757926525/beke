@@ -132,19 +132,26 @@ export const MediaPlayerView = ({
     }
   };
 
-  // Download media file using universal downloadFile with progress bar
+  // Download media file using universal downloadFile with progress bar / direct stream
   const handleDownloadMedia = async (m, e) => {
     if (e) e.stopPropagation();
     try {
       const ext = m.type === 'video' ? 'mp4' : 'mp3';
       const cleanTitle = m.title.replace(/[\\/:*?"<>|]/g, '_');
+
+      if (m.url && !m.url.startsWith('data:')) {
+        const downloadUrl = m.url.includes('?') ? `${m.url}&download=1` : `${m.url}?download=1`;
+        window.open(downloadUrl, '_blank');
+        showToast(`已开始流式下载媒体「${m.title}」！`);
+        return;
+      }
+
       await downloadFile(m.url, `${cleanTitle}.${ext}`);
       showToast(`已开始下载媒体文件「${m.title}」！`);
     } catch (err) {
       console.error('Media download error:', err);
-      // Fallback direct open
       window.open(m.url, '_blank');
-      showToast(`已在新标签页打开媒体文件「${m.title}」进行直接保存！`);
+      showToast(`已在新标签页打开媒体文件「${m.title}」！`);
     }
   };
 

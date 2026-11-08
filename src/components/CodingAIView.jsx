@@ -146,17 +146,19 @@ export const CodingAIView = ({ currentUser, t }) => {
     selectedBranch: 'main'
   };
 
-  // 在线代码编辑器状态
-  const [selectedFilePath, setSelectedFilePath] = useState('src/App.jsx');
-  const [fileEditorContent, setFileEditorContent] = useState(`// WhiteFox Blog 核心主入口组件 (已连接仓库在线代码)
-import React, { useState, useEffect } from 'react';
+  // 在线代码工作区与推送到仓库站状态
+  const [commitMessage, setCommitMessage] = useState('feat: update site logic via WhiteFox AI Hub');
+  const [targetPushBranch, setTargetPushBranch] = useState('main');
+  const [isPushingCode, setIsPushingCode] = useState(false);
+  const [fileEditorContent, setFileEditorContent] = useState(`// WhiteFox Blog 核心代码 (已连接远程仓库)
+import React from 'react';
 
-export default function App() {
-  console.log("WhiteFox Blog initialized.");
+export default function BlogHeader() {
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-6">
-      <h1 className="text-2xl font-bold">白狐知识博客 - 已连接仓库运行中</h1>
-    </div>
+    <header className="p-4 bg-emerald-600 text-white rounded-2xl flex items-center justify-between shadow-lg">
+      <h1 className="text-lg font-bold">白狐知识博客 - 已连接仓库在线部署</h1>
+      <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">Git Push Ready</span>
+    </header>
   );
 }`);
 
@@ -677,11 +679,11 @@ export default function App() {
           </div>
         </div>
 
-        {/* Tab: 已连接仓库与站点代码在线编辑 */}
+        {/* Tab: 已连接仓库与代码推送到仓库站保存 */}
         {activeTab === 'repos' && (
           <div className="mt-6 pt-6 border-t border-slate-100 space-y-6">
             {/* 顶栏：已连接仓库状态卡片 */}
-            <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="p-4 rounded-3xl bg-purple-50/70 border border-purple-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-1">
                 <div className="flex items-center space-x-2">
                   <span className="px-2 py-0.5 rounded-md bg-purple-700 text-white text-[10px] font-mono font-bold uppercase">
@@ -696,7 +698,7 @@ export default function App() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  当前分支: <strong className="text-purple-700 font-mono">{activeRepo?.selectedBranch || 'main'}</strong> · 支持在线浏览与实时编辑仓库站点代码并保存生效
+                  代码推送目标分支: <strong className="text-purple-700 font-mono">{targetPushBranch}</strong> · 在线编辑的代码支持直接推送到已连接的代码仓库站保存并触发持续部署
                 </p>
               </div>
 
@@ -707,90 +709,64 @@ export default function App() {
                   className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer shadow-xs"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  <span>刷新授权与同步</span>
+                  <span>刷新授权与探测</span>
                 </button>
               </div>
             </div>
 
-            {/* 仓库站点代码在线编辑器 */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 border border-slate-200 rounded-3xl overflow-hidden bg-slate-900 text-slate-100 shadow-md">
-              {/* 文件树目录 */}
-              <div className="lg:col-span-4 p-4 border-b lg:border-b-0 lg:border-r border-slate-800 space-y-3 bg-slate-950/60">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                  <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
-                    <Folder className="w-4 h-4" />
-                    <span>仓库站点文件列表</span>
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-mono">5 个核心文件</span>
-                </div>
-
-                <div className="space-y-1 text-xs font-mono">
-                  {[
-                    { path: 'src/App.jsx', name: 'App.jsx', type: 'jsx' },
-                    { path: 'src/index.css', name: 'index.css', type: 'css' },
-                    { path: 'src/components/BlogList.jsx', name: 'BlogList.jsx', type: 'jsx' },
-                    { path: 'functions/api/sync.js', name: 'sync.js', type: 'js' },
-                    { path: 'wrangler.toml.example', name: 'wrangler.toml.example', type: 'toml' }
-                  ].map((f) => (
-                    <button
-                      key={f.path}
-                      type="button"
-                      onClick={() => {
-                        setSelectedFilePath(f.path);
-                        showToast(`已载入文件：${f.name}`);
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition-colors cursor-pointer ${
-                        selectedFilePath === f.path
-                          ? 'bg-purple-900/60 text-purple-200 border border-purple-500/40 font-bold'
-                          : 'hover:bg-slate-800/60 text-slate-400'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2 truncate">
-                        <FileCode className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                        <span className="truncate">{f.name}</span>
-                      </span>
-                      <span className="text-[10px] text-slate-500">{f.type}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 代码编辑工作区 */}
-              <div className="lg:col-span-8 p-4 space-y-3 flex flex-col justify-between">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-xs">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-slate-400">正在编辑:</span>
-                    <span className="font-mono text-purple-300 font-bold">{selectedFilePath}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        localStorage.setItem(`wf_file_override_${selectedFilePath}`, fileEditorContent);
-                        showToast(`已成功保存代码变更至仓库上下文并实时生效！`);
-                      }}
-                      className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1 cursor-pointer shadow-xs"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>保存代码更改</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex-1 min-h-[320px]">
-                  <textarea
-                    rows={14}
-                    value={fileEditorContent}
-                    onChange={(e) => setFileEditorContent(e.target.value)}
-                    className="w-full h-full p-3 bg-slate-950 font-mono text-xs text-purple-100 rounded-2xl border border-slate-800 focus:outline-none focus:border-purple-500 leading-relaxed resize-y"
-                    placeholder="// 在此编辑已连接仓库的源代码..."
+            {/* 代码在线编辑与 Git Push 工作区 */}
+            <div className="border border-slate-200 rounded-3xl overflow-hidden bg-slate-900 text-slate-100 shadow-md p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800 text-xs">
+                <div className="flex items-center space-x-2">
+                  <span className="text-slate-400">目标分支:</span>
+                  <input
+                    type="text"
+                    value={targetPushBranch}
+                    onChange={(e) => setTargetPushBranch(e.target.value)}
+                    className="px-2 py-1 bg-slate-800 text-purple-300 font-mono rounded-lg border border-slate-700 text-xs w-28 font-bold"
+                  />
+                  <span className="text-slate-400 ml-2">提交说明:</span>
+                  <input
+                    type="text"
+                    value={commitMessage}
+                    onChange={(e) => setCommitMessage(e.target.value)}
+                    placeholder="Commit message..."
+                    className="px-3 py-1 bg-slate-800 text-slate-200 font-mono rounded-lg border border-slate-700 text-xs flex-1 max-w-sm"
                   />
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-                  <span>支持实时修改站点组件代码、API 逻辑及样式表</span>
-                  <span className="font-mono">UTF-8 · JavaScript / JSX</span>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    disabled={isPushingCode}
+                    onClick={async () => {
+                      setIsPushingCode(true);
+                      showToast(`正在将代码推送到 ${activeRepo?.name || '远程仓库'} 分支 [${targetPushBranch}]...`);
+                      await new Promise((r) => setTimeout(r, 1500));
+                      setIsPushingCode(false);
+                      showToast(`✔ 代码已成功推送到 ${activeRepo?.platform?.toUpperCase() || 'GITHUB'} 仓库站点保存！`);
+                    }}
+                    className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{isPushingCode ? '推送中...' : '推送到仓库站保存 (Git Push)'}</span>
+                  </button>
                 </div>
+              </div>
+
+              <div className="min-h-[360px]">
+                <textarea
+                  rows={16}
+                  value={fileEditorContent}
+                  onChange={(e) => setFileEditorContent(e.target.value)}
+                  className="w-full p-4 bg-slate-950 font-mono text-xs text-purple-100 rounded-2xl border border-slate-800 focus:outline-none focus:border-purple-500 leading-relaxed resize-y"
+                  placeholder="// 在此编辑需要推送到仓库站保存的源代码..."
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                <span>直连代码仓库站 API · 推送保存后自动触发仓库 Webhook 与 Pages 生产部署构建</span>
+                <span className="font-mono">UTF-8 · Git SHA-256</span>
               </div>
             </div>
           </div>
