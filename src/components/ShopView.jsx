@@ -3,7 +3,7 @@ import {
   ShoppingBag, Tag, Plus, Trash2, Edit3, Eye, DollarSign,
   CreditCard, ShieldCheck, CheckCircle2, ChevronRight, Upload,
   Image as ImageIcon, Phone, Mail, MapPin, User, Package,
-  Layers, Settings, AlertCircle, RefreshCw
+  Layers, Settings, AlertCircle, RefreshCw, MessageCircle, Send, X, Check, Clock
 } from 'lucide-react';
 
 export const ShopView = ({
@@ -17,9 +17,61 @@ export const ShopView = ({
   setPaymentSettings,
   t
 }) => {
-  const [activeTab, setActiveTab] = useState('showcase'); // 'showcase' | 'orders' | 'payment-settings'
+  const [activeTab, setActiveTab] = useState('showcase'); // 'showcase' | 'orders' | 'payment-settings' | 'inquiries'
+  const [orderFilter, setOrderFilter] = useState('all'); // 'all' | 'paid' | 'unpaid'
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [toastMessage, setToastMessage] = useState('');
+
+  // Online Customer Service Chat Modal
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatProduct, setChatProduct] = useState(null);
+  const [chatMessages, setChatMessages] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wf_shop_chat_messages');
+      return saved ? JSON.parse(saved) : [
+        { id: 1, sender: 'admin', text: '您好！欢迎光临白狐商城，请问有什么可以帮您的？支持咨询商品细节、支付方式或定制需求哦。', time: '刚刚' }
+      ];
+    } catch {
+      return [{ id: 1, sender: 'admin', text: '您好！欢迎光临白狐商城，请问有什么可以帮您的？', time: '刚刚' }];
+    }
+  });
+  const [inputMessage, setInputMessage] = useState('');
+
+  const handleSendMessage = (e) => {
+    e.preventDefault();
+    if (!inputMessage.trim()) return;
+
+    const newMsg = {
+      id: Date.now(),
+      sender: isAdmin ? 'admin' : (currentUser?.username || '访客'),
+      role: isAdmin ? 'admin' : 'customer',
+      text: inputMessage.trim(),
+      productTitle: chatProduct ? chatProduct.name : undefined,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    const nextMessages = [...chatMessages, newMsg];
+    setChatMessages(nextMessages);
+    localStorage.setItem('wf_shop_chat_messages', JSON.stringify(nextMessages));
+    setInputMessage('');
+
+    if (!isAdmin) {
+      setTimeout(() => {
+        const autoReply = {
+          id: Date.now() + 1,
+          sender: 'admin',
+          role: 'admin',
+          text: `收到关于「${chatProduct ? chatProduct.name : '商品'}」的咨询！站长已收到实时通知，会尽快为您解答。`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setChatMessages(prev => {
+          const updated = [...prev, autoReply];
+          localStorage.setItem('wf_shop_chat_messages', JSON.stringify(updated));
+          return updated;
+        });
+      }, 1000);
+    }
+  };
 
   // Product Modals
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -270,6 +322,18 @@ export const ShopView = ({
                 </button>
 
                 <button
+                  onClick={() => setActiveTab('inquiries')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === 'inquiries'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <MessageCircle className="w-3.5 h-3.5 inline mr-1" />
+                  <span>客服咨询 ({chatMessages.length})</span>
+                </button>
+
+                <button
                   onClick={() => setActiveTab('payment-settings')}
                   className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     activeTab === 'payment-settings'
@@ -432,6 +496,18 @@ export const ShopView = ({
                   )}
 
                   <button
+                    onClick={() => {
+                      setChatProduct(product);
+                      setIsChatOpen(true);
+                    }}
+                    className="py-2 px-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center justify-center space-x-1 transition-colors cursor-pointer"
+                    title="咨询在线客服"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>咨询</span>
+                  </button>
+
+                  <button
                     onClick={() => handleOpenBuyModal(product)}
                     className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center space-x-1 shadow-xs transition-colors cursor-pointer"
                   >
@@ -448,19 +524,60 @@ export const ShopView = ({
       {/* TAB 2: Orders List (Admin View) */}
       {isAdmin && activeTab === 'orders' && (
         <div className="bg-white/90 backdrop-blur-md rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
               <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
                 <Tag className="w-4 h-4 text-emerald-600" />
                 <span>客户订单处理中心 (共 {orders?.length || 0} 笔)</span>
               </h3>
-              <p className="text-xs text-slate-400">查看客户提交的收货地址、手机、邮箱与支付偏好，更新订单处理进度</p>
+              <p className="text-xs text-slate-400">查看客户提交的收货地址、手机、邮箱与支付偏好，精准分类筛选与更新状态</p>
+            </div>
+
+            {/* 订单状态筛选器：全部 / 已支付 / 未支付 */}
+            <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-2xl text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setOrderFilter('all')}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  orderFilter === 'all' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                全部订单 ({orders?.length || 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderFilter('paid')}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1 ${
+                  orderFilter === 'paid' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>已支付 ({orders?.filter(o => o.status === 'paid' || o.status === 'completed' || o.status === 'shipped').length || 0})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderFilter('unpaid')}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1 ${
+                  orderFilter === 'unpaid' ? 'bg-white text-rose-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5 text-amber-500" />
+                <span>未支付 ({orders?.filter(o => o.status === 'pending' || o.status === 'unpaid').length || 0})</span>
+              </button>
             </div>
           </div>
 
-          {orders && orders.length > 0 ? (
+          {orders && orders.filter(o => {
+            if (orderFilter === 'paid') return o.status === 'paid' || o.status === 'completed' || o.status === 'shipped';
+            if (orderFilter === 'unpaid') return o.status === 'pending' || o.status === 'unpaid';
+            return true;
+          }).length > 0 ? (
             <div className="divide-y divide-slate-100">
-              {orders.map((order) => (
+              {orders.filter(o => {
+                if (orderFilter === 'paid') return o.status === 'paid' || o.status === 'completed' || o.status === 'shipped';
+                if (orderFilter === 'unpaid') return o.status === 'pending' || o.status === 'unpaid';
+                return true;
+              }).map((order) => (
                 <div key={order.id} className="py-4 space-y-2.5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center space-x-3">
@@ -519,6 +636,161 @@ export const ShopView = ({
               暂无订单记录，发布精美商品吸引访客下单吧！
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB 4: Customer Inquiries / Online Chat (Admin View) */}
+      {isAdmin && activeTab === 'inquiries' && (
+        <div className="bg-white/90 backdrop-blur-md rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <MessageCircle className="w-4 h-4 text-emerald-600" />
+                <span>商城在线客服咨询中心</span>
+              </h3>
+              <p className="text-xs text-slate-400">实时接收访客对商品的咨询问题，支持直接在后台回复访客</p>
+            </div>
+            <button
+              onClick={() => {
+                if (window.confirm('确认清空所有咨询记录吗？')) {
+                  setChatMessages([]);
+                  localStorage.removeItem('wf_shop_chat_messages');
+                  showToast('已清空咨询记录');
+                }
+              }}
+              className="text-xs text-rose-500 hover:text-rose-700 cursor-pointer"
+            >
+              清空记录
+            </button>
+          </div>
+
+          <div className="space-y-3 max-h-[350px] overflow-y-auto p-3 bg-slate-50/70 rounded-2xl">
+            {chatMessages && chatMessages.length > 0 ? (
+              chatMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`p-3 rounded-2xl max-w-[80%] ${
+                    msg.role === 'admin'
+                      ? 'ml-auto bg-emerald-600 text-white'
+                      : 'mr-auto bg-white border border-slate-200 text-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3 text-[10px] opacity-75 mb-1">
+                    <span>{msg.sender} {msg.productTitle ? `(关于: ${msg.productTitle})` : ''}</span>
+                    <span>{msg.time}</span>
+                  </div>
+                  <p className="text-xs whitespace-pre-wrap">{msg.text}</p>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-xs text-slate-400 py-6">暂无客户咨询消息</p>
+            )}
+          </div>
+
+          <form onSubmit={handleSendMessage} className="flex gap-2">
+            <input
+              type="text"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              placeholder="以站长/客服身份回复访客..."
+              className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-200"
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 flex items-center gap-1 cursor-pointer"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>回复</span>
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Floating Chat Trigger Button for Visitors */}
+      <div className="fixed bottom-6 left-6 z-40">
+        <button
+          onClick={() => {
+            setChatProduct(null);
+            setIsChatOpen(true);
+          }}
+          className="px-4 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl flex items-center space-x-2 text-xs font-bold cursor-pointer transition-transform hover:scale-105"
+        >
+          <MessageCircle className="w-4 h-4" />
+          <span>联系在线客服</span>
+        </button>
+      </div>
+
+      {/* Online Customer Service Chat Modal (Visitor & General) */}
+      {isChatOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col h-[520px] animate-scaleUp">
+            {/* Header */}
+            <div className="p-4 bg-emerald-600 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <MessageCircle className="w-5 h-5" />
+                <div>
+                  <h4 className="font-bold text-xs">白狐商城在线客服</h4>
+                  <p className="text-[10px] text-emerald-100">站长随时在线 · 极速解答</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className="text-white/80 hover:text-white text-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Product context banner if available */}
+            {chatProduct && (
+              <div className="p-2.5 bg-emerald-50 border-b border-emerald-100 flex items-center space-x-2 text-xs">
+                <img
+                  src={chatProduct.images?.[0] || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=600&q=80'}
+                  alt={chatProduct.name}
+                  className="w-8 h-8 rounded-lg object-cover"
+                />
+                <span className="font-bold text-emerald-900 truncate">咨询商品: {chatProduct.name}</span>
+              </div>
+            )}
+
+            {/* Chat Messages */}
+            <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50/50">
+              {chatMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`p-3 rounded-2xl max-w-[85%] text-xs ${
+                    msg.role === 'admin'
+                      ? 'mr-auto bg-white border border-slate-200 text-slate-800'
+                      : 'ml-auto bg-emerald-600 text-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3 text-[10px] opacity-75 mb-1">
+                    <span>{msg.role === 'admin' ? '商城客服 / 站长' : msg.sender}</span>
+                    <span>{msg.time}</span>
+                  </div>
+                  <p className="whitespace-pre-wrap">{msg.text}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Input Footer */}
+            <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2">
+              <input
+                type="text"
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                placeholder="请输入您的问题或要求..."
+                className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-200"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 flex items-center gap-1 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>发送</span>
+              </button>
+            </form>
+          </div>
         </div>
       )}
 

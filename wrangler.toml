@@ -1,0 +1,35 @@
+# ==============================================================================
+# Cloudflare Pages / Workers 标准配置文件 (wrangler.toml)
+# 架构规范：
+# - D1: 存储文章、分类、评论、订单、客服消息与系统配置
+# - R2: 对象存储，用于图片、视频、音乐、电子书文件及附件
+# - KV: 热点文章缓存、配置降级回退及访问计数
+# ==============================================================================
+
+name = "whitefox-blog"
+compatibility_date = "2024-04-01"
+pages_build_output_dir = "dist"
+
+# [D1 数据库绑定]
+# 用于文章、分类、评论、订单及站点配置
+[[d1_databases]]
+binding = "DB"
+database_name = "whitefox_db"
+database_id = "your-cloudflare-d1-database-uuid"
+
+# [R2 对象存储存储桶绑定]
+# 用于图片、视频、音频、电子书等静态多媒体资源
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "whitefox-assets"
+
+# [KV 命名空间绑定]
+# 用于热点配置缓存、降级持久化与访问计数
+[[kv_namespaces]]
+binding = "KV"
+id = "your-cloudflare-kv-namespace-id"
+
+# [环境变量]
+[vars]
+ADMIN_USERNAME = "fox"
+ADMIN_PASSWORD = "whitefox2025"

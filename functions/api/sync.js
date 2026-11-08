@@ -2,37 +2,30 @@
  * Cloudflare Pages Function: /api/sync
  * 负责站点全量与增量数据的安全代理与多端持久化同步
  *
- * 核心特性：
- * 1. 有数据库时优先使用 Cloudflare D1 (env.DB) 乐观锁参数化存储；
- * 2. 无数据库但有对象存储时，自适应回退到 Cloudflare R2 (env.BUCKET / env.R2_BUCKET) 或 KV/内存存储，
- *    彻底实现“无论有无数据库，都能自动跨设备跨浏览器同步”！
- * 3. 严格保护写入鉴权（站长 Token / SYNC_BEARER_TOKEN）；
- * 4. 1.5MB Payload 大小限制保护；
- * 5. 跨设备版本号乐观锁与冲突探测机制。
+ * 架构规范：
+ * 1. 结构化数据与站点配置优先写入与读取 Cloudflare D1 (env.DB)；
+ * 2. 若未绑定 D1，自动降级至 Cloudflare KV (env.KV) 缓存；
+ * 3. 若无 D1 也无 KV，降级至 R2 (env.BUCKET) 或内存中继；
+ * 4. 彻底解决“无论有无数据库，都能自动跨设备跨浏览器同步”。
+ * 5. 严格保护写入鉴权（站长 Token / SYNC_BEARER_TOKEN），并提供并发乐观锁防冲突。
  */
 
 import { getAdminConfig, verifyAdminToken, readAdminToken } from '../_lib/auth.js';
 
 const MAX_PAYLOAD_BYTES = 1.5 * 1024 * 1024; // 1.5MB
 
-// 全站唯一的默认同步房间：同一个项目的所有设备/浏览器共用同一份记录
+// 全站唯一的默认同步房间
 const DEFAULT_SYNC_KEY = 'whitefox-site-main';
 
-// 内存中继回退缓存（当既无 D1 又无 R2 时提供当前 Worker 进程内的状态共享）
+// 内存中继回退缓存
 const memoryVaultStore = new Map();
 
-/**
- * 解析最终使用的房间密钥。
- * - 设置了环境变量 SYNC_ROOM_KEY：服务端强制使用该值（所有设备必然一致，最稳妥）
- * - 否则使用客户端传入的 key（默认也是同一个共享 key）
- */
 function resolveSyncKey(clientKey, env) {
   const forced = (env?.SYNC_ROOM_KEY || '').trim();
   if (forced) return forced;
   return (clientKey || '').trim() || DEFAULT_SYNC_KEY;
 }
 
-// 跨域响应头
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -47,7 +40,6 @@ export async function onRequestOptions() {
   });
 }
 
-// 读取：公开站点内容需要被所有访客拉取（写入受保护，且 payload 已剔除敏感凭据）
 function verifyReadAuth(request, env) {
   const serverToken = env?.SYNC_BEARER_TOKEN;
   if (!serverToken) return true;
@@ -56,7 +48,6 @@ function verifyReadAuth(request, env) {
   return token === serverToken;
 }
 
-// 写入：共享房间之后必须保护写权限，仅管理员会话令牌（或服务端 Bearer）可写
 async function verifyWriteAuth(request, env) {
   const serverToken = env?.SYNC_BEARER_TOKEN;
   if (serverToken) {
@@ -68,7 +59,6 @@ async function verifyWriteAuth(request, env) {
   if (admin.configured) {
     return verifyAdminToken(env, readAdminToken(request));
   }
-  // 既没有配置 Bearer 也没有配置管理员密码：保持开放写入模式
   return !serverToken;
 }
 
@@ -85,35 +75,11 @@ export async function onRequestGet(context) {
   const url = new URL(request.url);
   const syncKey = resolveSyncKey(url.searchParams.get('key') || request.headers.get('X-Sync-Key'), env);
 
-  const kv = env?.KV || env?.WHITEFOX_KV;
   const db = env?.DB;
+  const kv = env?.KV || env?.WHITEFOX_KV;
   const bucket = env?.BUCKET || env?.R2_BUCKET;
 
-  // 1. 最高优先级：若绑定了 KV (env.KV)，博客文章、配置、浏览记录优先从 KV 读取
-  if (kv) {
-    try {
-      const kvKey = `site_sync:${syncKey}`;
-      const rawText = await kv.get(kvKey);
-      if (rawText) {
-        const data = JSON.parse(rawText);
-        return new Response(JSON.stringify({
-          success: true,
-          storageEngine: 'cloudflare-kv',
-          syncKey,
-          version: data.version || 1,
-          updatedAt: data.updatedAt || Date.now(),
-          payload: data.payload
-        }), {
-          status: 200,
-          headers: CORS_HEADERS
-        });
-      }
-    } catch (err) {
-      console.warn('KV read error, falling back to D1:', err.message);
-    }
-  }
-
-  // 2. 次优先级：从 D1 数据库拉取
+  // 1. 优先从 D1 数据库拉取（结构化数据与配置持久化中心）
   if (db) {
     try {
       const query = `SELECT sync_key, payload, version, updated_at FROM site_sync WHERE sync_key = ? LIMIT 1`;
@@ -140,7 +106,31 @@ export async function onRequestGet(context) {
         });
       }
     } catch (err) {
-      console.warn('D1 query failed, checking fallback:', err.message);
+      console.warn('D1 query failed, falling back to KV:', err.message);
+    }
+  }
+
+  // 2. 次优先级：若无 D1 数据库，降级从 Cloudflare KV 读取
+  if (kv) {
+    try {
+      const kvKey = `site_sync:${syncKey}`;
+      const rawText = await kv.get(kvKey);
+      if (rawText) {
+        const data = JSON.parse(rawText);
+        return new Response(JSON.stringify({
+          success: true,
+          storageEngine: 'cloudflare-kv',
+          syncKey,
+          version: data.version || 1,
+          updatedAt: data.updatedAt || Date.now(),
+          payload: data.payload
+        }), {
+          status: 200,
+          headers: CORS_HEADERS
+        });
+      }
+    } catch (err) {
+      console.warn('KV read error, falling back to R2:', err.message);
     }
   }
 
@@ -165,33 +155,35 @@ export async function onRequestGet(context) {
         });
       }
     } catch (err) {
-      console.warn('R2 sync read error:', err.message);
+      console.warn('R2 read failed, falling back to memory store:', err.message);
     }
   }
 
-  // 3. 内存缓存回退 (Worker 进程内存)
+  // 4. 最低优先级：从 Worker 实例内存回退缓存读取
   if (memoryVaultStore.has(syncKey)) {
-    const memData = memoryVaultStore.get(syncKey);
+    const memoryRecord = memoryVaultStore.get(syncKey);
     return new Response(JSON.stringify({
       success: true,
       storageEngine: 'memory-relay',
       syncKey,
-      version: memData.version || 1,
-      updatedAt: memData.updatedAt || Date.now(),
-      payload: memData.payload
+      version: memoryRecord.version,
+      updatedAt: memoryRecord.updatedAt,
+      payload: memoryRecord.payload
     }), {
       status: 200,
       headers: CORS_HEADERS
     });
   }
 
-  // 4. 若全流程都未找到已存数据，返回 404
   return new Response(JSON.stringify({
-    success: false,
-    notFound: true,
-    message: 'No sync data found for key: ' + syncKey
+    success: true,
+    storageEngine: db ? 'cloudflare-d1' : (kv ? 'cloudflare-kv' : 'initial-empty'),
+    syncKey,
+    version: 0,
+    updatedAt: 0,
+    payload: null
   }), {
-    status: 404,
+    status: 200,
     headers: CORS_HEADERS
   });
 }
@@ -199,14 +191,17 @@ export async function onRequestGet(context) {
 export async function onRequestPost(context) {
   const { request, env } = context;
 
-  if (!(await verifyWriteAuth(request, env))) {
-    return new Response(JSON.stringify({ success: false, error: 'Unauthorized: 仅登录的站长可以写入同步数据，请先登录管理员账号' }), {
-      status: 401,
+  const isAuthorized = await verifyWriteAuth(request, env);
+  if (!isAuthorized) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'Forbidden: Admin authorization required to push data to cloud'
+    }), {
+      status: 403,
       headers: CORS_HEADERS
     });
   }
 
-  // 1. 服务端校验 Payload 尺寸，超过 1.5MB 直接阻断
   const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
   if (contentLength > MAX_PAYLOAD_BYTES) {
     return new Response(JSON.stringify({
@@ -218,16 +213,7 @@ export async function onRequestPost(context) {
     });
   }
 
-  let bodyText = '';
-  try {
-    bodyText = await request.text();
-  } catch (e) {
-    return new Response(JSON.stringify({ success: false, error: 'Failed to read request body' }), {
-      status: 400,
-      headers: CORS_HEADERS
-    });
-  }
-
+  const bodyText = await request.text();
   if (bodyText.length > MAX_PAYLOAD_BYTES) {
     return new Response(JSON.stringify({
       success: false,
@@ -261,37 +247,13 @@ export async function onRequestPost(context) {
   }
 
   const payloadString = typeof rawPayload === 'string' ? rawPayload : JSON.stringify(rawPayload);
-  const kv = env?.KV || env?.WHITEFOX_KV;
   const db = env?.DB;
+  const kv = env?.KV || env?.WHITEFOX_KV;
   const bucket = env?.BUCKET || env?.R2_BUCKET;
 
-  // 方式 A: 若配置了 Cloudflare KV，博客文章、配置信息等优先写入 KV
-  let savedToKV = false;
-  if (kv) {
-    try {
-      const kvKey = `site_sync:${syncKey}`;
-      const currentMeta = await kv.get(kvKey + ':meta', { type: 'json' });
-      if (currentMeta && currentMeta.version >= version) {
-        return new Response(JSON.stringify({
-          success: false,
-          conflict: true,
-          currentVersion: currentMeta.version,
-          message: 'Conflict detected in KV: Server has newer version.'
-        }), {
-          status: 409,
-          headers: CORS_HEADERS
-        });
-      }
+  let savedStorage = 'none';
 
-      await kv.put(kvKey, JSON.stringify({ version, updatedAt, payload: rawPayload }));
-      await kv.put(kvKey + ':meta', JSON.stringify({ version, updatedAt }));
-      savedToKV = true;
-    } catch (err) {
-      console.warn('KV write failed, attempting D1/R2:', err.message);
-    }
-  }
-
-  // 方式 B: 若配置了 Cloudflare D1 数据库，写入 D1
+  // 1. 架构核心规范：优先写入 Cloudflare D1 数据库
   if (db) {
     try {
       await db.prepare(`
@@ -315,142 +277,109 @@ export async function onRequestPost(context) {
 
       const runResult = await db.prepare(upsertSql).bind(syncKey, payloadString, version, updatedAt).run();
 
-      // 判断是否因版本较旧而未更新 (changes === 0)
       if (runResult.meta && runResult.meta.changes === 0) {
         const current = await db.prepare('SELECT version, updated_at FROM site_sync WHERE sync_key = ?').bind(syncKey).first();
+        if (current && current.version >= version) {
+          return new Response(JSON.stringify({
+            success: false,
+            conflict: true,
+            currentVersion: current.version,
+            message: 'Conflict detected: Server has newer or equal version.'
+          }), {
+            status: 409,
+            headers: CORS_HEADERS
+          });
+        }
+      }
+      savedStorage = 'cloudflare-d1';
+    } catch (err) {
+      console.warn('D1 write error, falling back to KV/R2:', err.message);
+    }
+  }
+
+  // 2. 若配置了 Cloudflare KV，同时或降级写入 KV 缓存热点
+  if (kv) {
+    try {
+      const kvKey = `site_sync:${syncKey}`;
+      const currentMeta = await kv.get(kvKey + ':meta', { type: 'json' });
+      if (!db && currentMeta && currentMeta.version >= version) {
         return new Response(JSON.stringify({
           success: false,
           conflict: true,
-          currentVersion: current ? current.version : null,
-          message: 'Conflict detected: Server has newer or equal version. Please pull and merge first.'
+          currentVersion: currentMeta.version,
+          message: 'Conflict detected in KV: Server has newer version.'
         }), {
           status: 409,
           headers: CORS_HEADERS
         });
       }
 
-      // 同步一份快照给 R2（如果有），提供双重容灾保障
-      if (bucket) {
-        try {
-          const r2Key = `site_sync/${syncKey}.json`;
-          await bucket.put(r2Key, JSON.stringify({ version, updatedAt, payload: rawPayload }), {
-            customMetadata: { version: String(version), updatedAt: String(updatedAt) }
-          });
-        } catch (e) {
-          // ignore
-        }
+      await kv.put(kvKey, JSON.stringify({ version, updatedAt, payload: rawPayload }));
+      await kv.put(kvKey + ':meta', JSON.stringify({ version, updatedAt }));
+      if (savedStorage === 'none') {
+        savedStorage = 'cloudflare-kv';
       }
-
-      return new Response(JSON.stringify({
-        success: true,
-        storageEngine: savedToKV ? 'cloudflare-kv+d1' : 'cloudflare-d1',
-        syncKey,
-        version,
-        updatedAt,
-        message: 'Sync payload persisted to Cloudflare D1 (and KV) successfully'
-      }), {
-        status: 200,
-        headers: CORS_HEADERS
-      });
     } catch (err) {
-      console.warn('D1 write failed, attempting R2/memory fallback:', err.message);
+      console.warn('KV write failed:', err.message);
     }
   }
 
-  if (savedToKV) {
-    return new Response(JSON.stringify({
-      success: true,
-      storageEngine: 'cloudflare-kv',
-      syncKey,
-      version,
-      updatedAt,
-      message: 'Sync payload persisted to Cloudflare KV successfully'
-    }), {
-      status: 200,
-      headers: CORS_HEADERS
-    });
-  }
-
-  // 方式 B: 无 D1 数据库但有 R2 对象存储桶，持久化写入 R2
-  if (bucket) {
+  // 3. 次次降级：R2
+  if (savedStorage === 'none' && bucket) {
     try {
       const r2Key = `site_sync/${syncKey}.json`;
-      // 检查版本防旧覆盖
-      const existing = await bucket.get(r2Key);
-      if (existing) {
-        try {
-          const meta = existing.customMetadata || {};
-          const currentVersion = parseInt(meta.version || '0', 10);
-          if (currentVersion >= version) {
-            return new Response(JSON.stringify({
-              success: false,
-              conflict: true,
-              currentVersion,
-              message: 'Conflict detected in R2: Storage has newer version. Please pull and merge first.'
-            }), {
-              status: 409,
-              headers: CORS_HEADERS
-            });
-          }
-        } catch (e) {
-          // continue
+      const metaKey = `site_sync/${syncKey}.meta.json`;
+
+      const existingMetaObj = await bucket.get(metaKey);
+      if (existingMetaObj) {
+        const existingMeta = JSON.parse(await existingMetaObj.text());
+        if (existingMeta.version >= version) {
+          return new Response(JSON.stringify({
+            success: false,
+            conflict: true,
+            currentVersion: existingMeta.version,
+            message: 'Conflict detected in R2: Remote has newer version.'
+          }), {
+            status: 409,
+            headers: CORS_HEADERS
+          });
         }
       }
 
-      await bucket.put(r2Key, JSON.stringify({
-        version,
-        updatedAt,
-        payload: rawPayload
-      }), {
-        customMetadata: {
-          version: String(version),
-          updatedAt: String(updatedAt)
-        }
-      });
-
-      return new Response(JSON.stringify({
-        success: true,
-        storageEngine: 'cloudflare-r2',
-        syncKey,
-        version,
-        updatedAt,
-        message: 'Sync payload persisted to Cloudflare R2 object storage successfully'
-      }), {
-        status: 200,
-        headers: CORS_HEADERS
-      });
+      const syncData = JSON.stringify({ version, updatedAt, payload: rawPayload });
+      await bucket.put(r2Key, syncData, { httpMetadata: { contentType: 'application/json' } });
+      await bucket.put(metaKey, JSON.stringify({ version, updatedAt }));
+      savedStorage = 'cloudflare-r2';
     } catch (err) {
       console.warn('R2 write error:', err.message);
     }
   }
 
-  // 方式 C: 内存持久化保底（无数据库也无 R2 对象存储的环境）
-  const existingMem = memoryVaultStore.get(syncKey);
-  if (existingMem && existingMem.version >= version) {
-    return new Response(JSON.stringify({
-      success: false,
-      conflict: true,
-      currentVersion: existingMem.version,
-      message: 'Conflict detected: Memory relay has newer version.'
-    }), {
-      status: 409,
-      headers: CORS_HEADERS
-    });
-  }
+  // 4. 最低优先级：内存中继
+  if (savedStorage === 'none') {
+    const existing = memoryVaultStore.get(syncKey);
+    if (existing && existing.version >= version) {
+      return new Response(JSON.stringify({
+        success: false,
+        conflict: true,
+        currentVersion: existing.version,
+        message: 'Conflict detected in Memory store.'
+      }), {
+        status: 409,
+        headers: CORS_HEADERS
+      });
+    }
 
-  memoryVaultStore.set(syncKey, {
-    version,
-    updatedAt,
-    payload: rawPayload
-  });
+    memoryVaultStore.set(syncKey, { version, updatedAt, payload: rawPayload });
+    savedStorage = 'memory-relay';
+  }
 
   return new Response(JSON.stringify({
     success: true,
-    storageEngine: 'memory-relay',
+    storageEngine: savedStorage,
     syncKey,
     version,
-    updatedAt,
-    message: 'Sync payload persisted to server relay memory'
+    updatedAt
   }), {
     status: 200,
     headers: CORS_HEADERS

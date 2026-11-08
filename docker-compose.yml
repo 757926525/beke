@@ -9,5 +9,8 @@ services:
     restart: always
     ports:
       - "80:80"
+    volumes:
+      - ./data:/app/data
     environment:
-      - VITE_ADMIN_PASSWORD=whitefox2025
+      - ADMIN_USERNAME=fox
+      - ADMIN_PASSWORD=whitefox2025

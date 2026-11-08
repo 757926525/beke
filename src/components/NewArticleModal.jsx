@@ -31,48 +31,32 @@ export default function NewArticleModal({
     setContent((prev) => prev ? `${prev}\n\n${text}` : text);
   };
 
-  // 1. Handle local file insert (Image / Video / Audio) with Canvas Compression for Images
-  const handleLocalFileInsert = (type, e) => {
+  // 1. Handle local file insert (Image / Video / Audio) with Unified Uploader (R2 / D1 / Local)
+  const handleLocalFileInsert = async (type, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (type === 'image') {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const maxDim = 1200;
-          let width = img.width;
-          let height = img.height;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
-          insertTextAtCursor(`![${file.name}](${compressedDataUrl})`);
-        };
-        img.src = event.target.result;
-      };
-      reader.readAsDataURL(file);
-    } else {
-      const objectUrl = URL.createObjectURL(file);
-      if (type === 'video') {
-        insertTextAtCursor(`🎬 [视频: ${file.name}](${objectUrl})`);
-      } else if (type === 'audio') {
-        insertTextAtCursor(`🎵 [音频: ${file.name}](${objectUrl})`);
+    try {
+      const { uploadFileWithFallback } = await import('../services/uploader');
+      const uploadRes = await uploadFileWithFallback(file, { folder: 'articles' });
+
+      if (uploadRes.success) {
+        const fileUrl = uploadRes.url || uploadRes.downloadUrl;
+        if (type === 'image') {
+          insertTextAtCursor(`\n\n![${file.name}](${fileUrl})\n`);
+        } else if (type === 'video') {
+          insertTextAtCursor(`\n\n🎬 [视频: ${file.name}](${fileUrl})\n`);
+        } else if (type === 'audio') {
+          insertTextAtCursor(`\n\n🎵 [音频: ${file.name}](${fileUrl})\n`);
+        }
+      } else {
+        alert(uploadRes.message || '文件上传失败');
       }
+    } catch (err) {
+      alert(err.message || '上传异常');
+    } finally {
+      e.target.value = '';
     }
-    e.target.value = '';
   };
 
   // 2. Select Cloud File from Hub
@@ -195,36 +179,20 @@ export default function NewArticleModal({
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (loadEvt) => {
-                      const img = new Image();
-                      img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        const maxDim = 1200;
-                        let w = img.width;
-                        let h = img.height;
-                        if (w > maxDim || h > maxDim) {
-                          if (w > h) {
-                            h = Math.round((h * maxDim) / w);
-                            w = maxDim;
-                          } else {
-                            w = Math.round((w * maxDim) / h);
-                            h = maxDim;
-                          }
-                        }
-                        canvas.width = w;
-                        canvas.height = h;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, w, h);
-                        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-                        setCover(dataUrl);
-                      };
-                      img.src = loadEvt.target.result;
-                    };
-                    reader.readAsDataURL(file);
+                    try {
+                      const { uploadFileWithFallback } = await import('../services/uploader');
+                      const uploadRes = await uploadFileWithFallback(file, { folder: 'covers' });
+                      if (uploadRes.success) {
+                        setCover(uploadRes.url || uploadRes.downloadUrl);
+                      } else {
+                        alert(uploadRes.message || '封面上传失败');
+                      }
+                    } catch (err) {
+                      alert(err.message || '封面上传异常');
+                    }
                     e.target.value = '';
                   }}
                   className="hidden"

@@ -52,12 +52,12 @@ export const MediaPlayerView = ({
   };
 
   // Upload directly to URL / web storage entry
-  const handleDirectWebUpload = (e) => {
+  const handleDirectWebUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const isVideo = file.type.startsWith('video');
-    const isAudio = file.type.startsWith('audio');
+    const isVideo = file.type.startsWith('video') || /\.(mp4|webm|mkv|mov|avi|flv)$/i.test(file.name);
+    const isAudio = file.type.startsWith('audio') || /\.(mp3|wav|ogg|aac|flac|m4a)$/i.test(file.name);
 
     if (!isVideo && !isAudio) {
       showToast('请选择有效的音视频文件（MP4、WebM、MP3等）！');
@@ -65,16 +65,26 @@ export const MediaPlayerView = ({
     }
 
     const sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target.result;
+
+    try {
+      showToast('正在上传并持久化媒体文件...');
+      const { uploadFileWithFallback } = await import('../services/uploader');
+      const uploadRes = await uploadFileWithFallback(file, { folder: 'media' });
+
+      if (!uploadRes.success) {
+        showToast(uploadRes.message || '媒体上传失败');
+        return;
+      }
+
+      const mediaUrl = uploadRes.url || uploadRes.downloadUrl;
       const newMediaItem = {
         id: `media-${Date.now()}`,
         title: file.name.replace(/\.[^/.]+$/, ''),
         desc: `上传的${isVideo ? '视频' : '音频'}媒体 (${sizeStr})`,
         type: isVideo ? 'video' : 'audio',
         aspect: 'auto',
-        url: dataUrl,
+        url: mediaUrl,
+        downloadUrl: uploadRes.downloadUrl || mediaUrl,
         poster: isVideo
           ? 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80'
           : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
@@ -89,9 +99,11 @@ export const MediaPlayerView = ({
       setActiveMedia(newMediaItem);
       setAspectRatio('auto');
       showToast(`媒体「${file.name}」已上传挂载成功！`);
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
+    } catch (err) {
+      showToast(err.message || '上传异常');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   // Permission helper: admin can manage all, user can manage own uploaded media

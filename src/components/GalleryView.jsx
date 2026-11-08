@@ -59,48 +59,29 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, activeSto
     return false;
   };
 
-  const processAndUploadFile = (file, targetFolder) => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const maxDim = 1200;
-          let width = img.width;
-          let height = img.height;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  const processAndUploadFile = async (file, targetFolder) => {
+    try {
+      const { uploadFileWithFallback } = await import('../services/uploader');
+      const uploadRes = await uploadFileWithFallback(file, { folder: 'gallery' });
+      const photoUrl = uploadRes.success ? (uploadRes.url || uploadRes.downloadUrl) : '';
 
-          resolve({
-            id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-            title: file.name.replace(/\.[^/.]+$/, ""),
-            desc: `上传至文件夹「${targetFolder}」，已安全记录至云相册。`,
-            url: dataUrl,
-            category: targetFolder,
-            folder: targetFolder,
-            author: currentUser?.username || '站长',
-            userId: currentUser?.id || 'admin',
-            date: new Date().toISOString().split('T')[0],
-            location: '随拍记录'
-          });
-        };
-        img.src = event.target.result;
+      return {
+        id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        title: file.name.replace(/\.[^/.]+$/, ""),
+        desc: `上传至文件夹「${targetFolder}」，已安全持久化至云存储。`,
+        url: photoUrl,
+        downloadUrl: uploadRes.downloadUrl || photoUrl,
+        category: targetFolder,
+        folder: targetFolder,
+        author: currentUser?.username || '站长',
+        userId: currentUser?.id || 'admin',
+        date: new Date().toISOString().split('T')[0],
+        location: '随拍记录'
       };
-      reader.readAsDataURL(file);
-    });
+    } catch (err) {
+      console.error('Photo upload error:', err);
+      return null;
+    }
   };
 
   const handleUpload = async (e) => {

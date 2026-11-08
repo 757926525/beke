@@ -56,7 +56,16 @@ export const translations = {
     registerPrompt: '注册账号',
     exportBackup: '导出同步备份',
     importBackup: '导入全库数据',
-    oneClickSync: '手动一键全量数据库同步'
+    oneClickSync: '手动一键全量数据库同步',
+    onlineChat: '在线客服',
+    contactSupport: '联系在线客服',
+    ordersCenter: '客户订单处理中心',
+    allOrders: '全部订单',
+    paidOrders: '已支付',
+    unpaidOrders: '未支付',
+    shopInquiries: '客服咨询',
+    storageBucketRequired: '文件超出1.5兆则提示上传无效，请绑定存储桶',
+    verifiedHandshake: '真实握手验证成功'
   },
   'zh-TW': {
     appName: '白狐博客',
@@ -103,7 +112,16 @@ export const translations = {
     registerPrompt: '註冊帳號',
     exportBackup: '導出同步備份',
     importBackup: '導入全庫數據',
-    oneClickSync: '手動一鍵全量數據庫同步'
+    oneClickSync: '手動一鍵全量數據庫同步',
+    onlineChat: '線上客服',
+    contactSupport: '聯繫線上客服',
+    ordersCenter: '客戶訂單處理中心',
+    allOrders: '全部訂單',
+    paidOrders: '已支付',
+    unpaidOrders: '未支付',
+    shopInquiries: '客服諮詢',
+    storageBucketRequired: '文件超出1.5兆則提示上傳無效，請綁定存儲桶',
+    verifiedHandshake: '真實握手驗證成功'
   },
   'en-US': {
     appName: 'WhiteFox Blog',
@@ -150,7 +168,16 @@ export const translations = {
     registerPrompt: 'Create Account',
     exportBackup: 'Export Backup',
     importBackup: 'Import Database',
-    oneClickSync: 'Full Database Sync'
+    oneClickSync: 'Manual 1-Click Database Full Sync',
+    onlineChat: 'Online Support',
+    contactSupport: 'Contact Support',
+    ordersCenter: 'Customer Orders Center',
+    allOrders: 'All Orders',
+    paidOrders: 'Paid',
+    unpaidOrders: 'Unpaid',
+    shopInquiries: 'Inquiries',
+    storageBucketRequired: 'File exceeds 1.5MB; upload rejected, please bind an R2 storage bucket',
+    verifiedHandshake: 'Handshake Verified'
   },
   'ja-JP': {
     appName: '白狐ブログ',

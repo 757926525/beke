@@ -145,48 +145,52 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
   };
 
   // Local file upload parser supporting TXT, MD, PDF, EPUB, JSON, HTML
-  const handleLocalFileUpload = (e) => {
+  const handleLocalFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const ext = file.name.split('.').pop()?.toUpperCase() || 'TXT';
-    const supportedExts = ['TXT', 'MD', 'PDF', 'EPUB', 'JSON', 'HTML', 'CSV'];
-
-    if (!supportedExts.includes(ext)) {
-      showToast(`温馨提示：书架支持 ${supportedExts.join(', ')} 格式文档！`);
-      e.target.value = '';
-      return;
-    }
-
     const fileName = file.name.replace(/\.[^/.]+$/, '');
-    const reader = new FileReader();
 
-    const binaryFormats = ['PDF', 'EPUB', 'MOBI', 'AZW3', 'DOC', 'DOCX', 'FB2'];
-    if (binaryFormats.includes(ext)) {
-      reader.onload = (event) => {
-        const dataUrl = event.target.result;
+    // 使用统一上传服务持久化到 R2 或 D1
+    try {
+      const { uploadFileWithFallback } = await import('../services/uploader');
+      const uploadRes = await uploadFileWithFallback(file, { folder: 'books' });
+
+      if (!uploadRes.success) {
+        showToast(uploadRes.message || '上传失败');
+        return;
+      }
+
+      const fileUrl = uploadRes.url || uploadRes.downloadUrl;
+      const textFormats = ['TXT', 'MD', 'JSON', 'HTML', 'CSV'];
+
+      if (textFormats.includes(ext)) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const rawText = ev.target.result;
+          setBookForm((prev) => ({
+            ...prev,
+            title: prev.title || fileName,
+            format: ext,
+            fileUrl: fileUrl,
+            content: typeof rawText === 'string' ? rawText : ''
+          }));
+          showToast(`已成功载入 ${ext} 文档「${file.name}」并同步至云存储！`);
+        };
+        reader.readAsText(file);
+      } else {
         setBookForm((prev) => ({
           ...prev,
           title: prev.title || fileName,
           format: ext,
-          fileUrl: dataUrl,
-          content: `【${ext} 电子书/文档已载入】\n文件名: ${file.name}\n大小: ${(file.size / 1024 / 1024).toFixed(2)} MB\n支持直接阅读与导出下载。`
+          fileUrl: fileUrl,
+          content: `【${ext} 电子书/文档已载入并持久化】\n文件名: ${file.name}\n大小: ${(file.size / 1024 / 1024).toFixed(2)} MB\n支持在线解析与原文件高速流式下载。`
         }));
         showToast(`已成功载入本地 ${ext} 格式图书「${file.name}」！`);
-      };
-      reader.readAsDataURL(file);
-    } else {
-      reader.onload = (event) => {
-        const rawText = event.target.result;
-        setBookForm((prev) => ({
-          ...prev,
-          title: prev.title || fileName,
-          format: ext,
-          content: typeof rawText === 'string' ? rawText : ''
-        }));
-        showToast(`已成功载入本地 ${ext} 文档「${file.name}」！`);
-      };
-      reader.readAsText(file);
+      }
+    } catch (err) {
+      showToast(err.message || '文件读取与上传失败');
     }
   };
 
@@ -842,7 +846,7 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
                     <input
                       type="file"
                       multiple
-                      accept=".txt,.md,.pdf,.epub,.mobi,.azw3,.doc,.docx,.fb2,.json,.html"
+                      accept="*/*"
                       onChange={handleBatchFilesSelect}
                       className="hidden"
                     />
@@ -939,14 +943,14 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
                     <span>选择本地电子书</span>
                     <input
                       type="file"
-                      accept=".txt,.md,.pdf,.epub,.mobi,.azw3,.doc,.docx,.fb2,.json,.html"
+                      accept="*/*"
                       onChange={handleLocalFileUpload}
                       className="hidden"
                     />
                   </label>
                 </div>
                 <p className="text-[11px] text-emerald-700">
-                  支持 TXT、MD、PDF、EPUB、MOBI、AZW3、DOCX 等多种格式，自动解析标题与章节目录。
+                  解除格式限制：支持全格式电子书与文档（PDF、EPUB、MOBI、AZW3、TXT、DOC、DOCX、FB2、CBZ、CBR、ZIP等），优先持久化至对象存储并支持流式下载。
                 </p>
               </div>
 

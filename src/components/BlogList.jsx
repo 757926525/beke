@@ -527,12 +527,13 @@ export const BlogList = ({
                   className="group cursor-pointer bg-white/80 backdrop-blur-md rounded-3xl overflow-hidden border border-slate-200/80 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between"
                 >
                   <div>
-                    {/* Cover & Actions */}
-                    <div className="relative h-48 overflow-hidden bg-slate-100">
+                    {/* Cover & Actions - 自适应画幅与智能居中 */}
+                    <div className="relative min-h-[190px] max-h-[260px] overflow-hidden bg-slate-900/10 flex items-center justify-center">
                       <img
                         src={post.cover}
                         alt={post.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        className="w-full h-full object-contain md:object-cover group-hover:scale-105 transition-transform duration-500"
+                        style={{ maxHeight: '260px' }}
                       />
                       <div className="absolute top-3 left-3 flex items-center space-x-1.5">
                         <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-xs text-white text-[11px] font-semibold">
@@ -629,11 +630,11 @@ export const BlogList = ({
                   onClick={() => handlePostClick(post)}
                   className="group cursor-pointer bg-white/80 backdrop-blur-md rounded-3xl overflow-hidden border border-slate-200/80 shadow-xs hover:shadow-xl transition-all duration-300 grid grid-cols-1 md:grid-cols-12"
                 >
-                  <div className="md:col-span-5 relative h-56 md:h-full bg-slate-100 overflow-hidden">
+                  <div className="md:col-span-5 relative min-h-[190px] h-56 md:h-full bg-slate-900/10 overflow-hidden flex items-center justify-center">
                     <img
                       src={post.cover}
                       alt={post.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      className="w-full h-full object-contain md:object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute top-3 left-3 flex items-center space-x-1.5">
                       <span className="px-2.5 py-1 rounded-full bg-black/60 text-white text-[10px] font-semibold">
