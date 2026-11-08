@@ -237,7 +237,48 @@ export async function onRequestPost(context) {
     const randomStr = Math.random().toString(36).substring(2, 8);
     const key = `uploads/${timestamp}_${randomStr}_${safeName}`;
 
-    // 1. 优先使用 Cloudflare R2 对象存储桶
+    // 策略判断：大文件实体（视频，音乐，图片，> 100KB 或特定多媒体类型）优先使用存储桶；小文件（如纯小文档、配置文本）若有数据库可优先存数据库
+    const isLargeMedia = fileSize > 100 * 1024 || fileMime.startsWith('video/') || fileMime.startsWith('audio/') || fileMime.startsWith('image/');
+
+    // 小文件 (<= 100KB 且非大音视频) 优先存数据库 D1
+    if (!isLargeMedia && db && fileSize <= MAX_D1_FILE_SIZE) {
+      await ensureD1Tables(db);
+      let binary = '';
+      const bytes = new Uint8Array(fileBuffer);
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64Data = btoa(binary);
+
+      await db.prepare(`
+        INSERT OR REPLACE INTO site_files (key, filename, content_type, size, data_base64, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(key, fileName, fileMime, fileSize, base64Data, timestamp).run();
+
+      const fileUrl = `/api/upload?key=${encodeURIComponent(key)}`;
+
+      await db.prepare(`
+        INSERT OR REPLACE INTO files_metadata (key, filename, content_type, size, url, storage_type, module, created_at)
+        VALUES (?, ?, ?, ?, ?, 'd1', 'general', ?)
+      `).bind(key, fileName, fileMime, fileSize, fileUrl, timestamp).run();
+
+      return new Response(JSON.stringify({
+        success: true,
+        storage: 'd1',
+        key,
+        url: fileUrl,
+        size: fileSize,
+        filename: fileName,
+        mime: fileMime,
+        message: '小文件已优先保存至 D1 数据库并记录元数据'
+      }), {
+        status: 200,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // 1. 大文件实体（视频、音乐、图片）优先使用 Cloudflare R2 对象存储桶
     if (bucket) {
       await bucket.put(key, fileBuffer, {
         httpMetadata: {
