@@ -65,19 +65,6 @@ export const AdminFileAndPortalView = ({
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    const readAsDataUrl = (file) =>
-      new Promise((resolve) => {
-        // For large files (> 5MB), fallback to object URL to avoid localStorage quotas
-        if (file.size > 5 * 1024 * 1024) {
-          resolve(URL.createObjectURL(file));
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = (event) => resolve(event.target.result);
-        reader.onerror = () => resolve(URL.createObjectURL(file));
-        reader.readAsDataURL(file);
-      });
-
     const newItems = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -88,7 +75,18 @@ export const AdminFileAndPortalView = ({
       else if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) type = 'image';
       else if (['zip', 'rar', 'tar', 'gz', '7z'].includes(ext)) type = 'archive';
 
-      const fileData = await readAsDataUrl(file);
+      let fileUrl = '';
+      try {
+        const { uploadFileWithFallback } = await import('../services/uploader');
+        const uploadRes = await uploadFileWithFallback(file, { folder: 'portal' });
+        if (uploadRes && uploadRes.success) {
+          fileUrl = uploadRes.url || uploadRes.downloadUrl;
+        } else {
+          fileUrl = `/api/upload?key=portal/${Date.now()}_${encodeURIComponent(file.name)}`;
+        }
+      } catch (err) {
+        fileUrl = `/api/upload?key=portal/${Date.now()}_${encodeURIComponent(file.name)}`;
+      }
 
       newItems.push({
         id: `admin-f-${Date.now()}-${i}`,

@@ -149,17 +149,18 @@ export const NetDriveView = ({
       let fileUrl = '';
       let thumbnail = '';
 
-      if (file.size < 6 * 1024 * 1024) {
-        fileUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.readAsDataURL(file);
-        });
-        if (isImg) {
-          thumbnail = fileUrl;
+      try {
+        const { uploadFileWithFallback } = await import('../services/uploader');
+        const uploadRes = await uploadFileWithFallback(file, { folder: 'netdrive' });
+        if (uploadRes && uploadRes.success) {
+          fileUrl = uploadRes.url || uploadRes.downloadUrl;
+          if (isImg) thumbnail = fileUrl;
+        } else {
+          fileUrl = `/api/upload?key=netdrive/${Date.now()}_${encodeURIComponent(file.name)}`;
         }
-      } else {
-        fileUrl = URL.createObjectURL(file);
+      } catch (uploadErr) {
+        console.warn('NetDrive upload fallback:', uploadErr.message);
+        fileUrl = `/api/upload?key=netdrive/${Date.now()}_${encodeURIComponent(file.name)}`;
       }
 
       newEntries.push({
