@@ -601,7 +601,7 @@ export const sanitizeSyncPayload = (payload) => {
       if (m.vaultId || (m.url && (m.url.startsWith('blob:') || m.url.startsWith('data:')))) {
         return {
           ...m,
-          url: m.url?.startsWith('data:') ? '' : m.url
+          url: (m.url?.startsWith('data:') || m.url?.startsWith('blob:')) ? '' : m.url
         };
       }
       return m;
