@@ -595,6 +595,32 @@ export const sanitizeSyncPayload = (payload) => {
   // Exclude users completely from cloud sync payload
   delete clean.users;
 
+  // Sanitize mediaList: strip volatile blob: URLs and heavy base64 to avoid Cloudflare 1.5MB sync limit
+  if (Array.isArray(clean.mediaList)) {
+    clean.mediaList = clean.mediaList.map((m) => {
+      if (m.vaultId || (m.url && (m.url.startsWith('blob:') || m.url.startsWith('data:')))) {
+        return {
+          ...m,
+          url: m.url?.startsWith('data:') ? '' : m.url
+        };
+      }
+      return m;
+    });
+  }
+
+  // Sanitize books: strip heavy book content if it is stored in IndexedDB Vault
+  if (Array.isArray(clean.books)) {
+    clean.books = clean.books.map((b) => {
+      if (b.vaultId && b.content && b.content.length > 50000) {
+        return {
+          ...b,
+          content: b.content.slice(0, 500) + '... (大文件原件保存在本地保险箱)'
+        };
+      }
+      return b;
+    });
+  }
+
   // Sanitize emailSettings
   if (clean.emailSettings) {
     clean.emailSettings = {

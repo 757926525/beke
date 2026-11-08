@@ -1,9 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Play, Pause, RotateCcw, Volume2, Maximize, Smartphone, Monitor, Film, Music,
   Upload, Trash2, Plus, Download, CheckCircle2, Video, Radio, Layers, Eye, RefreshCw,
   FolderInput, HardDrive, Check
 } from 'lucide-react';
+import { handleImageError } from '../services/utils';
+import { saveVaultFile, getVaultFileUrl, deleteVaultFile, revokeVaultFileUrl } from '../services/indexedDbVault';
 
 export const MediaPlayerView = ({
   currentUser,
@@ -19,6 +21,7 @@ export const MediaPlayerView = ({
   const videoRef = useRef(null);
   const audioRef = useRef(null);
   const [toastMessage, setToastMessage] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   const [activeMedia, setActiveMedia] = useState(mediaList[0] || {
     id: 'm-default',
@@ -33,16 +36,59 @@ export const MediaPlayerView = ({
     date: '2025-05-18'
   });
 
+  // Re-hydrate any IndexedDB vault-backed media URLs across reloads
+  useEffect(() => {
+    let isCancelled = false;
+
+    const restoreVaultUrls = async () => {
+      let hasUpdates = false;
+      const updatedList = await Promise.all(
+        mediaList.map(async (m) => {
+          if (m.vaultId) {
+            const vaultUrl = await getVaultFileUrl(m.vaultId);
+            if (vaultUrl && vaultUrl !== m.url) {
+              hasUpdates = true;
+              return { ...m, url: vaultUrl };
+            }
+          }
+          return m;
+        })
+      );
+
+      if (!isCancelled && hasUpdates) {
+        setMediaList(updatedList);
+        if (activeMedia.vaultId) {
+          const activeUpdated = updatedList.find((item) => item.id === activeMedia.id);
+          if (activeUpdated) {
+            setActiveMedia(activeUpdated);
+          }
+        }
+      }
+    };
+
+    restoreVaultUrls();
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3000);
   };
 
   // Switch media item
-  const handleSelectMedia = (m) => {
-    setActiveMedia(m);
-    if (m.aspect) {
-      setAspectRatio(m.aspect);
+  const handleSelectMedia = async (m) => {
+    let target = m;
+    if (m.vaultId) {
+      const vaultUrl = await getVaultFileUrl(m.vaultId);
+      if (vaultUrl) {
+        target = { ...m, url: vaultUrl };
+      }
+    }
+    setActiveMedia(target);
+    if (target.aspect) {
+      setAspectRatio(target.aspect);
     }
     setIsPlaying(false);
   };
@@ -68,73 +114,73 @@ export const MediaPlayerView = ({
     }
   };
 
-  // Local media file upload - converts to Base64 data URL for small files, or object URL with localStorage sync
-  const handleLocalMediaUpload = (e) => {
+  // Local media file upload - backed directly by IndexedDB Vault
+  // Completely eliminates QuotaExceededError and broken Blob URLs
+  const handleLocalMediaUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const isVideo = file.type.startsWith('video');
-    const isAudio = file.type.startsWith('audio');
+    const isVideo = file.type.startsWith('video') || /\.(mp4|webm|mov|mkv|avi|m4v)$/i.test(file.name);
+    const isAudio = file.type.startsWith('audio') || /\.(mp3|wav|ogg|flac|m4a|aac)$/i.test(file.name);
 
     if (!isVideo && !isAudio) {
-      showToast('请选择有效的音视频文件（MP4、WebM、MP3、FLAC等）！');
+      showToast('请选择有效的音视频文件（MP4、WebM、MOV、MP3、FLAC等）！');
+      e.target.value = '';
       return;
     }
 
-    const sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    const sizeStr = `${sizeMb} MB`;
+    const mediaId = `media-${Date.now()}`;
+    const vaultId = `media-vault-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
-    // If file is reasonably sized, read as data URL for permanent persistence
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target.result;
+    setIsUploading(true);
+    showToast(`正在将「${file.name}」写入本地高可用保险箱 (${sizeStr})...`);
+
+    try {
+      // 1. Save binary directly to IndexedDB
+      await saveVaultFile(vaultId, file, {
+        name: file.name,
+        type: file.type || (isVideo ? 'video/mp4' : 'audio/mp3'),
+        size: file.size
+      });
+
+      // 2. Obtain a persistent managed Object URL
+      const playableUrl = await getVaultFileUrl(vaultId);
+
       const newMediaItem = {
-        id: `media-${Date.now()}`,
+        id: mediaId,
+        vaultId: vaultId,
         title: file.name.replace(/\.[^/.]+$/, ''),
-        desc: `本地上传的${isVideo ? '视频' : '音频'}媒体文件 (${sizeStr})`,
+        desc: `本地持久保存的${isVideo ? '视频' : '音频'}媒体 (${sizeStr})`,
         type: isVideo ? 'video' : 'audio',
         aspect: isVideo ? '16:9' : '1:1',
-        url: dataUrl,
+        url: playableUrl,
         poster: isVideo
           ? 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80'
           : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
-        duration: '本地流',
+        duration: '本地高清流',
         size: sizeStr,
         date: new Date().toISOString().split('T')[0],
         uploadedBy: currentUser?.username || '用户',
         userId: currentUser?.id || 'guest',
-        isLocalUpload: true
+        isLocalUpload: true,
+        updatedAt: Date.now(),
+        deleted: false
       };
 
       const updated = [newMediaItem, ...mediaList];
       setMediaList(updated);
       setActiveMedia(newMediaItem);
       if (isVideo) setAspectRatio('16:9');
-      showToast(`本地媒体「${file.name}」已持久保存入库，刷新页面不丢失！`);
-    };
-
-    reader.onerror = () => {
-      // Fallback to object URL
-      const objectUrl = URL.createObjectURL(file);
-      const fallbackItem = {
-        id: `media-${Date.now()}`,
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        desc: `本地上传的${isVideo ? '视频' : '音频'}媒体文件 (${sizeStr})`,
-        type: isVideo ? 'video' : 'audio',
-        aspect: isVideo ? '16:9' : '1:1',
-        url: objectUrl,
-        poster: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80',
-        duration: '本地流',
-        size: sizeStr,
-        date: new Date().toISOString().split('T')[0],
-        isLocalUpload: true
-      };
-      setMediaList([fallbackItem, ...mediaList]);
-      setActiveMedia(fallbackItem);
-      showToast(`本地媒体「${file.name}」载入就绪！`);
-    };
-
-    reader.readAsDataURL(file);
-    e.target.value = '';
+      showToast(`本地媒体「${file.name}」已存入保险箱，刷新页面不丢失！`);
+    } catch (err) {
+      console.error('Failed to upload media:', err);
+      showToast('上传存储失败，请重试');
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
+    }
   };
 
   // Permission helper: admin can manage all, user can manage own uploaded media
@@ -146,7 +192,7 @@ export const MediaPlayerView = ({
   };
 
   // Delete media item
-  const handleDeleteMedia = (id, title, e) => {
+  const handleDeleteMedia = async (id, title, e) => {
     if (e) e.stopPropagation();
     const target = mediaList.find((m) => m.id === id);
     if (!canManageMedia(target)) {
@@ -154,6 +200,10 @@ export const MediaPlayerView = ({
       return;
     }
     if (window.confirm(`确认删除媒体项目「${title}」吗？`)) {
+      if (target?.vaultId) {
+        revokeVaultFileUrl(target.vaultId);
+        await deleteVaultFile(target.vaultId);
+      }
       const remaining = mediaList.filter((m) => m.id !== id);
       setMediaList(remaining);
       if (activeMedia.id === id && remaining.length > 0) {
@@ -303,6 +353,7 @@ export const MediaPlayerView = ({
                   <img
                     src={activeMedia.poster}
                     alt={activeMedia.title}
+                    onError={handleImageError}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-emerald-950/40 backdrop-blur-xs flex items-center justify-center">
@@ -360,6 +411,8 @@ export const MediaPlayerView = ({
                     <img
                       src={m.poster}
                       alt={m.title}
+                      loading="lazy"
+                      onError={handleImageError}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">

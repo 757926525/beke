@@ -15,6 +15,7 @@ import {
   UploadCloud,
   CheckCircle2
 } from 'lucide-react';
+import { handleImageError } from '../services/utils';
 
 export default function BlogView({
   articles,
@@ -152,6 +153,8 @@ export default function BlogView({
                   <img
                     src={article.cover}
                     alt={article.title}
+                    loading="lazy"
+                    onError={handleImageError}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-white text-xs font-medium">
@@ -280,6 +283,7 @@ export default function BlogView({
               <img
                 src={activeArticle.cover}
                 alt={activeArticle.title}
+                onError={handleImageError}
                 className="w-full h-64 sm:h-80 object-cover rounded-2xl my-6 shadow-md"
               />
             )}

@@ -9,6 +9,7 @@ import {
 
 import NewArticleModal from './NewArticleModal';
 import { formatBytes, calculateUsedStorageBytes } from '../services/storageService';
+import { handleImageError } from '../services/utils';
 
 export const BlogList = ({
   posts,
@@ -346,6 +347,7 @@ export const BlogList = ({
           <img
             src={heroIntro?.heroImage || 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=800&q=80'}
             alt="Hero Decoration"
+            onError={handleImageError}
             className="w-full h-full object-cover opacity-60 mix-blend-luminosity hover:opacity-90 hover:mix-blend-normal transition-all duration-700"
           />
         </div>
@@ -499,6 +501,8 @@ export const BlogList = ({
                       <img
                         src={post.cover}
                         alt={post.title}
+                        loading="lazy"
+                        onError={handleImageError}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                       <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-xs text-white text-[11px] font-semibold">
@@ -595,6 +599,8 @@ export const BlogList = ({
                     <img
                       src={post.cover}
                       alt={post.title}
+                      loading="lazy"
+                      onError={handleImageError}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 text-white text-[10px] font-semibold">
