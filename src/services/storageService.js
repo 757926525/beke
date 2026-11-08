@@ -696,6 +696,29 @@ export const sanitizeSyncPayload = (payload) => {
     delete clean.backendConfig.storageSecretAccessKey;
   }
 
+  // 严格杜绝在数据库同步载荷中传输大文件本体/Base64：仅保留元数据与正确 URL
+  const sanitizeCollectionUrls = (items) => {
+    if (!Array.isArray(items)) return items;
+    return items.map((item) => {
+      if (!item || typeof item !== 'object') return item;
+      const stripped = { ...item };
+      // 若包含超过 50KB 的内联 Base64，移除并保留占位，要求走 R2/D1 URL 访问
+      if (typeof stripped.url === 'string' && stripped.url.startsWith('data:') && stripped.url.length > 50000) {
+        stripped.url = stripped.downloadUrl || stripped.storageKey ? `/api/upload?key=${encodeURIComponent(stripped.storageKey)}` : '';
+      }
+      if (typeof stripped.fileUrl === 'string' && stripped.fileUrl.startsWith('data:') && stripped.fileUrl.length > 50000) {
+        stripped.fileUrl = stripped.downloadUrl || stripped.storageKey ? `/api/upload?key=${encodeURIComponent(stripped.storageKey)}` : '';
+      }
+      return stripped;
+    });
+  };
+
+  if (clean.posts) clean.posts = sanitizeCollectionUrls(clean.posts);
+  if (clean.photos) clean.photos = sanitizeCollectionUrls(clean.photos);
+  if (clean.books) clean.books = sanitizeCollectionUrls(clean.books);
+  if (clean.mediaList) clean.mediaList = sanitizeCollectionUrls(clean.mediaList);
+  if (clean.cloudFiles) clean.cloudFiles = sanitizeCollectionUrls(clean.cloudFiles);
+
   return clean;
 };
 
@@ -724,6 +747,8 @@ export const mergeSyncPayloadWithTimestamp = (currentData, incomingData) => {
   const mergedBookmarks = mergeEntityCollection(currentData.bookmarks, incomingData.bookmarks, true);
   const mergedBrowsingHistory = mergeEntityCollection(currentData.browsingHistory, incomingData.browsingHistory, true);
   const mergedMailMessages = mergeEntityCollection(currentData.mailMessages, incomingData.mailMessages, true);
+  const mergedShopOrders = mergeEntityCollection(currentData.shopOrders, incomingData.shopOrders, true);
+  const mergedShopInquiries = mergeEntityCollection(currentData.shopInquiries, incomingData.shopInquiries, true);
 
   // Settings & appearance: take newer by payload timestamp
   const isIncomingNewer = incomingTs >= currentTs;
@@ -739,6 +764,8 @@ export const mergeSyncPayloadWithTimestamp = (currentData, incomingData) => {
     bookmarks: mergedBookmarks,
     browsingHistory: mergedBrowsingHistory,
     mailMessages: mergedMailMessages,
+    shopOrders: mergedShopOrders,
+    shopInquiries: mergedShopInquiries,
     // Sensitive configurations are retained locally and not blindly overwritten by stripped data
     emailSettings: currentData.emailSettings || incomingData.emailSettings || {},
     cloudConfig: currentData.cloudConfig || incomingData.cloudConfig || {},

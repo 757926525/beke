@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   BookOpen, ChevronRight, ChevronLeft,
   Maximize2, Minimize2, ArrowLeft,
-  BookMarked, Download, Upload, Trash2, Edit3,
+  BookMarked, Download, Upload, Trash2, Edit3, Share2,
   Plus, X, FileText, CheckCircle2, List, Layers,
   RefreshCw, Check, AlertCircle, LayoutGrid, AlignLeft
 } from 'lucide-react';
@@ -215,10 +215,10 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
     showToast(`已选入 ${validFiles.length} 份电子书文件！`);
   };
 
-  // Batch import TXT files directly to bookshelf
+  // Batch import files (all formats: TXT, EPUB, PDF, MOBI, etc.) directly to bookshelf & storage
   const handleProcessBatchImport = async () => {
     if (!batchFiles.length) {
-      showToast('请先选择需要批量导入的 TXT 文档！');
+      showToast('请先选择需要批量导入的电子书或文档！');
       return;
     }
 
@@ -226,41 +226,69 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
     const newBooksToAdd = [];
 
     try {
-      for (const file of batchFiles) {
-        const content = await file.text();
-        const lines = content.split('\n');
-        const chapters = [];
-        let currentChapter = { title: '第一章 · 引言', content: '' };
+      const { uploadFileWithFallback } = await import('../services/uploader');
 
-        lines.forEach((line) => {
-          if (line.startsWith('#') || line.startsWith('第') || line.startsWith('Chapter') || line.startsWith('卷')) {
+      for (const file of batchFiles) {
+        const ext = file.name.split('.').pop()?.toUpperCase() || 'TXT';
+        const isText = ['TXT', 'MD', 'JSON', 'HTML', 'CSV'].includes(ext);
+
+        let fileUrl = '';
+        try {
+          const uploadRes = await uploadFileWithFallback(file, { folder: 'books' });
+          if (uploadRes && uploadRes.success) {
+            fileUrl = uploadRes.url || uploadRes.downloadUrl;
+          }
+        } catch (e) {
+          console.warn('Batch upload to storage fallback:', e.message);
+        }
+
+        let chapters = [];
+        let bookDesc = `批量上架入库的 ${ext} 文档 (${file.name})。`;
+
+        if (isText) {
+          try {
+            const content = await file.text();
+            const lines = content.split('\n');
+            let currentChapter = { title: '第一章 · 引言', content: '' };
+
+            lines.forEach((line) => {
+              if (line.startsWith('#') || line.startsWith('第') || line.startsWith('Chapter') || line.startsWith('卷')) {
+                if (currentChapter.content.trim()) {
+                  chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
+                }
+                currentChapter = { title: line.replace(/^[#\s]+/, '').trim(), content: '' };
+              } else {
+                currentChapter.content += line + '\n';
+              }
+            });
             if (currentChapter.content.trim()) {
               chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
             }
-            currentChapter = { title: line.replace(/^[#\s]+/, '').trim(), content: '' };
-          } else {
-            currentChapter.content += line + '\n';
+          } catch {
+            // text parse fallback
           }
-        });
-        if (currentChapter.content.trim()) {
-          chapters.push({ ...currentChapter, content: currentChapter.content.trim() });
         }
+
         if (chapters.length === 0) {
-          chapters.push({ title: '全本正文', content });
+          chapters.push({
+            title: '全本阅读与下载',
+            content: `【${ext} 全本电子书已载入】\n文件名称: ${file.name}\n大小: ${(file.size / 1024 / 1024).toFixed(2)} MB\n支持直接在线阅读与流式极速下载。`
+          });
         }
 
         const newBook = {
           id: `book-batch-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
           title: file.name.replace(/\.[^/.]+$/, ''),
-          author: currentUser?.username || '批量上架',
+          author: currentUser?.username || '上架图书',
           userId: currentUser?.id || 'guest',
           category: '经典文集',
-          format: 'TXT',
+          format: ext,
           size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
           progress: 0,
           totalChapters: chapters.length,
           cover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
-          description: `批量上传入库的纯文本电子书 (${file.name})。`,
+          fileUrl: fileUrl,
+          description: bookDesc,
           dateAdded: new Date().toISOString().split('T')[0],
           chapters: chapters
         };
@@ -269,7 +297,7 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
       }
 
       setBooks([...newBooksToAdd, ...books]);
-      showToast(`成功批量上架 ${newBooksToAdd.length} 本 TXT 图书至书架！`);
+      showToast(`成功批量上架 ${newBooksToAdd.length} 本全格式电子书至书架！`);
       setBatchFiles([]);
       setIsBatchModalOpen(false);
     } catch (err) {
@@ -681,9 +709,21 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, activeSto
                   <span>进入沉浸阅读</span>
                 </button>
                 <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const url = book.fileUrl || `/api/upload?key=books/${book.id}`;
+                    navigator.clipboard.writeText(url);
+                    showToast('已复制电子书存储桶直链！');
+                  }}
+                  className="px-2 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-sky-600 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer"
+                  title="复制存储桶直链"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                </button>
+                <button
                   onClick={(e) => handleDownloadBook(book, e)}
                   className="px-3 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-emerald-700 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer"
-                  title="导出下载到本地"
+                  title="从存储桶极速下载"
                 >
                   <Download className="w-3.5 h-3.5" />
                 </button>

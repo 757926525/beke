@@ -384,7 +384,21 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, activeSto
               </div>
 
               <div className="flex items-center space-x-3 shrink-0" onClick={(e) => e.stopPropagation()}>
+                <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-mono border border-emerald-200 hidden sm:inline">
+                  {photo.url.includes('/api/upload?key=') ? 'R2/D1存储桶' : '存储桶挂载'}
+                </span>
                 <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">{photo.date}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(photo.url);
+                    alert('已复制存储桶文件源地址！');
+                  }}
+                  className="p-1 text-slate-400 hover:text-sky-600 cursor-pointer"
+                  title="复制存储桶直链"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                </button>
                 <button
                   onClick={(e) => handleDownloadPhoto(photo, e)}
                   className="p-1 text-slate-400 hover:text-emerald-600"
@@ -396,7 +410,7 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, activeSto
                   <button
                     onClick={() => handleRemovePhoto(photo.id)}
                     className="p-1 text-slate-400 hover:text-rose-600"
-                    title="删除"
+                    title="从存储桶及相册删除"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

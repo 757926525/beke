@@ -215,8 +215,15 @@ export const BlogPostView = ({
 
         {/* Cover */}
         {post.cover && (
-          <div className="rounded-2xl overflow-hidden aspect-[16/9] max-h-96 w-full shadow-inner bg-slate-100">
-            <img src={post.cover} alt={post.title} className="w-full h-full object-cover" />
+          <div className="rounded-3xl overflow-hidden max-h-[460px] w-full shadow-inner bg-slate-900/10 flex items-center justify-center border border-slate-200/50">
+            <img
+              src={post.cover}
+              alt={post.title}
+              className="w-full h-full object-contain max-h-[460px]"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
           </div>
         )}
 
@@ -224,6 +231,35 @@ export const BlogPostView = ({
         <div className={`text-slate-700 leading-relaxed py-2 ${contentFontSizeClass}`}>
           <RichContentRenderer content={post.content} />
         </div>
+
+        {/* 博客配图区展示 (位于博文正文下方) */}
+        {post.images && post.images.length > 0 && (
+          <div className="my-6 p-4 rounded-3xl bg-slate-50/80 border border-slate-200/80 space-y-3">
+            <div className="flex items-center space-x-2 text-xs font-bold text-slate-700">
+              <ImageIcon className="w-4 h-4 text-emerald-600" />
+              <span>文章配图精选 ({post.images.length} 张)</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {post.images.map((img, idx) => (
+                <div key={img.id || idx} className="rounded-2xl overflow-hidden border border-slate-200/60 bg-white shadow-2xs group flex flex-col">
+                  <div className="relative aspect-video overflow-hidden bg-slate-100 flex items-center justify-center">
+                    <img
+                      src={img.url}
+                      alt={img.title || `配图 ${idx + 1}`}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  </div>
+                  {img.title && (
+                    <div className="p-2 text-center text-xs font-medium text-slate-600 truncate bg-white">
+                      {img.title}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Tags */}
         {post.tags && (

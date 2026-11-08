@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import {
   Play, Pause, RotateCcw, Volume2, Maximize, Smartphone, Monitor, Film, Music,
   Upload, Trash2, Plus, Download, CheckCircle2, Video, Radio, Layers, Eye, RefreshCw,
-  FolderInput, HardDrive, Check, AlignLeft, List
+  FolderInput, HardDrive, Check, AlignLeft, List, Share2
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
 
@@ -360,8 +360,23 @@ export const MediaPlayerView = ({
                     </td>
                     <td className="py-3 px-3 text-slate-400 font-mono">{m.duration}</td>
                     <td className="py-3 px-3 text-slate-400 font-mono">{m.size}</td>
-                    <td className="py-3 px-3 text-slate-400">{m.date}</td>
+                    <td className="py-3 px-3">
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-mono border border-emerald-200">
+                        {m.url.includes('/api/upload?key=') ? 'R2/D1存储桶' : '存储桶挂载'}
+                      </span>
+                    </td>
                     <td className="py-3 px-3 text-right space-x-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(m.url);
+                          showToast('已复制媒体存储桶直链！');
+                        }}
+                        className="p-1 rounded-lg text-slate-500 hover:text-sky-600 cursor-pointer"
+                        title="复制存储桶直链"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={(e) => handleDownloadMedia(m, e)}
                         className="p-1 rounded-lg text-slate-500 hover:text-emerald-600"

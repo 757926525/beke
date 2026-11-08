@@ -10,266 +10,112 @@
 
 ---
 
-## 🌟 项目介绍
+## 🌟 核心分层存储与同步架构 (彻底解决多端同步)
 
-**白狐博客 (WhiteFox Blog)** 是一套专为极客、学者与创作者打造的全功能多云边缘博客系统。以**翡翠竹韵（绿白美学）**为默认基调，支持暗黑模式与多套东方典雅配色，支持四种博文排版与全站字体调节。
+白狐博客采用业界领先的**分层协同存储与自动增量同步架构**，无论是否绑定关系型数据库，全站数据均可实现秒级跨端自动同步：
 
-### ✨ 核心功能矩阵
-
-1. **站内免代理浏览器 (国内直通 Google 搜索与海外网站)：**
-   - 真正实现在中国境内直接访问 Google 搜索与境外技术站点。
-   - 大气不遮挡的全局搜索框，支持直接输入关键词搜索或键入目标网址。
-   - 大尺寸手机界面沉浸视窗，完美贴合移动端触控体验，亦可一键切换桌面宽屏。
-2. **专属文件夹相册与双列全景 (光影视界)：**
-   - 支持自由创建相册文件夹进行分类归档。
-   - 支持上传照片直接保存至指定文件夹，Canvas 智能压缩与持久化存储。
-   - 照片界面严格采用**每排两张（双列瀑布网格）**，全面适应手机小屏与桌面端。
-3. **首页介绍区动态编辑与容量全景监测：**
-   - 首页介绍区主标题、微徽标、描述语均可在线修改并持久化保存。
-   - 介绍区封面照片可一键本地上传替换并实时生效。
-   - 动态监测并显示网站的**总容量与已用容量**（如 R2 免费额度 10 GB 与实时存储占用）。
-4. **左侧浏览历史记录专区：**
-   - 博客文章左侧常驻浏览历史记录选区。
-   - 记录访问时间、博文分类，支持**一键直达**与**逐条/批量清空记录**。
-5. **八国主流语言实时切换 (默认简体中文)：**
-   - 支持简体中文、繁體中文、English、日本語、한국어、Français、Español、Deutsch。
-   - 切换即时生效，持久化写入本地配置。
-6. **双模高可用同步机制 (接或不接数据库均有效)：**
-   - **离线/单机模式：** 即使未接入后端数据库，所有文章、书架进度、相册、配置均本地持久化，点击同步即可完成本地高可用镜像快照保存，数据 100% 不丢失。
-   - **数据库模式：** 支持在系统设置中一键接入 Cloudflare D1、MySQL、PostgreSQL 或 Supabase。
-7. **极简 TXT 藏书阁与纯云端下载中心：**
-   - 书架严格遵循纯 TXT 格式，支持单本/批量上传，专为手机刘海屏（Safe Area）适配。
-   - 纯云端下载中枢，支持多分辨率与音视频分离提取。
+1. **Cloudflare R2（或其他对象存储桶，如腾讯云 COS、阿里云 OSS）：**
+   - **职责：负责存文件实体。** 图片、音视频、电子书、附件等所有二进制静态资产一律写入存储桶。
+   - 彻底解除电子书与文档格式限制（支持 PDF, EPUB, MOBI, AZW3, TXT, DOC, DOCX, FB2, CBZ, CBR, ZIP 等）。
+   - 优先使用存储桶；未绑定存储桶时，<=1.5MB 文件自动降级写入 D1 附件表，>1.5MB 严格拦截提示：`文件超出1.5兆则提示上传无效，请绑定存储桶`。
+2. **Cloudflare D1（或其他数据库，如 MySQL、PostgreSQL、Supabase）：**
+   - **职责：负责存文件元信息（Metadata）和正确 URL，以及结构化业务数据。**
+   - 存储博文、分类、评论、商品订单、在线客服聊天、配置等结构化数据。
+   - 各端同步载荷严格不包含大文件 Base64，彻底保证数据库与同步 payload 的轻量与毫秒级传输。
+3. **Cloudflare KV（高速边缘缓存）：**
+   - **职责：仅用于缓存热点文章索引与文件列表，以及访问计数。** 不存文件本身，避免配额溢出。
+4. **多端自适应冲突避免与无感增量同步：**
+   - 彻底移除无意义的定时空轮询，仅在用户发生增删改实体操作时触发 1.5 秒防抖提交。
+   - 采用 ID + 毫秒级时间戳（updatedAt）+ 软删除墓碑（deleted）算法，实现跨设备、多浏览器标签页间的无缝合并，彻底杜绝数据覆盖冲突。
 
 ---
 
-## 📌 Cloudflare Pages 免费计划配额与存储说明
+## ✨ 核心特色与功能专区
 
-```text
-[Cloudflare Pages 免费计划 的话：不连数据库时，一个 Pages 项目最多能存 20,000 个文件。
+### 1. 博客视界与文章配图区
+- **画幅自适应居中容器：** 彻底杜绝博客封面在不同屏幕下的拉伸裁剪变形。
+- **博文专属配图区：** 正文下方配备专属“博客配图区”，支持本地批量多图上传与从相册一键转贴，配图支持实时预览、缩略图展示与一键删除。
+- **正文多媒体随心嵌入：** 自动将 Markdown 语法配图、外部图片直链渲染为响应式画幅图片。
 
-另外还有两个硬限制：
+### 2. 全格式沉浸式书架 (Bookshelf)
+- 解除所有电子书格式限制，支持 PDF、EPUB、MOBI、AZW3、TXT、DOC、DOCX、FB2 等多种格式。
+- 支持单本上架与批量多选导入，自动流式持久化至存储桶，支持在线全本解析与流式原件极速下载。
+- 提供大图、卡片、紧凑、详细列表 4 种浏览排版，支持全屏沉浸阅读。
 
-单文件最大 25 MiB，超过这个大小不能直接放进 Pages 站点资源里。
+### 3. 可视化存储桶文件管理
+- 画廊相册、多媒体影音中心、书架及网盘外接备份列表中，每个文件项均带有清晰的存储桶来源徽标。
+- 支持一键复制存储桶直链、高速流式下载及可视化删除。
 
-总文件数限制按项目算，不是按账号算；一个账号最多可以有 100 个 Pages 项目。
-R2 的文件数量没有明确上限，但受 10 GB 存储 限制；KV 虽然 key 数量不限，但总存储只有 1 GB。
+### 4. AI 编程区 (已连接仓库与在线代码编辑)
+- 移除杂乱的多仓库列表，精炼为单一明确的“已连接仓库”面板，支持真实远程仓库网络探测握手。
+- 提供**仓库站点代码在线编辑器**：内置核心文件树，支持在浏览器中实时查看、修改、保存站点代码并生效。
 
-所以如果你只是部署静态站点，20,000 个文件、每个不超过 25 MiB 就是 Pages 免费版的文件上限。超过的话，建议把大文件、图片、视频类资源挪到 R2。]
+### 5. 商品文创展台与客服订单管理
+- **在线客服聊天窗口：** 访客可在前台点击“联系在线客服”针对具体商品实时咨询，站长可在后台客服咨询中心实时查看并直接回复，配备自动应答机制。
+- **订单分类管理后台：** 订单中心支持对【全部订单 / 已支付 / 未支付】进行精准分类筛选与状态流转管理。
+
+### 6. 外接备份与全站一键快照
+- 原生支持坚果云 Nutstore、WebDAV 云盘及 R2/COS/OSS 对象存储挂载。
+- 提供博客全站数据一键 JSON 备份导出与一键还原，并配备实时操作进度条。
+
+---
+
+## 🚀 部署指南 (多平台全面支持)
+
+### 方案 A：Cloudflare Pages 一键全自动部署 (推荐)
+
+1. Fork 或克隆本仓库到您的 GitHub 账户。
+2. 打开 [Cloudflare Dashboard](https://dash.cloudflare.com/) -> **Workers & Pages** -> **Create application** -> **Pages** -> **Connect to Git**。
+3. 选择克隆的代码仓库：
+   - **Framework preset (框架预设)**: `Vite`
+   - **Build command (构建命令)**: `npm run build`
+   - **Build output directory (构建输出目录)**: `dist`
+4. 在 Pages 项目的 **Settings** -> **Functions** 中绑定资源：
+   - **D1 数据库绑定**：变量名填写 `DB`，绑定到创建的 D1 数据库，并执行 `deploy/cloudflare-d1-schema.sql` 建表。
+   - **R2 对象存储绑定**：变量名填写 `BUCKET`，绑定到您的 R2 存储桶。
+   - **KV 命名空间绑定**：变量名填写 `KV`，绑定到创建的 KV 命名空间。
+   - **环境变量**：设置 `ADMIN_USERNAME` (默认 `fox`) 与 `ADMIN_PASSWORD` (默认 `whitefox2025`)。
+5. 点击保存并重新部署，秒级上线！
+
+> 💡 **提示**：根目录提供 `wrangler.toml.example` 作为标准绑定配置参考。
+
+### 方案 B：自建 VPS / Node.js 独立服务运行
+
+项目内置轻量生产级独立服务端 `server.js`，无需依赖任何云平台即可完全离线自建：
+```bash
+# 1. 安装依赖并构建前端静态资源
+npm install
+npm run build
+
+# 2. 启动独立服务 (包含全功能 API 与数据本地持久化)
+node server.js
 ```
+默认监听 `http://localhost:3000`，所有上传附件自动存入 `data/uploads/`，全站数据持久化于 `data/site_sync.json`。
 
----
-
-## 🚀 构建与部署指南
-
-### 本地构建与快速预览
+### 方案 C：Docker / Docker-Compose 一键部署
 
 ```bash
-# 1. 克隆代码并安装依赖
-git clone <repo-url>
-cd whitefox-blog
+docker compose up -d
+```
+服务将在 80 端口运行，并通过数据卷挂载 `./data` 目录保证数据永久安全。
+
+---
+
+## 🛠️ 本地开发
+
+```bash
+# 安装依赖
 npm install
 
-# 2. 启动本地开发服务
+# 启动本地开发服务
 npm run dev
 
-# 3. 生产环境构建打包
+# 构建生产版本
 npm run build
 ```
 
 ---
 
-### 方案一：Cloudflare Pages 一键拉取自动部署 (首选推荐 ⭐⭐⭐⭐⭐)
+## 📄 开源许可证
 
-Cloudflare Pages 与 Git 仓库无缝集成，全球 330+ Anycast 边缘节点加速，具备零元建站、秒级构建与无限流量的优势。
-
-1. 打开 [Cloudflare 仪表盘](https://dash.cloudflare.com/)。
-2. 导航至 **Workers & Pages** -> 点击 **Create application** -> 选择 **Pages** -> **Connect to Git**。
-3. 选择托管白狐项目的 GitHub / GitLab 仓库。
-4. 在构建配置（Build settings）中填入：
-   - **Framework preset (框架预设)**: `Vite`
-   - **Build command (构建命令)**: `npm run build`
-   - **Build output directory (输出目录)**: `dist`
-   - **Environment variables (环境变量)**:
-     - 添加 `NODE_VERSION` = `20`
-     - 添加 `VITE_ADMIN_USERNAME` = `fox` (可自定义设定唯一系统站长账号)
-     - 添加 `VITE_ADMIN_PASSWORD` = `your_strong_password` (设定站长密码)
-     - *提示：后续也可在 Cloudflare Pages 项目后台 `Settings` -> `Environment variables` 中随时修改变量，跨设备登录无缝自动同步！*
-5. 点击 **Save and Deploy**，即可在 1 分钟内完成全球自动化部署！后续向 `main` 分支提交代码均会自动触发增量更新。
-
----
-
-### 方案二：Cloudflare Pages 一键上传压缩包部署 (免 Git 绑定)
-
-如果您希望直接上传预构建包而无需关联 Git 仓库：
-
-#### 📦 获取/生成上传部署包的方式
-
-在项目根目录下运行白狐定制打包指令：
-
-```bash
-npm run package:pages
-```
-
-该命令会自动完成 Vite 生产构建，并将 `dist` 静态资源封装为标准的 **`whitefox-pages-deploy.zip`** 压缩包。
-
-#### 部署步骤：
-1. 登录 Cloudflare Dashboard -> **Workers & Pages** -> **Create application** -> **Pages**。
-2. 选择 **Upload assets (直接上传资产)** 选项卡。
-3. 输入您的项目名称（例如 `whitefox`）。
-4. 将生成的 **`whitefox-pages-deploy.zip`** 解压后直接拖入网页上传区域（或直接拖入 zip 内的全部文件）。
-5. 点击 **Deploy site**，秒级全球上线！
-
----
-
-### 方案三：腾讯云 EdgeOne / COS 对象存储部署
-
-适合对中国大陆境内访问速度有极致要求的备案域名站点：
-
-1. **构建静态产物：**
-   ```bash
-   npm run build
-   ```
-2. **上传到腾讯云 COS：**
-   使用腾讯云官方 `coscli` 命令行工具将 `dist/` 目录同步到目标存储桶：
-   ```bash
-   coscli sync ./dist/ cos://whitefox-bucket/ -r
-   ```
-3. **开启静态网站托管：**
-   在 COS 控制台中开启“静态网站”，索引文档与错误文档均填写 `index.html`。
-4. **绑定 EdgeOne 边缘加速：**
-   在腾讯云 EdgeOne 中添加已备案自定义域名，源站选择 COS 存储桶，开启全球 Anycast 边缘缓存与免费 SSL 证书。
-
----
-
-### 方案四：阿里云 ESA / OSS 对象存储部署
-
-1. **构建静态产物：**
-   ```bash
-   npm run build
-   ```
-2. **上传到阿里云 OSS：**
-   使用 `ossutil` 命令行工具同步到 Bucket：
-   ```bash
-   ossutil sync ./dist/ oss://whitefox-bucket/ -u
-   ```
-3. **配置 OSS 静态页面：**
-   将默认首页与 404 错误页均设为 `index.html`。
-4. **配置 ESA (边缘安全加速平台)：**
-   在阿里云 ESA 中绑定域名，加速源站指向 OSS，享受企业级 WAF、DDoS 防护与国内 CDN 极速加速。
-
----
-
-### 方案五：Vercel / Netlify / Railway 多平台云托管部署
-
-白狐博客基于标准 React 19 + Vite 构建，可无缝部署至全球主流静态与 Serverless 云托管平台：
-
-- **Vercel**：在 [vercel.com](https://vercel.com) 导入项目，构建命令填写 `npm run build`，输出目录填写 `dist`。
-- **Netlify**：在 [netlify.com](https://app.netlify.com) 选择 Import from Git，构建命令 `npm run build`，发布目录 `dist`。
-- **Railway**：直接连接 GitHub 仓库，Railway 将自动读取仓库根目录的 `Dockerfile` 进行容器化秒级发布。
-
----
-
-### 方案六：Docker & Nginx 私有化部署
-
-针对独立 VPS / 云服务器环境：
-
-```bash
-# 启动容器
-docker compose up -d --build
-
-# 访问博客
-http://<服务器IP>:80
-```
-
----
-
-## 🗄️ 数据库接入与 Cloudflare 原生直绑指南
-
-白狐博客支持**Cloudflare Pages 后台原生直接绑定**与**各大外部数据库/对象存储直接接入**：
-
-### 1. Cloudflare Dashboard 原生直绑（首选推荐 · 零硬编码配置）
-
-无需在代码或 `wrangler.toml` 中填写敏感 UUID 或访问密钥，直接在 Cloudflare 控制台添加绑定：
-
-1. **创建 D1 数据库与 R2 存储桶**：
-   - 打开 Cloudflare Dashboard -> **Storage & Databases** -> **D1 SQL Database** -> 创建名为 `whitefox-db` 的数据库。
-   - 在其 **Console** 中执行 `deploy/cloudflare-d1-schema.sql` 完成表结构初始化。
-   - （可选）在 **R2 Object Storage** 中创建名为 `whitefox-assets` 的存储桶。
-2. **在 Pages 项目后台添加原生绑定**：
-   - 打开 Pages 项目 -> **Settings** -> **Functions**。
-   - 在 **D1 database bindings** 点击添加：变量名称填 **`DB`**，选择刚创建的 `whitefox-db`。
-   - 在 **R2 bucket bindings** 点击添加：变量名称填 **`BUCKET`**，选择刚创建的 `whitefox-assets`。
-   - 保存并重新部署，站内后台状态指示灯将自动识别为 **绿色已接入 (Connected)**，全站数据实现毫秒级持久化与多端极速自动同步！
-
-### 2. 外部数据库与对象存储接入（腾讯云 / 阿里云 / Supabase / MySQL / AWS S3）
-
-在博客右上角 **系统设置** -> **全能数据库后台与管理界面接入** 中：
-- 下拉选择数据库类型（Cloudflare D1、Supabase / PostgreSQL、MySQL、腾讯云 TDSQL、阿里云 PolarDB、MongoDB Atlas、Redis）。
-- 填入 Endpoint 与访问凭证，点击 **测试并激活数据库接入**，状态指示灯将实时反映真实通信连通性。
-- 同理可接入 Cloudflare R2、腾讯云 COS、阿里云 OSS、Amazon S3 或七牛云 Kodo。
-
-### 3. 无遮挡透明背景与主题定制
-
-- 在 **系统设置** -> **主题调色与本地图片设定** 中提供了 **通透亚克力** 与 **纯净冰晶** 两套半透明玻璃主题预设。
-- 开启 **无遮挡透明区块模式 (Transparent Glass)** 后，卡片容器与页面区块将呈现通透的高级亚克力磨砂玻璃质感，自定义背景大图将尽收眼底、通透无遮挡。
-
----
-
-## 🗄️ 多级存储与智能自适应同步说明 (KV 优先 · 有无数据库皆可同步)
-
-白狐博客原生支持**有无数据库均可全自动同步的高可用多级存储架构**：
-- **第一级 (Cloudflare Workers KV - 毫秒极速，首选优先 ⭐⭐⭐⭐⭐)：** 无需配置繁琐的 SQL 数据库，绑定 `KV` 即可享受毫秒级跨设备读写与数据版本乐观锁合并。
-- **第二级 (Cloudflare D1 关系型数据库)：** 绑定 `DB` 时自动建立或复用 `site_sync` 全量数据表，支持毫秒级时间戳比对与结构化查询。
-- **第三级 (Cloudflare R2 对象存储桶)：** 绑定 `BUCKET` 时自动接管大文件归档、图片图床与全站同步快照存储。
-- **第四级 (内存中转与纯本地高可用持久化)：** 当未绑定任何云端服务时，系统自动切换为纯本地文件与 IndexedDB 高可用持久化，支持外接坚果云/WebDAV 备份及一键导出/恢复 JSON 快照。
-- **防风暴按需同步：** 废弃固定轮询，仅在用户发生增删改操作时触发 1.5 秒防抖同步，彻底消除多设备空转与请求冲突。
-
-### 统一管理员账号与 CF 后台动态定制
-
-- **统一最高权限身份**：无论从首页普通登录还是站长专线登录，只要密码匹配管理员密码，系统均统一认证为唯一的最高站长身份（`u-admin`），杜绝因账号大小写或别名歧义进入不同界面或降级为普通会员。
-- **Cloudflare 后台动态修改管理员名称**：在 Cloudflare Pages 项目后台 `Settings` -> `Environment variables` 添加 `ADMIN_USERNAME` 或 `VITE_ADMIN_USERNAME`（例如修改为 `master_fox`），站点与 Functions 将自动同步读取并在后台生效，无需重新打包编译！
-
-### 修复说明：绑定数据库后「同一管理员密码进入不同界面」
-
-**根因**
-1. 同步房间密钥原先在每个浏览器首次打开时随机生成，各设备读写 D1 中不同的 `site_sync` 记录，内容/外观/文章各不相同。
-2. 无登录会话时前端默认伪造站长身份，退出后刷新或换设备会直接进入站长界面。
-3. 管理员密码仅在前端按各自构建/缓存的凭据比对，且硬编码了 `whitefox2025`、`fox`、站点名等备用凭据。
-
-**修复**
-- 同一项目所有设备默认共用固定房间 `whitefox-site-main`（可用服务端 `SYNC_ROOM_KEY` 强制指定）；旧版本自动生成的随机密钥会自动迁移回共享房间，本地数据会与云端合并而不是丢失。
-- 新增 `/api/auth`：站长账号密码由 Cloudflare 环境变量 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 在服务端统一校验，签发会话令牌。
-- `/api/sync` 的写入需要站长会话令牌（读取仍公开），避免共享房间被他人覆盖。
-- 默认身份改为游客；本地残留的站长状态若没有有效服务端令牌，会自动降级为游客。
-- 移除硬编码的备用管理员凭据。
-
-> 升级后请在 Cloudflare Pages 设置 `ADMIN_PASSWORD`（建议同时设置 `ADMIN_USERNAME`），然后重新部署并重新登录一次。
-
-### 初始化 Cloudflare D1 数据库：
-```bash
-# 1. 在 Cloudflare 控制台创建 D1 数据库 whitefox-db 或使用命令行：
-npx wrangler d1 create whitefox-db
-
-# 2. 执行建表 SQL (位于 deploy/cloudflare-d1-schema.sql)
-npx wrangler d1 execute whitefox-db --file=./deploy/cloudflare-d1-schema.sql
-```
-
-进入站点右上角 **系统设置** -> **全能数据库后台与管理界面接入** 即可查看状态灯。
-
----
-
-## ⚙️ 环境变量说明 (`.env.example`)
-
-| 变量名 | 说明 | 示例值 |
-| :--- | :--- | :--- |
-| `ADMIN_USERNAME` / `VITE_ADMIN_USERNAME` | 唯一系统站长管理员账号（可随时在 CF 后台修改动态生效） | `fox` |
-| `ADMIN_PASSWORD` / `VITE_ADMIN_PASSWORD` | 唯一系统站长管理员密码（可随时在 CF 后台修改动态生效） | `whitefox2025` |
-| `SYNC_ROOM_KEY` | （可选）服务端强制全站共用的同步房间密钥 | `whitefox-site-main` |
-| `VITE_SITE_NAME` | 博客系统默认名称 | `fox` |
-| `VITE_DEFAULT_LANG` | 默认语言 | `zh-CN` |
-| `VITE_CLOUDFLARE_D1_DATABASE_ID` | Cloudflare D1 边缘数据库 ID | `your-d1-db-uuid` |
-| `VITE_CLOUDFLARE_R2_BUCKET` | Cloudflare R2 存储桶名称 | `whitefox-assets` |
-| `VITE_SEARCH_PROXY_URL` | 国内免代理直连海外反代接口 | `https://proxy.whitefox.blog/api` |
-| `VITE_TENCENT_COS_BUCKET` | 腾讯云 COS 存储桶 | `whitefox-cos-125000` |
-| `VITE_ALIYUN_OSS_BUCKET` | 阿里云 OSS 存储桶 | `whitefox-oss` |
+本项目基于 [MIT License](LICENSE) 开源。欢迎贡献代码与 Issue 交流！

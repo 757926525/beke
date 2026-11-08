@@ -126,6 +126,21 @@ CREATE TABLE IF NOT EXISTS site_sync (
 );
 
 -- 10. 文件与附件降级存储表 (<= 1.5MB 无 R2 时的降级存储)
+-- 10. 文件元信息与外链索引表 (Files Metadata & URLs)
+-- 规范：R2 或其他存储桶负责存文件实体；D1 负责存文件元信息和正确 URL；KV 仅负责缓存列表
+CREATE TABLE IF NOT EXISTS files_metadata (
+  key TEXT PRIMARY KEY,
+  filename TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  url TEXT NOT NULL,
+  storage_type TEXT DEFAULT 'r2', -- 'r2' | 'cos' | 'oss' | 'webdav' | 'local'
+  module TEXT DEFAULT 'general', -- 'blog' | 'bookshelf' | 'gallery' | 'media' | 'general'
+  etag TEXT,
+  created_at INTEGER NOT NULL
+);
+
+-- 11. 文件与附件降级存储表 (<= 1.5MB 纯无存储桶时的降级存储)
 CREATE TABLE IF NOT EXISTS site_files (
   key TEXT PRIMARY KEY,
   filename TEXT NOT NULL,

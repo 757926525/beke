@@ -25,9 +25,22 @@ export async function onRequestOptions() {
   });
 }
 
-// 确保 D1 site_files 表存在
-async function ensureD1FilesTable(db) {
+// 确保 D1 files_metadata 和 site_files 表存在
+async function ensureD1Tables(db) {
   try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS files_metadata (
+        key TEXT PRIMARY KEY,
+        filename TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        url TEXT NOT NULL,
+        storage_type TEXT DEFAULT 'r2',
+        module TEXT DEFAULT 'general',
+        etag TEXT,
+        created_at INTEGER NOT NULL
+      )
+    `).run();
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS site_files (
         key TEXT PRIMARY KEY,
@@ -39,7 +52,7 @@ async function ensureD1FilesTable(db) {
       )
     `).run();
   } catch (e) {
-    console.error('ensureD1FilesTable failed:', e.message);
+    console.error('ensureD1Tables failed:', e.message);
   }
 }
 
@@ -85,7 +98,7 @@ export async function onRequestGet(context) {
   // 2. 若 R2 未找到或未绑定，从 D1 site_files 降级表中检索
   if (env?.DB) {
     try {
-      await ensureD1FilesTable(env.DB);
+      await ensureD1Tables(env.DB);
       const row = await env.DB.prepare('SELECT * FROM site_files WHERE key = ?').bind(key).first();
       if (row && row.data_base64) {
         // 解码 Base64
@@ -182,6 +195,34 @@ export async function onRequestPost(context) {
         ? `${r2Domain.replace(/\/$/, '')}/${key}`
         : `/api/upload?key=${encodeURIComponent(key)}`;
 
+      // 架构规范：D1 负责存文件元信息和正确 URL
+      if (db) {
+        try {
+          await ensureD1Tables(db);
+          await db.prepare(`
+            INSERT OR REPLACE INTO files_metadata (key, filename, content_type, size, url, storage_type, module, created_at)
+            VALUES (?, ?, ?, ?, ?, 'r2', 'general', ?)
+          `).bind(key, fileName, fileMime, fileSize, fileUrl, timestamp).run();
+        } catch (dbErr) {
+          console.warn('Failed to record metadata to D1:', dbErr.message);
+        }
+      }
+
+      // 架构规范：KV 仅缓存列表索引（不存文件本体）
+      const kv = env.KV || env.WHITEFOX_KV;
+      if (kv) {
+        try {
+          let list = [];
+          const cached = await kv.get('files_metadata_cache', 'json');
+          if (Array.isArray(cached)) list = cached;
+          list.unshift({ key, filename: fileName, size: fileSize, url: fileUrl, createdAt: timestamp, contentType: fileMime });
+          if (list.length > 500) list = list.slice(0, 500);
+          await kv.put('files_metadata_cache', JSON.stringify(list));
+        } catch (kvErr) {
+          console.warn('Failed to cache metadata to KV:', kvErr.message);
+        }
+      }
+
       return new Response(JSON.stringify({
         success: true,
         storage: 'r2',
@@ -190,7 +231,7 @@ export async function onRequestPost(context) {
         size: fileSize,
         filename: fileName,
         mime: fileMime,
-        message: '成功保存至 Cloudflare R2 对象存储桶'
+        message: '成功保存至 Cloudflare R2 对象存储桶，元信息已入库'
       }), {
         status: 200,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
@@ -215,7 +256,7 @@ export async function onRequestPost(context) {
 
     // 3. 小于等于 1.5MB 存入 D1 数据库降级附件表
     if (db) {
-      await ensureD1FilesTable(db);
+      await ensureD1Tables(db);
 
       // 转 Base64 存储
       let binary = '';
@@ -233,6 +274,11 @@ export async function onRequestPost(context) {
 
       const fileUrl = `/api/upload?key=${encodeURIComponent(key)}`;
 
+      await db.prepare(`
+        INSERT OR REPLACE INTO files_metadata (key, filename, content_type, size, url, storage_type, module, created_at)
+        VALUES (?, ?, ?, ?, ?, 'd1_fallback', 'general', ?)
+      `).bind(key, fileName, fileMime, fileSize, fileUrl, timestamp).run();
+
       return new Response(JSON.stringify({
         success: true,
         storage: 'd1',
@@ -241,7 +287,7 @@ export async function onRequestPost(context) {
         size: fileSize,
         filename: fileName,
         mime: fileMime,
-        message: '未绑定存储桶，文件(<=1.5MB)已自动降级保存至 D1 数据库'
+        message: '未绑定存储桶，文件(<=1.5MB)已自动降级保存至 D1 数据库并记录元数据'
       }), {
         status: 200,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }

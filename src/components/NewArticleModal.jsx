@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
 import {
-  X, Image as ImageIcon, Video, Music, Tag, Send, HardDrive,
-  Globe, Film, Upload, Check, ChevronRight, FileText
+  X, Image as ImageIcon, Upload, Check, Trash2, Plus
 } from 'lucide-react';
 
 export default function NewArticleModal({
   isOpen,
   onClose,
   onSave,
-  cloudFiles = [],
-  bookmarks = [],
   photos = [],
   currentUser = null,
   initialData = null
@@ -21,62 +18,55 @@ export default function NewArticleModal({
   const [cover, setCover] = useState(initialData?.cover || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80');
   const [content, setContent] = useState(initialData?.content || '');
 
-  // Active Picker Modal State: null | 'cloud' | 'bookmark' | 'media'
-  const [activePicker, setActivePicker] = useState(null);
+  // 博客配图区图片列表 (支持上传本地图片或选择转贴相册图片)
+  const [articleImages, setArticleImages] = useState(initialData?.images || []);
+  const [isPhotoPickerOpen, setIsPhotoPickerOpen] = useState(false);
 
   if (!isOpen) return null;
 
-  // Insert helper text into content
-  const insertTextAtCursor = (text) => {
-    setContent((prev) => prev ? `${prev}\n\n${text}` : text);
-  };
-
-  // 1. Handle local file insert (Image / Video / Audio) with Unified Uploader (R2 / D1 / Local)
-  const handleLocalFileInsert = async (type, e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // 上传本地配图并持久化至 R2/D1
+  const handleUploadArticleImage = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
 
     try {
       const { uploadFileWithFallback } = await import('../services/uploader');
-      const uploadRes = await uploadFileWithFallback(file, { folder: 'articles' });
-
-      if (uploadRes.success) {
-        const fileUrl = uploadRes.url || uploadRes.downloadUrl;
-        if (type === 'image') {
-          insertTextAtCursor(`\n\n![${file.name}](${fileUrl})\n`);
-        } else if (type === 'video') {
-          insertTextAtCursor(`\n\n🎬 [视频: ${file.name}](${fileUrl})\n`);
-        } else if (type === 'audio') {
-          insertTextAtCursor(`\n\n🎵 [音频: ${file.name}](${fileUrl})\n`);
+      for (const file of files) {
+        const uploadRes = await uploadFileWithFallback(file, { folder: 'article_images' });
+        if (uploadRes.success) {
+          const imgUrl = uploadRes.url || uploadRes.downloadUrl;
+          setArticleImages((prev) => [...prev, {
+            id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            url: imgUrl,
+            title: file.name.replace(/\.[^/.]+$/, '')
+          }]);
         }
-      } else {
-        alert(uploadRes.message || '文件上传失败');
       }
     } catch (err) {
-      alert(err.message || '上传异常');
+      alert(`配图上传失败: ${err.message}`);
     } finally {
       e.target.value = '';
     }
   };
 
-  // 2. Select Cloud File from Hub
-  const handleSelectCloudFile = (file) => {
-    if (file.type === 'video' || file.name.match(/\.(mp4|webm)$/i)) {
-      insertTextAtCursor(`🎬 [云端视频: ${file.name}](${file.url})`);
-    } else if (file.type === 'audio' || file.name.match(/\.(mp3|wav|flac)$/i)) {
-      insertTextAtCursor(`🎵 [云端音频: ${file.name}](${file.url})`);
-    } else if (file.name.match(/\.(jpg|jpeg|png|webp|gif)$/i)) {
-      insertTextAtCursor(`![${file.name}](${file.url})`);
-    } else {
-      insertTextAtCursor(`📦 [调度中枢文件: ${file.name}](${file.url})`);
-    }
-    setActivePicker(null);
+  // 选择相册转贴图片
+  const handleSelectGalleryPhoto = (photo) => {
+    const photoUrl = photo.url || photo.downloadUrl;
+    if (!photoUrl) return;
+    setArticleImages((prev) => [
+      ...prev,
+      {
+        id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        url: photoUrl,
+        title: photo.title || '相册转贴配图'
+      }
+    ]);
+    setIsPhotoPickerOpen(false);
   };
 
-  // 3. Select Bookmark / Search site cite
-  const handleSelectBookmark = (b) => {
-    insertTextAtCursor(`🌐 **引用网站**：[${b.title}](${b.url})\n> 来源备注: ${b.desc || '白狐搜索中心与收藏夹'}`);
-    setActivePicker(null);
+  // 删除单张配图
+  const handleRemoveArticleImage = (indexToRemove) => {
+    setArticleImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   const handleSubmit = (e) => {
@@ -88,6 +78,7 @@ export default function NewArticleModal({
       title: title.trim(),
       summary: summary.trim() || title.trim(),
       content: content.trim(),
+      images: articleImages,
       author: initialData?.author || (currentUser?.username ? currentUser.username : '白狐居士'),
       userId: initialData?.userId || currentUser?.id || 'guest',
       date: initialData?.date || new Date().toISOString().split('T')[0],
@@ -118,21 +109,21 @@ export default function NewArticleModal({
           {initialData ? '编辑白狐文章' : '撰写白狐新文'}
         </h3>
         <p className="text-xs text-slate-400 mb-5">
-          支持 Markdown 排版、一键插入本地音视频图片、多云网盘文件引用、搜索中心网站引用及媒体影音文件联动。
+          支持 Markdown 排版撰写、专属博客配图区管理、封面自适应及全站实时同步。
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">
-              文章标题
+              文章标题 *
             </label>
             <input
               type="text"
               required
-              placeholder="请输入灵动深刻的文章标题..."
+              placeholder="例如：云原生多端同步架构深度实践"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-medium focus:ring-2 focus:ring-emerald-500"
+              className="w-full px-3.5 py-2 text-sm rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-medium"
             />
           </div>
 
@@ -144,38 +135,39 @@ export default function NewArticleModal({
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200 text-slate-900"
+                className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900"
               >
                 <option value="技术视界">技术视界</option>
-                <option value="云原生实践">云原生实践</option>
-                <option value="数字生活">数字生活</option>
-                <option value="青丘随笔">青丘随笔</option>
-                <option value="多云架构">多云架构</option>
+                <option value="灵感札记">灵感札记</option>
+                <option value="生活微语">生活微语</option>
+                <option value="读书心得">读书心得</option>
+                <option value="影音评鉴">影音评鉴</option>
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">
-                标签 (逗号分隔)
+                文章标签 (逗号分隔)
               </label>
               <input
                 type="text"
-                placeholder="Cloudflare, 存储, 前端"
+                placeholder="架构, 同步, 博客"
                 value={tagsInput}
                 onChange={(e) => setTagsInput(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200 text-slate-900"
-              />
+                className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-900"
+              >
+              </input>
             </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-semibold text-slate-600">
-                博客封面配图 (支持本地图片上传或网络链接)
+                封面图 URL
               </label>
-              <label className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer flex items-center space-x-1">
-                <Upload className="w-3 h-3 inline" />
-                <span>选择本地封面图片</span>
+              <label className="text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold cursor-pointer flex items-center space-x-1">
+                <Upload className="w-3 h-3" />
+                <span>上传本地图片作为封面</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -228,102 +220,77 @@ export default function NewArticleModal({
             />
           </div>
 
-          {/* Quick Insert Toolbar */}
-          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              快捷插入与站内资源联动：
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {/* 1-click select photo from Cloud Gallery */}
-              <button
-                type="button"
-                onClick={() => setActivePicker('gallery')}
-                className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-xs"
-              >
-                <ImageIcon className="w-3.5 h-3.5" />
-                <span>一键选择插入云相册图片</span>
-              </button>
-
-              {/* Insert local image */}
-              <label className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-2xs">
-                <Upload className="w-3.5 h-3.5 text-emerald-600" />
-                <span>上传本地图片</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleLocalFileInsert('image', e)}
-                  className="hidden"
-                />
-              </label>
-
-              {/* Insert local video */}
-              <label className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-2xs">
-                <Video className="w-3.5 h-3.5 text-sky-600" />
-                <span>插入本地视频</span>
-                <input
-                  type="file"
-                  accept="video/*"
-                  onChange={(e) => handleLocalFileInsert('video', e)}
-                  className="hidden"
-                />
-              </label>
-
-              {/* Insert local audio */}
-              <label className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-2xs">
-                <Music className="w-3.5 h-3.5 text-purple-600" />
-                <span>插入本地音乐</span>
-                <input
-                  type="file"
-                  accept="audio/*"
-                  onChange={(e) => handleLocalFileInsert('audio', e)}
-                  className="hidden"
-                />
-              </label>
-
-              {/* 1-click select NetDrive & Multi-Cloud files */}
-              <button
-                type="button"
-                onClick={() => setActivePicker('cloud')}
-                className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center space-x-1.5 shadow-2xs"
-              >
-                <HardDrive className="w-3.5 h-3.5 text-emerald-600" />
-                <span>一键插入网盘与多云文件</span>
-              </button>
-
-              {/* 1-click cite search center bookmarks */}
-              <button
-                type="button"
-                onClick={() => setActivePicker('bookmark')}
-                className="px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-800 text-xs font-semibold flex items-center space-x-1.5 shadow-2xs"
-              >
-                <Globe className="w-3.5 h-3.5 text-sky-600" />
-                <span>一键引用搜索中心网站</span>
-              </button>
-
-              {/* 1-click insert Media Library File */}
-              <button
-                type="button"
-                onClick={() => setActivePicker('media')}
-                className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center space-x-1.5 shadow-2xs"
-              >
-                <Film className="w-3.5 h-3.5 text-amber-600" />
-                <span>一键插入媒体影音文件</span>
-              </button>
-            </div>
-          </div>
-
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">
               文章正文 (支持 Markdown 排版)
             </label>
             <textarea
-              rows="8"
+              rows="7"
               required
-              placeholder="落墨成文，言由心生... 支持自由编写、编辑与插入多媒体"
+              placeholder="落墨成文，言由心生... 支持自由编写与排版"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-mono leading-relaxed"
             />
+          </div>
+
+          {/* 博客配图区 (置于博文正文下方) */}
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <ImageIcon className="w-4 h-4 text-emerald-600" />
+                <span className="text-xs font-bold text-slate-800">博客配图区 ({articleImages.length} 张配图)</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <label className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-xs">
+                  <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>上传本地图片</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleUploadArticleImage}
+                    className="hidden"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsPhotoPickerOpen(true)}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>转贴相册图片</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 配图缩略图列表与删除 */}
+            {articleImages && articleImages.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                {articleImages.map((img, idx) => (
+                  <div key={img.id || idx} className="relative group rounded-xl overflow-hidden border border-slate-200 bg-white aspect-video shadow-2xs">
+                    <img src={img.url} alt={img.title || '配图'} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveArticleImage(idx)}
+                      className="absolute top-1 right-1 p-1 rounded-full bg-rose-600 text-white opacity-80 hover:opacity-100 cursor-pointer shadow-xs"
+                      title="删除配图"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                    {img.title && (
+                      <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1.5 py-0.5 truncate text-center">
+                        {img.title}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4 border-2 border-dashed border-slate-200 rounded-xl text-xs text-slate-400">
+                暂无配图，点击上方按钮上传本地图片或选择转贴相册图片
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
@@ -336,187 +303,51 @@ export default function NewArticleModal({
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-md flex items-center gap-2"
+              className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-md flex items-center gap-2 cursor-pointer"
             >
-              <Send className="w-4 h-4" />
-              <span>{initialData ? '保存修改' : '发表文章'}</span>
+              <span>{initialData ? '保存更新' : '发布文章'}</span>
             </button>
           </div>
         </form>
 
-        {/* Modal Pickers: Cloud Gallery Photos (支持从相册各文件夹中一键插入) */}
-        {activePicker === 'gallery' && (
+        {/* 转贴相册图片选择弹窗 */}
+        {isPhotoPickerOpen && (
           <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                 <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
                   <ImageIcon className="w-4 h-4 text-emerald-600" />
-                  <span>从云相册选择插入配图 ({photos.length} 张可用)</span>
+                  <span>选择相册图片转贴至配图区</span>
                 </h4>
                 <button
                   type="button"
-                  onClick={() => setActivePicker(null)}
+                  onClick={() => setIsPhotoPickerOpen(false)}
                   className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
 
-              <div className="overflow-y-auto flex-1 pr-1 grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="max-h-72 overflow-y-auto grid grid-cols-3 gap-2.5 p-1">
                 {photos.length === 0 ? (
-                  <div className="col-span-full py-12 text-center text-xs text-slate-400">
-                    云相册暂无照片，请先在「光影视界」相册中上传
-                  </div>
+                  <div className="col-span-3 py-8 text-center text-slate-400 text-xs">相册中暂无照片</div>
                 ) : (
                   photos.map((p) => (
                     <div
                       key={p.id}
-                      onClick={() => {
-                        insertTextAtCursor(`![${p.title}](${p.url})\n*图注: ${p.title} (${p.folder || p.category || '云相册'})*`);
-                        setActivePicker(null);
-                      }}
-                      className="group cursor-pointer rounded-2xl border border-slate-200 hover:border-emerald-500 overflow-hidden bg-slate-50 hover:shadow-md transition-all flex flex-col justify-between"
+                      onClick={() => handleSelectGalleryPhoto(p)}
+                      className="group relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 aspect-square cursor-pointer hover:border-emerald-500 transition-all"
                     >
-                      <div className="relative aspect-4/3 overflow-hidden bg-slate-100">
-                        <img
-                          src={p.url}
-                          alt={p.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                        <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-black/60 text-white text-[9px] font-semibold">
-                          {p.folder || p.category || '相册'}
-                        </span>
+                      <img src={p.url} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold">
+                        点击转贴
                       </div>
-                      <div className="p-2.5 space-y-1">
-                        <div className="font-bold text-xs text-slate-800 truncate">{p.title}</div>
-                        <div className="text-[10px] text-emerald-600 font-semibold flex items-center justify-between">
-                          <span>点击一键插入</span>
-                          <Check className="w-3 h-3" />
-                        </div>
+                      <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[9px] px-1 py-0.5 truncate text-center">
+                        {p.title}
                       </div>
                     </div>
                   ))
                 )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal Pickers: NetDrive Files */}
-        {activePicker === 'cloud' && (
-          <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
-                  <HardDrive className="w-4 h-4 text-emerald-600" />
-                  <span>选择网盘与多云调度中枢文件</span>
-                </h4>
-                <button onClick={() => setActivePicker(null)} className="text-slate-400 hover:text-slate-600 text-sm font-bold">✕</button>
-              </div>
-
-              <div className="max-h-72 overflow-y-auto space-y-2">
-                {cloudFiles.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-6 text-center">调度中枢暂无文件，可在网盘选区新增</p>
-                ) : (
-                  cloudFiles.map((file) => (
-                    <div
-                      key={file.id}
-                      onClick={() => handleSelectCloudFile(file)}
-                      className="p-3 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 cursor-pointer flex items-center justify-between transition-all"
-                    >
-                      <div>
-                        <div className="font-semibold text-xs text-slate-800 truncate max-w-[280px]">{file.name}</div>
-                        <div className="text-[10px] text-slate-400">{file.provider} · {file.size}</div>
-                      </div>
-                      <span className="text-xs text-emerald-600 font-semibold flex items-center">
-                        选择插入 <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal Pickers: Search Center Bookmarks */}
-        {activePicker === 'bookmark' && (
-          <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
-                  <Globe className="w-4 h-4 text-sky-600" />
-                  <span>选择引用搜索中心保存的网站</span>
-                </h4>
-                <button onClick={() => setActivePicker(null)} className="text-slate-400 hover:text-slate-600 text-sm font-bold">✕</button>
-              </div>
-
-              <div className="max-h-72 overflow-y-auto space-y-2">
-                {bookmarks.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-6 text-center">暂无保存的网站书签</p>
-                ) : (
-                  bookmarks.map((bm) => (
-                    <div
-                      key={bm.id}
-                      onClick={() => handleSelectBookmark(bm)}
-                      className="p-3 rounded-xl border border-slate-200 hover:border-sky-500 hover:bg-sky-50/50 cursor-pointer flex items-center justify-between transition-all"
-                    >
-                      <div>
-                        <div className="font-semibold text-xs text-slate-800">{bm.title}</div>
-                        <div className="text-[10px] text-slate-400 truncate max-w-[280px]">{bm.url}</div>
-                      </div>
-                      <span className="text-xs text-sky-600 font-semibold flex items-center">
-                        引用网址 <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal Pickers: Media Center Files */}
-        {activePicker === 'media' && (
-          <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <h4 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
-                  <Film className="w-4 h-4 text-amber-600" />
-                  <span>选择媒体影音中心保存的文件</span>
-                </h4>
-                <button onClick={() => setActivePicker(null)} className="text-slate-400 hover:text-slate-600 text-sm font-bold">✕</button>
-              </div>
-
-              <div className="max-h-72 overflow-y-auto space-y-2">
-                {[
-                  { title: '白狐博客宣传片 · 竖屏与横屏全适配演示', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', type: 'video' },
-                  { title: '极速边缘 · 手机短视频竖屏演示 (9:16 沉浸画幅)', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', type: 'video' },
-                  { title: '东方风韵 · 宽荧幕电影感演示 (21:9 超宽屏)', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4', type: 'video' },
-                  { title: '青丘幽引 · 东方禅意氛围原声曲', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', type: 'audio' },
-                  { title: '白狐技术电台: 从单体到多云全球边缘架构', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3', type: 'audio' },
-                ].map((item, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => {
-                      if (item.type === 'video') {
-                        insertTextAtCursor(`🎬 [媒体影音: ${item.title}](${item.url})`);
-                      } else {
-                        insertTextAtCursor(`🎵 [媒体原声: ${item.title}](${item.url})`);
-                      }
-                      setActivePicker(null);
-                    }}
-                    className="p-3 rounded-xl border border-slate-200 hover:border-amber-500 hover:bg-amber-50/50 cursor-pointer flex items-center justify-between transition-all"
-                  >
-                    <div>
-                      <div className="font-semibold text-xs text-slate-800">{item.title}</div>
-                      <div className="text-[10px] text-slate-400">{item.type === 'video' ? '高清视频' : '原声音频'}</div>
-                    </div>
-                    <span className="text-xs text-amber-600 font-semibold flex items-center">
-                      插入媒体 <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                    </span>
-                  </div>
-                ))}
               </div>
             </div>
           </div>

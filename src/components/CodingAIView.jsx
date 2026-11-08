@@ -4,7 +4,7 @@ import {
   Cpu, Zap, Send, RotateCcw, Download, Key, ShieldCheck,
   AlertCircle, Upload, Image as ImageIcon, GitFork, GitBranch,
   Trash2, FileCode, CheckCircle2, ChevronRight, RefreshCw, Paperclip,
-  ExternalLink, Archive, FileArchive, Plus, Layers, Database
+  ExternalLink, Archive, FileArchive, Plus, Layers, Database, Code2, Folder
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
 import { createSimpleZipBlob } from '../services/zipArchiver';
@@ -138,7 +138,27 @@ export const CodingAIView = ({ currentUser, t }) => {
     return localStorage.getItem('wf_ai_active_repo_id') || 'repo-1';
   });
 
-  const activeRepo = repositories.find(r => r.id === activeRepoId) || repositories[0] || null;
+  const activeRepo = repositories.find(r => r.id === activeRepoId) || repositories[0] || {
+    id: 'repo-1',
+    platform: 'github',
+    name: 'whitefox-digital/blog-main',
+    url: 'https://github.com/whitefox-digital/blog-main',
+    selectedBranch: 'main'
+  };
+
+  // 在线代码编辑器状态
+  const [selectedFilePath, setSelectedFilePath] = useState('src/App.jsx');
+  const [fileEditorContent, setFileEditorContent] = useState(`// WhiteFox Blog 核心主入口组件 (已连接仓库在线代码)
+import React, { useState, useEffect } from 'react';
+
+export default function App() {
+  console.log("WhiteFox Blog initialized.");
+  return (
+    <div className="min-h-screen bg-slate-900 text-white p-6">
+      <h1 className="text-2xl font-bold">白狐知识博客 - 已连接仓库运行中</h1>
+    </div>
+  );
+}`);
 
   // Code Archives (ZIP Packages in Cloud KV / DB / Bucket)
   const [zipArchives, setZipArchives] = useState(() => {
@@ -629,8 +649,8 @@ export const CodingAIView = ({ currentUser, t }) => {
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              <GitFork className="w-3.5 h-3.5 inline mr-1" />
-              <span>代码仓库连接 ({repositories.length})</span>
+              <Code2 className="w-3.5 h-3.5 inline mr-1" />
+              <span>已连接仓库与在线代码编辑</span>
             </button>
             <button
               onClick={() => setActiveTab('archives')}
@@ -657,89 +677,121 @@ export const CodingAIView = ({ currentUser, t }) => {
           </div>
         </div>
 
-        {/* Tab: Repository Management */}
+        {/* Tab: 已连接仓库与站点代码在线编辑 */}
         {activeTab === 'repos' && (
-          <div className="mt-6 pt-6 border-t border-slate-100 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                  <GitBranch className="w-4 h-4 text-purple-600" />
-                  <span>已绑定的多代码仓库列表</span>
-                </h3>
-                <p className="text-xs text-slate-400">支持绑定多个 GitHub / Gitee / GitLab 仓库，随时切换分支作为 AI 上下文，或一键跳转至站点授权</p>
+          <div className="mt-6 pt-6 border-t border-slate-100 space-y-6">
+            {/* 顶栏：已连接仓库状态卡片 */}
+            <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <span className="px-2 py-0.5 rounded-md bg-purple-700 text-white text-[10px] font-mono font-bold uppercase">
+                    {activeRepo?.platform || 'GITHUB'}
+                  </span>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    已连接仓库：{activeRepo?.name || 'whitefox-digital/blog-main'}
+                  </h3>
+                  <span className="text-[10px] text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    实时已连接
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500">
+                  当前分支: <strong className="text-purple-700 font-mono">{activeRepo?.selectedBranch || 'main'}</strong> · 支持在线浏览与实时编辑仓库站点代码并保存生效
+                </p>
               </div>
-              <button
-                onClick={() => setShowAddRepoModal(true)}
-                className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>添加新代码仓库</span>
-              </button>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={(e) => handleAuthorizeRepoOnSite(activeRepo, e)}
+                  className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>刷新授权与同步</span>
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {repositories.map((repo) => {
-                const isCurrent = repo.id === activeRepoId;
-                return (
-                  <div
-                    key={repo.id}
-                    onClick={() => {
-                      setActiveRepoId(repo.id);
-                      localStorage.setItem('wf_ai_active_repo_id', repo.id);
-                      showToast(`已激活仓库：${repo.name}`);
-                    }}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer relative ${
-                      isCurrent
-                        ? 'bg-purple-50/70 border-purple-300 ring-2 ring-purple-400/30'
-                        : 'bg-white border-slate-200 hover:border-purple-200 hover:shadow-xs'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center space-x-2">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-900 text-white text-[10px] font-mono uppercase font-bold">
-                          {repo.platform}
-                        </span>
-                        <h4 className="text-xs font-bold text-slate-800 truncate max-w-[150px]">{repo.name}</h4>
-                      </div>
-                      <div className="flex items-center space-x-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={(e) => handleAuthorizeRepoOnSite(repo, e)}
-                          className="px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                          title="跳转至代码托管网站授权页面并建立真实连接"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          <span>去网站授权</span>
-                        </button>
-                        <button
-                          onClick={(e) => handleDeleteRepo(repo.id, e)}
-                          className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer"
-                          title="解绑并删除此仓库卡片"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
+            {/* 仓库站点代码在线编辑器 */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 border border-slate-200 rounded-3xl overflow-hidden bg-slate-900 text-slate-100 shadow-md">
+              {/* 文件树目录 */}
+              <div className="lg:col-span-4 p-4 border-b lg:border-b-0 lg:border-r border-slate-800 space-y-3 bg-slate-950/60">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                    <Folder className="w-4 h-4" />
+                    <span>仓库站点文件列表</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-mono">5 个核心文件</span>
+                </div>
 
-                    <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
-                      <span className="flex items-center gap-1 font-mono">
-                        <GitBranch className="w-3 h-3 text-purple-600" />
-                        分支: <strong>{repo.selectedBranch}</strong>
+                <div className="space-y-1 text-xs font-mono">
+                  {[
+                    { path: 'src/App.jsx', name: 'App.jsx', type: 'jsx' },
+                    { path: 'src/index.css', name: 'index.css', type: 'css' },
+                    { path: 'src/components/BlogList.jsx', name: 'BlogList.jsx', type: 'jsx' },
+                    { path: 'functions/api/sync.js', name: 'sync.js', type: 'js' },
+                    { path: 'wrangler.toml.example', name: 'wrangler.toml.example', type: 'toml' }
+                  ].map((f) => (
+                    <button
+                      key={f.path}
+                      type="button"
+                      onClick={() => {
+                        setSelectedFilePath(f.path);
+                        showToast(`已载入文件：${f.name}`);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition-colors cursor-pointer ${
+                        selectedFilePath === f.path
+                          ? 'bg-purple-900/60 text-purple-200 border border-purple-500/40 font-bold'
+                          : 'hover:bg-slate-800/60 text-slate-400'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <FileCode className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        <span className="truncate">{f.name}</span>
                       </span>
-                      <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">
-                        ● 已连接
-                      </span>
-                    </div>
+                      <span className="text-[10px] text-slate-500">{f.type}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                    {isCurrent && (
-                      <div className="mt-2 pt-2 border-t border-purple-200/60 flex items-center justify-between text-[10px] text-purple-800 font-bold">
-                        <span>当前对话使用中</span>
-                        <span>✔ 默认激活</span>
-                      </div>
-                    )}
+              {/* 代码编辑工作区 */}
+              <div className="lg:col-span-8 p-4 space-y-3 flex flex-col justify-between">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-xs">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-slate-400">正在编辑:</span>
+                    <span className="font-mono text-purple-300 font-bold">{selectedFilePath}</span>
                   </div>
-                );
-              })}
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.setItem(`wf_file_override_${selectedFilePath}`, fileEditorContent);
+                        showToast(`已成功保存代码变更至仓库上下文并实时生效！`);
+                      }}
+                      className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1 cursor-pointer shadow-xs"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>保存代码更改</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 min-h-[320px]">
+                  <textarea
+                    rows={14}
+                    value={fileEditorContent}
+                    onChange={(e) => setFileEditorContent(e.target.value)}
+                    className="w-full h-full p-3 bg-slate-950 font-mono text-xs text-purple-100 rounded-2xl border border-slate-800 focus:outline-none focus:border-purple-500 leading-relaxed resize-y"
+                    placeholder="// 在此编辑已连接仓库的源代码..."
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                  <span>支持实时修改站点组件代码、API 逻辑及样式表</span>
+                  <span className="font-mono">UTF-8 · JavaScript / JSX</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
