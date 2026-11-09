@@ -1,5 +1,5 @@
 # 白狐 (WhiteFox) 博客系统
-
+代码有问题，有待修复
 > 🦊 东方美学设计 · 极简敏捷 · 翡翠绿与纯白质感 · 多云边缘计算知识空间
 
 [![Vite](https://img.shields.io/badge/Vite-6.x-646CFF?logo=vite)](https://vitejs.dev/)
