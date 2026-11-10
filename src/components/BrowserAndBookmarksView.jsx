@@ -25,7 +25,7 @@ export const BrowserAndBookmarksView = ({
   const [newCategory, setNewCategory] = useState('tech');
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [proxyMode, setProxyMode] = useState('auto'); // 'auto' | 'custom' | 'corsproxy' | 'allorigins' | 'direct'
+  const [proxyMode, setProxyMode] = useState('auto'); // 'auto' | 'mirror' | 'custom' | 'corsproxy' | 'allorigins' | 'direct'
   const [customProxyDomain, setCustomProxyDomain] = useState(() => searchProxy?.customDomain || '');
   const [showProxyConfig, setShowProxyConfig] = useState(false);
 
@@ -47,8 +47,10 @@ export const BrowserAndBookmarksView = ({
     const isUrl = /^(https?:\/\/|[a-zA-Z0-9-]+\.[a-zA-Z]{2,})/.test(clean);
 
     if (!isUrl) {
-      // It's a Google search query!
-      // igu=1 allows Google search in iframe, plus proxy bypasses GFW in China
+      // 中国大陆高可用 Google 搜索优化处理
+      if (mode === 'mirror') {
+        return `https://html.duckduckgo.com/html/?q=${encodeURIComponent(clean)}`;
+      }
       actualTarget = `https://www.google.com/search?q=${encodeURIComponent(clean)}&igu=1`;
     } else {
       if (!actualTarget.startsWith('http://') && !actualTarget.startsWith('https://')) {
@@ -63,17 +65,17 @@ export const BrowserAndBookmarksView = ({
       return actualTarget;
     }
 
-    // Resilient domestic direct proxy gateways for China Mainland:
-    // 1. Google igu=1 parameter enables frame rendering and bypasses standard frame restriction
-    if (actualTarget.includes('google.com') && actualTarget.includes('igu=1')) {
-      return actualTarget;
+    // 中国大陆免代理专线加速优化：
+    // 1. Google igu=1 内嵌参数支持
+    if (actualTarget.includes('google.com')) {
+      const glue = actualTarget.includes('?') ? '&' : '?';
+      const targetWithIgu = actualTarget.includes('igu=1') ? actualTarget : `${actualTarget}${glue}igu=1`;
+      if (mode === 'auto') {
+        return targetWithIgu;
+      }
     }
 
-    if (actualTarget.includes('google.com') && !actualTarget.includes('igu=1')) {
-      return actualTarget.includes('?') ? `${actualTarget}&igu=1` : `${actualTarget}?igu=1`;
-    }
-
-    // 2. Custom Domain Proxy Gateway (自定义域名反代专线: 如 proxy.yourdomain.com/proxy?url=...)
+    // 2. Custom Domain Proxy Gateway (自定义反代专线)
     if (mode === 'custom' || (customProxyDomain && customProxyDomain.trim())) {
       let baseDomain = customProxyDomain.trim();
       if (!baseDomain.startsWith('http://') && !baseDomain.startsWith('https://')) {
@@ -83,13 +85,13 @@ export const BrowserAndBookmarksView = ({
       return `${baseDomain}/api/proxy?url=${encodeURIComponent(actualTarget)}`;
     }
 
-    // 3. Multi-tier Anycast / Edge proxies with domestic fallback (corsproxy, allorigins, cf-worker)
-    if (mode === 'corsproxy') {
-      return `https://corsproxy.io/?${encodeURIComponent(actualTarget)}`;
-    } else if (mode === 'allorigins') {
+    // 3. Multi-tier Anycast / Edge proxies with domestic fallback
+    if (mode === 'allorigins') {
       return `https://api.allorigins.win/raw?url=${encodeURIComponent(actualTarget)}`;
+    } else if (mode === 'corsproxy') {
+      return `https://corsproxy.io/?${encodeURIComponent(actualTarget)}`;
     } else {
-      // Auto adaptive mode: use corsproxy or direct Google frame
+      // 默认 auto 智能路由
       return `https://corsproxy.io/?${encodeURIComponent(actualTarget)}`;
     }
   };

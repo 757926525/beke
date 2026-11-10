@@ -68,12 +68,33 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
   const handleDownloadBook = async (book, e) => {
     if (e) e.stopPropagation();
     try {
-      // 1. If remote fileUrl exists, open or stream download
+      const formatExt = (book.format || 'TXT').toLowerCase();
+      const filename = `${book.title}_白狐书架.${formatExt}`;
+
+      // 1. If remote fileUrl exists, use streaming fetch download
       if (book.fileUrl && !book.fileUrl.startsWith('data:')) {
-        const downloadUrl = book.fileUrl.includes('?') ? `${book.fileUrl}&download=1` : `${book.fileUrl}?download=1`;
-        window.open(downloadUrl, '_blank');
-        showToast(`已开始从云端对象存储极速流式下载《${book.title}》！`);
-        return;
+        showToast(`正在从对象存储极速下载《${book.title}》...`);
+        try {
+          const res = await fetch(book.fileUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+            showToast(`已成功下载《${book.title}》！`);
+            return;
+          }
+        } catch (fetchErr) {
+          // fallback to direct link
+          window.open(book.fileUrl, '_blank');
+          showToast(`已触发极速下载《${book.title}》！`);
+          return;
+        }
       }
 
       // 2. Text/chapters fallback export
@@ -86,8 +107,7 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
         bookText += book.content;
       }
 
-      const formatExt = (book.format || 'TXT').toLowerCase();
-      downloadFile(bookText, `${book.title}_白狐书架.${formatExt}`, 'text/plain;charset=utf-8');
+      downloadFile(bookText, filename, 'text/plain;charset=utf-8');
       showToast(`《${book.title}》已成功开始下载！`);
     } catch (err) {
       console.error(err);
@@ -347,6 +367,7 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
         cover: bookForm.cover,
         chapters: chapters,
         totalChapters: chapters.length,
+        fileUrl: bookForm.fileUrl || b.fileUrl || '',
         vaultId: bookForm.vaultId || b.vaultId,
         fileExt: bookForm.fileExt || b.fileExt || bookFormat.toLowerCase()
       } : b));
@@ -367,6 +388,7 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
         description: bookForm.description || `用户上传入库的 ${bookFormat} 藏书。`,
         dateAdded: new Date().toISOString().split('T')[0],
         chapters: chapters,
+        fileUrl: bookForm.fileUrl || '',
         vaultId: bookForm.vaultId,
         fileExt: bookForm.fileExt || bookFormat.toLowerCase()
       };

@@ -137,11 +137,41 @@ export function resolveKernelMediaUrl(rawUrl) {
   return rawUrl;
 }
 
+/**
+ * 统一快速触发流式文件下载 (支持 Blob 与安全直链)
+ */
+export async function downloadFileFromKernel(url, filename = 'downloaded_file') {
+  if (!url) return;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+  } catch (err) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+}
+
 export default {
   STORAGE_LIMITS,
   KERNEL_FALLBACK_IMAGE,
   KERNEL_FALLBACK_AVATAR,
   handleKernelImageError,
   uploadViaKernel,
-  resolveKernelMediaUrl
+  resolveKernelMediaUrl,
+  downloadFileFromKernel
 };

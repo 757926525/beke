@@ -156,17 +156,37 @@ export const MediaPlayerView = ({
     }
   };
 
-  // Download media file
-  const handleDownloadMedia = (m, e) => {
+  // Download media file (optimized with blob or direct download)
+  const handleDownloadMedia = async (m, e) => {
     if (e) e.stopPropagation();
-    const link = document.createElement('a');
-    link.href = m.url;
-    link.download = `${m.title}.${m.type === 'video' ? 'mp4' : 'mp3'}`;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast(`开始下载「${m.title}」！`);
+    const ext = m.type === 'video' ? 'mp4' : 'mp3';
+    const filename = `${m.title}.${ext}`;
+    showToast(`准备下载「${m.title}」...`);
+
+    try {
+      const res = await fetch(m.url);
+      if (!res.ok) throw new Error('网络请求异常');
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+      showToast(`已成功下载「${filename}」！`);
+    } catch (err) {
+      const link = document.createElement('a');
+      link.href = m.url;
+      link.download = filename;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast(`已触发下载「${filename}」！`);
+    }
   };
 
   return (
@@ -225,16 +245,6 @@ export const MediaPlayerView = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* 1-click Transfer button */}
-            <button
-              onClick={(e) => handleTransferToStorage(activeMedia, e)}
-              className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
-              title="转存到站内存储池与调度中枢"
-            >
-              <FolderInput className="w-3.5 h-3.5 text-emerald-600" />
-              <span>一键转存到站内</span>
-            </button>
-
             {/* Aspect Ratio Switcher Pills */}
             <div className="flex flex-wrap items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/80">
               <span className="text-[10px] font-bold text-slate-400 px-2 uppercase">画幅调节:</span>
@@ -389,16 +399,9 @@ export const MediaPlayerView = ({
                   {/* Management Buttons */}
                   <div className="flex items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
                     <button
-                      onClick={(e) => handleTransferToStorage(m, e)}
-                      className="p-1 rounded-lg hover:bg-emerald-50 text-slate-500 hover:text-emerald-700 cursor-pointer"
-                      title="一键转存到站内"
-                    >
-                      <FolderInput className="w-3.5 h-3.5" />
-                    </button>
-                    <button
                       onClick={(e) => handleDownloadMedia(m, e)}
                       className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-emerald-600 cursor-pointer"
-                      title="下载本地媒体"
+                      title="下载媒体文件"
                     >
                       <Download className="w-3.5 h-3.5" />
                     </button>

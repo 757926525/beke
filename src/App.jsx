@@ -957,22 +957,6 @@ export function App() {
             />
           )}
 
-          {activeTab === 'cloud' && (
-            <NetDriveView
-              cloudConfig={cloudConfig}
-              setCloudConfig={setCloudConfig}
-              cloudFiles={cloudFiles.filter((f) => !f.deleted)}
-              setCloudFiles={(newFilesOrFn) => {
-                const updated = typeof newFilesOrFn === 'function' ? newFilesOrFn(cloudFiles) : newFilesOrFn;
-                setCloudFiles((updated || []).map((f) => ({ ...f, updatedAt: f.updatedAt || Date.now(), deleted: Boolean(f.deleted) })));
-              }}
-              currentUser={currentUser}
-              isAdmin={currentUser?.role === 'admin'}
-              backendConfig={backendConfig}
-              t={t}
-            />
-          )}
-
           {activeTab === 'download' && (
             <DownloaderView currentUser={currentUser} t={t} />
           )}
@@ -999,16 +983,6 @@ export function App() {
                 const updated = typeof newMediaOrFn === 'function' ? newMediaOrFn(mediaList) : newMediaOrFn;
                 setMediaList((updated || []).map((m) => ({ ...m, updatedAt: m.updatedAt || Date.now(), deleted: Boolean(m.deleted) })));
               }}
-              cloudFiles={cloudFiles.filter((f) => !f.deleted)}
-              setCloudFiles={setCloudFiles}
-              t={t}
-            />
-          )}
-
-          {activeTab === 'admin-portal' && currentUser?.role === 'admin' && (
-            <AdminFileAndPortalView
-              currentUser={currentUser}
-              isAdmin={currentUser?.role === 'admin'}
               cloudFiles={cloudFiles.filter((f) => !f.deleted)}
               setCloudFiles={setCloudFiles}
               t={t}

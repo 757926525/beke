@@ -218,18 +218,7 @@ export default function BlogView({
               </div>
 
               {/* Footer Actions */}
-              <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleNetDriveSave(article)}
-                    title="一键转存至网盘指定文件夹"
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors flex items-center gap-1"
-                  >
-                    <UploadCloud className="w-3.5 h-3.5" />
-                    <span>存入网盘</span>
-                  </button>
-                </div>
-
+              <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-end text-xs">
                 <button
                   onClick={() => setActiveArticle(article)}
                   className="font-semibold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1"
@@ -302,13 +291,6 @@ export default function BlogView({
                 <span>{activeArticle.isBookmarked ? '已收藏到白狐' : '一键收藏文章'}</span>
               </button>
 
-              <button
-                onClick={() => handleNetDriveSave(activeArticle)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 transition-colors"
-              >
-                <UploadCloud className="w-4 h-4" />
-                <span>一键转存至网盘</span>
-              </button>
             </div>
 
             {/* Markdown-like article body */}
