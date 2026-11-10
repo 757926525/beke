@@ -4,6 +4,7 @@ import {
   Download, Cloud, Shield, Moon, Sun, LogIn, LogOut,
   ChevronDown, ChevronUp, Rocket
 } from 'lucide-react';
+import { handleImageError } from '../services/utils';
 
 export const Navbar = ({
   siteName = 'fox',
@@ -58,7 +59,7 @@ export const Navbar = ({
           >
             <div className="w-10 h-10 rounded-2xl overflow-hidden shadow-xs flex items-center justify-center transition-transform group-hover:scale-105 border border-slate-200 bg-emerald-50">
               {avatarImage ? (
-                <img src={avatarImage} alt="Avatar" className="w-full h-full object-cover" />
+                <img src={avatarImage} alt="Avatar" onError={handleImageError} className="w-full h-full object-cover" />
               ) : (
                 <span className="text-xl">🦊</span>
               )}
@@ -118,7 +119,7 @@ export const Navbar = ({
                 >
                   <div className="w-8 h-8 rounded-full overflow-hidden border border-emerald-400/60 bg-emerald-100 flex items-center justify-center text-xs font-bold text-emerald-800">
                     {avatarImage ? (
-                      <img src={avatarImage} alt="Avatar" className="w-full h-full object-cover" />
+                      <img src={avatarImage} alt="Avatar" onError={handleImageError} className="w-full h-full object-cover" />
                     ) : (
                       currentUser.username[0]?.toUpperCase() || '狐'
                     )}

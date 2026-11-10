@@ -1,5 +1,6 @@
 import React from 'react';
 import { ExternalLink, Play, Music, Film, FileText, Download } from 'lucide-react';
+import { handleImageError } from '../services/utils';
 
 /**
  * RichContentRenderer parses markdown and rich embedded blocks:
@@ -81,6 +82,8 @@ export const RichContentRenderer = ({ content = '' }) => {
                 <img
                   src={url}
                   alt={alt}
+                  loading="lazy"
+                  onError={handleImageError}
                   className="w-full max-h-[500px] object-contain mx-auto"
                 />
               </div>

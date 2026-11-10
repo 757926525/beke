@@ -19,6 +19,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
+import { handleImageError } from '../services/utils';
 
 export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
@@ -354,6 +355,8 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
               <img
                 src={photo.url}
                 alt={photo.title}
+                loading="lazy"
+                onError={handleImageError}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2.5 sm:p-4">
@@ -513,6 +516,7 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
             <img
               src={selectedPhoto.url}
               alt={selectedPhoto.title}
+              onError={handleImageError}
               className="max-h-[75vh] w-auto max-w-full rounded-2xl object-contain shadow-2xl"
             />
             <div className="mt-4 text-center text-white space-y-1">

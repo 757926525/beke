@@ -7,6 +7,7 @@ import {
 import { generateDocxBlob, downloadFile } from '../services/documentConverter';
 import { RichContentRenderer } from './RichContentRenderer';
 import NewArticleModal from './NewArticleModal';
+import { handleImageError } from '../services/utils';
 
 export const BlogPostView = ({
   post,
@@ -216,7 +217,7 @@ export const BlogPostView = ({
         {/* Cover */}
         {post.cover && (
           <div className="rounded-2xl overflow-hidden aspect-[16/9] max-h-96 w-full shadow-inner bg-slate-100">
-            <img src={post.cover} alt={post.title} className="w-full h-full object-cover" />
+            <img src={post.cover} alt={post.title} onError={handleImageError} className="w-full h-full object-cover" />
           </div>
         )}
 

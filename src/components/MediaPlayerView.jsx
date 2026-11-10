@@ -1,9 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Play, Pause, RotateCcw, Volume2, Maximize, Smartphone, Monitor, Film, Music,
   Upload, Trash2, Plus, Download, CheckCircle2, Video, Radio, Layers, Eye, RefreshCw,
   FolderInput, HardDrive, Check
 } from 'lucide-react';
+import { handleImageError } from '../services/utils';
+import { uploadViaKernel } from '../services/mediaStorageKernel';
 
 export const MediaPlayerView = ({
   currentUser,
@@ -19,6 +21,7 @@ export const MediaPlayerView = ({
   const videoRef = useRef(null);
   const audioRef = useRef(null);
   const [toastMessage, setToastMessage] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   const [activeMedia, setActiveMedia] = useState(mediaList[0] || {
     id: 'm-default',
@@ -68,73 +71,63 @@ export const MediaPlayerView = ({
     }
   };
 
-  // Local media file upload - converts to Base64 data URL for small files, or object URL with localStorage sync
-  const handleLocalMediaUpload = (e) => {
+  // 接入统一调度内核上传音视频 (规范云架构，拒绝未绑定桶时的本地大文件干扰)
+  const handleLocalMediaUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const isVideo = file.type.startsWith('video');
-    const isAudio = file.type.startsWith('audio');
+    const isVideo = file.type.startsWith('video') || /\.(mp4|webm|mov|mkv|avi|m4v)$/i.test(file.name);
+    const isAudio = file.type.startsWith('audio') || /\.(mp3|wav|ogg|flac|m4a|aac)$/i.test(file.name);
 
     if (!isVideo && !isAudio) {
-      showToast('请选择有效的音视频文件（MP4、WebM、MP3、FLAC等）！');
+      showToast('请选择有效的音视频文件（MP4、WebM、MOV、MP3、FLAC等）！');
+      e.target.value = '';
       return;
     }
 
-    const sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    const sizeStr = `${sizeMb} MB`;
+    const mediaId = `media-${Date.now()}`;
 
-    // If file is reasonably sized, read as data URL for permanent persistence
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target.result;
+    setIsUploading(true);
+    showToast(`正在通过统一调度内核上传「${file.name}」(${sizeStr})...`);
+
+    try {
+      const uploadRes = await uploadViaKernel(file, { folder: 'media' });
+      const playableUrl = uploadRes.url;
+
       const newMediaItem = {
-        id: `media-${Date.now()}`,
+        id: mediaId,
         title: file.name.replace(/\.[^/.]+$/, ''),
-        desc: `本地上传的${isVideo ? '视频' : '音频'}媒体文件 (${sizeStr})`,
+        desc: `已入库的${isVideo ? '视频' : '音频'}媒体 (${sizeStr})`,
         type: isVideo ? 'video' : 'audio',
         aspect: isVideo ? '16:9' : '1:1',
-        url: dataUrl,
+        url: playableUrl,
         poster: isVideo
           ? 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80'
           : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
-        duration: '本地流',
+        duration: '对象存储流',
         size: sizeStr,
         date: new Date().toISOString().split('T')[0],
         uploadedBy: currentUser?.username || '用户',
         userId: currentUser?.id || 'guest',
-        isLocalUpload: true
+        isLocalUpload: false,
+        updatedAt: Date.now(),
+        deleted: false
       };
 
       const updated = [newMediaItem, ...mediaList];
       setMediaList(updated);
       setActiveMedia(newMediaItem);
       if (isVideo) setAspectRatio('16:9');
-      showToast(`本地媒体「${file.name}」已持久保存入库，刷新页面不丢失！`);
-    };
-
-    reader.onerror = () => {
-      // Fallback to object URL
-      const objectUrl = URL.createObjectURL(file);
-      const fallbackItem = {
-        id: `media-${Date.now()}`,
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        desc: `本地上传的${isVideo ? '视频' : '音频'}媒体文件 (${sizeStr})`,
-        type: isVideo ? 'video' : 'audio',
-        aspect: isVideo ? '16:9' : '1:1',
-        url: objectUrl,
-        poster: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80',
-        duration: '本地流',
-        size: sizeStr,
-        date: new Date().toISOString().split('T')[0],
-        isLocalUpload: true
-      };
-      setMediaList([fallbackItem, ...mediaList]);
-      setActiveMedia(fallbackItem);
-      showToast(`本地媒体「${file.name}」载入就绪！`);
-    };
-
-    reader.readAsDataURL(file);
-    e.target.value = '';
+      showToast(`媒体「${file.name}」已规范入库对象存储！`);
+    } catch (err) {
+      console.warn('Media upload prevented or failed:', err.message);
+      showToast(err.message || '上传存储失败，请重试');
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
+    }
   };
 
   // Permission helper: admin can manage all, user can manage own uploaded media
@@ -303,6 +296,7 @@ export const MediaPlayerView = ({
                   <img
                     src={activeMedia.poster}
                     alt={activeMedia.title}
+                    onError={handleImageError}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-emerald-950/40 backdrop-blur-xs flex items-center justify-center">
@@ -360,6 +354,8 @@ export const MediaPlayerView = ({
                     <img
                       src={m.poster}
                       alt={m.title}
+                      loading="lazy"
+                      onError={handleImageError}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">

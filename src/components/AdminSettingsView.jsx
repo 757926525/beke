@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { themePresets, languages } from '../services/i18nAndTheme';
 import { layoutOptions, fontSizes, getDeploymentAdminCredentials } from '../services/storageService';
+import { handleImageError } from '../services/utils';
 
 export const AdminSettingsView = ({
   siteName,
@@ -1329,6 +1330,7 @@ export const AdminSettingsView = ({
                   <img
                     src={appearance.avatarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=100&q=80'}
                     alt="Avatar Preview"
+                    onError={handleImageError}
                     className="w-10 h-10 rounded-2xl object-cover border border-slate-200 shadow-xs shrink-0"
                   />
                   <input
@@ -1370,6 +1372,7 @@ export const AdminSettingsView = ({
                   <img
                     src={appearance.heroImage || 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=100&q=80'}
                     alt="Hero Preview"
+                    onError={handleImageError}
                     className="w-10 h-10 rounded-2xl object-cover border border-slate-200 shadow-xs shrink-0"
                   />
                   <input

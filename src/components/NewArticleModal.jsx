@@ -3,6 +3,7 @@ import {
   X, Image as ImageIcon, Video, Music, Tag, Send, HardDrive,
   Globe, Film, Upload, Check, ChevronRight, FileText
 } from 'lucide-react';
+import { handleImageError } from '../services/utils';
 
 export default function NewArticleModal({
   isOpen,
@@ -335,6 +336,7 @@ export default function NewArticleModal({
                         <img
                           src={p.url}
                           alt={p.title}
+                          onError={handleImageError}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                         />
                         <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-black/60 text-white text-[9px] font-semibold">
