@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { downloadFile } from '../services/documentConverter';
 import { handleImageError } from '../services/utils';
-import { saveVaultFile, getVaultFile, deleteVaultFile } from '../services/indexedDbVault';
+import { uploadViaKernel } from '../services/mediaStorageKernel';
 
 export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
   const [selectedBook, setSelectedBook] = useState(null);
@@ -68,18 +68,15 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
   const handleDownloadBook = async (book, e) => {
     if (e) e.stopPropagation();
     try {
-      // 1. If stored in IndexedDB Vault
-      if (book.vaultId) {
-        const fileRecord = await getVaultFile(book.vaultId);
-        if (fileRecord && fileRecord.blob) {
-          const ext = book.fileExt || book.format?.toLowerCase() || 'bin';
-          downloadFile(fileRecord.blob, `${book.title}_白狐藏书.${ext}`, fileRecord.type || 'application/octet-stream');
-          showToast(`《${book.title}》文件已从本地保险箱开始高速导出！`);
-          return;
-        }
+      // 1. If remote fileUrl exists, open or stream download
+      if (book.fileUrl && !book.fileUrl.startsWith('data:')) {
+        const downloadUrl = book.fileUrl.includes('?') ? `${book.fileUrl}&download=1` : `${book.fileUrl}?download=1`;
+        window.open(downloadUrl, '_blank');
+        showToast(`已开始从云端对象存储极速流式下载《${book.title}》！`);
+        return;
       }
 
-      // 2. If it's pure TXT or chapters
+      // 2. Text/chapters fallback export
       let bookText = `# ${book.title}\n作者：${book.author}\n分类：${book.category}\n\n简介：\n${book.description || ''}\n\n`;
       if (book.chapters && book.chapters.length > 0) {
         book.chapters.forEach((chap, idx) => {
@@ -115,9 +112,6 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
       return;
     }
     if (window.confirm(`确定要从白狐书架彻底删除《${title}》吗？`)) {
-      if (target?.vaultId) {
-        await deleteVaultFile(target.vaultId);
-      }
       setBooks(books.filter((b) => b.id !== id));
       if (selectedBook?.id === id) {
         setSelectedBook(null);
@@ -163,7 +157,7 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
     setIsModalOpen(true);
   };
 
-  // Local file upload parser supporting all formats (TXT, PDF, EPUB, MOBI, DOCX, etc.)
+  // 接入统一调度内核上传与解析电子书 (规范云架构)
   const handleLocalFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -173,36 +167,38 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
     const fileName = file.name.replace(/\.[^/.]+$/, '');
     const isTxt = ext === 'TXT' || file.type.includes('text');
 
-    // Store binary in IndexedDB Vault
-    const vaultId = `book-vault-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    await saveVaultFile(vaultId, file, { name: file.name, type: file.type, size: file.size });
+    try {
+      const uploadRes = await uploadViaKernel(file, { folder: 'books' });
+      const fileUrl = uploadRes.url;
 
-    if (isTxt) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const rawText = event.target.result;
+      if (isTxt) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const rawText = event.target.result;
+          setBookForm((prev) => ({
+            ...prev,
+            title: prev.title || fileName,
+            format: 'TXT',
+            fileUrl: fileUrl,
+            content: typeof rawText === 'string' ? rawText : '',
+            fileExt: 'txt'
+          }));
+          showToast(`已成功载入 TXT 文本「${file.name}」！`);
+        };
+        reader.readAsText(file);
+      } else {
         setBookForm((prev) => ({
           ...prev,
           title: prev.title || fileName,
-          format: 'TXT',
-          content: typeof rawText === 'string' ? rawText : '',
-          vaultId,
-          fileExt: 'txt'
+          format: ext,
+          fileUrl: fileUrl,
+          content: `【${ext} 电子书文档】\n已规范入库对象存储 (大小: ${(file.size / (1024 * 1024)).toFixed(2)} MB)。\n支持原格式流式下载与多设备同步阅读。`,
+          fileExt: ext.toLowerCase()
         }));
-        showToast(`已成功载入本地 TXT 文本「${file.name}」！`);
-      };
-      reader.readAsText(file);
-    } else {
-      // Non-TXT format (PDF, EPUB, MOBI, DOCX, etc.)
-      setBookForm((prev) => ({
-        ...prev,
-        title: prev.title || fileName,
-        format: ext,
-        content: `【${ext} 电子书文档】\n已安全存入本地高可用保险箱 (大小: ${(file.size / (1024 * 1024)).toFixed(2)} MB)。\n支持点击导出下载与外部阅读器打开。`,
-        vaultId,
-        fileExt: ext.toLowerCase()
-      }));
-      showToast(`已成功载入本地 ${ext} 文档「${file.name}」并存入本地保险箱！`);
+        showToast(`已成功入库 ${ext} 文档「${file.name}」！`);
+      }
+    } catch (err) {
+      showToast(err.message || '电子书上传失败');
     }
   };
 
@@ -230,8 +226,16 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
         const extMatch = file.name.match(/\.([^.]+)$/);
         const ext = extMatch ? extMatch[1].toUpperCase() : 'TXT';
         const isTxt = ext === 'TXT' || file.type.includes('text');
-        const vaultId = `book-vault-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-        await saveVaultFile(vaultId, file, { name: file.name, type: file.type, size: file.size });
+
+        let fileUrl = '';
+        let uploadWarning = '';
+        try {
+          const res = await uploadViaKernel(file, { folder: 'books' });
+          fileUrl = res.url;
+        } catch (uploadErr) {
+          uploadWarning = uploadErr.message;
+          console.warn('Batch upload info:', uploadErr.message);
+        }
 
         let chapters = [];
         let bookDesc = `批量上传导入的 ${ext} 电子书 (${file.name})。`;
@@ -260,7 +264,7 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
         } else {
           chapters = [{
             title: `全书概览 (${ext})`,
-            content: `【${ext} 格式原装文档】\n已持久化保存在白狐本地数字保险箱中。\n文件大小：${(file.size / (1024 * 1024)).toFixed(2)} MB。\n点击详情或下载按钮可随时导出原件。`
+            content: `【${ext} 格式原装文档】\n已规范入库对象存储。\n文件大小：${(file.size / (1024 * 1024)).toFixed(2)} MB。\n点击详情或下载按钮可随时导出原件。`
           }];
         }
 
@@ -275,10 +279,10 @@ export const BookshelfView = ({ books, setBooks, currentUser, isAdmin, t }) => {
           progress: 0,
           totalChapters: chapters.length,
           cover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
-          description: bookDesc,
+          description: uploadWarning ? `${bookDesc} (${uploadWarning})` : bookDesc,
           dateAdded: new Date().toISOString().split('T')[0],
           chapters: chapters,
-          vaultId,
+          fileUrl,
           fileExt: ext.toLowerCase()
         };
 

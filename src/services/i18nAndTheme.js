@@ -397,8 +397,23 @@ export const getTranslation = (langCode, key) => {
 // Theme presets with Green & White as default!
 export const themePresets = [
   {
+    id: 'minimal-luxe',
+    name: '极简高级风 (Minimal Luxe · 杂志白与深空黑)',
+    primary: '#18181b', // zinc-900
+    primaryLight: '#f4f4f5', // zinc-100
+    primaryDark: '#09090b', // zinc-950
+    accent: '#71717a', // zinc-500
+    badgeBg: 'bg-zinc-100 text-zinc-900 border border-zinc-200/80',
+    headerBg: 'bg-zinc-900 text-white',
+    buttonBg: 'bg-zinc-900 hover:bg-black text-white shadow-xs',
+    ringColor: 'focus:ring-zinc-400',
+    borderActive: 'border-zinc-900',
+    gradientText: 'from-zinc-900 via-neutral-800 to-zinc-700',
+    navActive: 'bg-zinc-900 text-white border-zinc-900 font-medium shadow-xs',
+  },
+  {
     id: 'emerald-white',
-    name: '翡翠竹韵 (默认绿白)',
+    name: '翡翠竹韵 (绿白雅致)',
     primary: '#10b981', // emerald-500
     primaryLight: '#ecfdf5', // emerald-50
     primaryDark: '#047857', // emerald-700

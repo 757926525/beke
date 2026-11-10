@@ -36,6 +36,8 @@ export const DEFAULT_FALLBACK_IMAGE = 'data:image/svg+xml;utf8,' + encodeURIComp
 </svg>
 `);
 
+import { handleKernelImageError } from './mediaStorageKernel';
+
 /**
  * Handle img onError to gracefully swap to fallback placeholder without infinite loops
  * @param {Event} e
@@ -44,6 +46,6 @@ export const DEFAULT_FALLBACK_IMAGE = 'data:image/svg+xml;utf8,' + encodeURIComp
 export const handleImageError = (e, fallbackUrl = DEFAULT_FALLBACK_IMAGE) => {
   if (e && e.target && e.target.src !== fallbackUrl) {
     e.target.onerror = null; // Prevent infinite loop
-    e.target.src = fallbackUrl;
+    handleKernelImageError(e, fallbackUrl);
   }
 };

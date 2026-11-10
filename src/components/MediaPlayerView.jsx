@@ -5,7 +5,7 @@ import {
   FolderInput, HardDrive, Check
 } from 'lucide-react';
 import { handleImageError } from '../services/utils';
-import { saveVaultFile, getVaultFileUrl, deleteVaultFile, revokeVaultFileUrl } from '../services/indexedDbVault';
+import { uploadViaKernel } from '../services/mediaStorageKernel';
 
 export const MediaPlayerView = ({
   currentUser,
@@ -36,59 +36,16 @@ export const MediaPlayerView = ({
     date: '2025-05-18'
   });
 
-  // Re-hydrate any IndexedDB vault-backed media URLs across reloads
-  useEffect(() => {
-    let isCancelled = false;
-
-    const restoreVaultUrls = async () => {
-      let hasUpdates = false;
-      const updatedList = await Promise.all(
-        mediaList.map(async (m) => {
-          if (m.vaultId) {
-            const vaultUrl = await getVaultFileUrl(m.vaultId);
-            if (vaultUrl && vaultUrl !== m.url) {
-              hasUpdates = true;
-              return { ...m, url: vaultUrl };
-            }
-          }
-          return m;
-        })
-      );
-
-      if (!isCancelled && hasUpdates) {
-        setMediaList(updatedList);
-        if (activeMedia.vaultId) {
-          const activeUpdated = updatedList.find((item) => item.id === activeMedia.id);
-          if (activeUpdated) {
-            setActiveMedia(activeUpdated);
-          }
-        }
-      }
-    };
-
-    restoreVaultUrls();
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
-
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3000);
   };
 
   // Switch media item
-  const handleSelectMedia = async (m) => {
-    let target = m;
-    if (m.vaultId) {
-      const vaultUrl = await getVaultFileUrl(m.vaultId);
-      if (vaultUrl) {
-        target = { ...m, url: vaultUrl };
-      }
-    }
-    setActiveMedia(target);
-    if (target.aspect) {
-      setAspectRatio(target.aspect);
+  const handleSelectMedia = (m) => {
+    setActiveMedia(m);
+    if (m.aspect) {
+      setAspectRatio(m.aspect);
     }
     setIsPlaying(false);
   };
@@ -114,8 +71,7 @@ export const MediaPlayerView = ({
     }
   };
 
-  // Local media file upload - backed directly by IndexedDB Vault
-  // Completely eliminates QuotaExceededError and broken Blob URLs
+  // 接入统一调度内核上传音视频 (规范云架构，拒绝未绑定桶时的本地大文件干扰)
   const handleLocalMediaUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -132,39 +88,30 @@ export const MediaPlayerView = ({
     const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
     const sizeStr = `${sizeMb} MB`;
     const mediaId = `media-${Date.now()}`;
-    const vaultId = `media-vault-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
     setIsUploading(true);
-    showToast(`正在将「${file.name}」写入本地高可用保险箱 (${sizeStr})...`);
+    showToast(`正在通过统一调度内核上传「${file.name}」(${sizeStr})...`);
 
     try {
-      // 1. Save binary directly to IndexedDB
-      await saveVaultFile(vaultId, file, {
-        name: file.name,
-        type: file.type || (isVideo ? 'video/mp4' : 'audio/mp3'),
-        size: file.size
-      });
-
-      // 2. Obtain a persistent managed Object URL
-      const playableUrl = await getVaultFileUrl(vaultId);
+      const uploadRes = await uploadViaKernel(file, { folder: 'media' });
+      const playableUrl = uploadRes.url;
 
       const newMediaItem = {
         id: mediaId,
-        vaultId: vaultId,
         title: file.name.replace(/\.[^/.]+$/, ''),
-        desc: `本地持久保存的${isVideo ? '视频' : '音频'}媒体 (${sizeStr})`,
+        desc: `已入库的${isVideo ? '视频' : '音频'}媒体 (${sizeStr})`,
         type: isVideo ? 'video' : 'audio',
         aspect: isVideo ? '16:9' : '1:1',
         url: playableUrl,
         poster: isVideo
           ? 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80'
           : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
-        duration: '本地高清流',
+        duration: '对象存储流',
         size: sizeStr,
         date: new Date().toISOString().split('T')[0],
         uploadedBy: currentUser?.username || '用户',
         userId: currentUser?.id || 'guest',
-        isLocalUpload: true,
+        isLocalUpload: false,
         updatedAt: Date.now(),
         deleted: false
       };
@@ -173,10 +120,10 @@ export const MediaPlayerView = ({
       setMediaList(updated);
       setActiveMedia(newMediaItem);
       if (isVideo) setAspectRatio('16:9');
-      showToast(`本地媒体「${file.name}」已存入保险箱，刷新页面不丢失！`);
+      showToast(`媒体「${file.name}」已规范入库对象存储！`);
     } catch (err) {
-      console.error('Failed to upload media:', err);
-      showToast('上传存储失败，请重试');
+      console.warn('Media upload prevented or failed:', err.message);
+      showToast(err.message || '上传存储失败，请重试');
     } finally {
       setIsUploading(false);
       e.target.value = '';
@@ -192,7 +139,7 @@ export const MediaPlayerView = ({
   };
 
   // Delete media item
-  const handleDeleteMedia = async (id, title, e) => {
+  const handleDeleteMedia = (id, title, e) => {
     if (e) e.stopPropagation();
     const target = mediaList.find((m) => m.id === id);
     if (!canManageMedia(target)) {
@@ -200,10 +147,6 @@ export const MediaPlayerView = ({
       return;
     }
     if (window.confirm(`确认删除媒体项目「${title}」吗？`)) {
-      if (target?.vaultId) {
-        revokeVaultFileUrl(target.vaultId);
-        await deleteVaultFile(target.vaultId);
-      }
       const remaining = mediaList.filter((m) => m.id !== id);
       setMediaList(remaining);
       if (activeMedia.id === id && remaining.length > 0) {

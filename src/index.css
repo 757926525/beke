@@ -127,6 +127,26 @@ body.font-size-extra {
   box-shadow: 0 0 25px rgba(244, 63, 94, 0.25);
 }
 
+/* Minimal Luxe Aesthetic (极简高级风) */
+.theme-minimal-luxe {
+  --bg-primary: #fafafa;
+  --text-main: #18181b;
+  --card-bg: rgba(255, 255, 255, 0.95);
+  --border-color: rgba(228, 228, 231, 0.8);
+}
+
+.theme-minimal-luxe .card-luxe {
+  background: #ffffff;
+  border: 1px solid rgba(228, 228, 231, 0.9);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.02), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.theme-minimal-luxe .card-luxe:hover {
+  border-color: rgba(161, 161, 170, 0.5);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.02);
+}
+
 /* Scrollbar aesthetic */
 ::-webkit-scrollbar {
   width: 6px;
@@ -140,5 +160,5 @@ body.font-size-extra {
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(244, 63, 94, 0.6);
+  background: rgba(100, 116, 139, 0.6);
 }
