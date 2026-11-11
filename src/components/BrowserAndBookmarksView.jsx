@@ -115,6 +115,30 @@ export const BrowserAndBookmarksView = ({
   const [testingId, setTestingId] = useState('');
   const [qrModalNode, setQrModalNode] = useState(null);
 
+  // 免翻墙直连谷歌与外部受限网站工具状态
+  const [searchQuery, setSearchQuery] = useState('');
+  const [proxyActiveUrl, setProxyActiveUrl] = useState('');
+  const [proxyLoading, setProxyLoading] = useState(false);
+
+  // 触发代理访问
+  const handleLaunchProxyAccess = (target) => {
+    let clean = (target || searchQuery || '').trim();
+    if (!clean) return;
+
+    let destination = clean;
+    if (!destination.startsWith('http://') && !destination.startsWith('https://')) {
+      if (destination.includes('.') && !destination.includes(' ')) {
+        destination = `https://${destination}`;
+      } else {
+        destination = `https://www.google.com/search?q=${encodeURIComponent(destination)}`;
+      }
+    }
+
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(destination)}`;
+    setProxyActiveUrl(proxyUrl);
+    setProxyLoading(true);
+  };
+
   // 新增节点状态
   const [showAddModal, setShowAddModal] = useState(false);
   const [newNodeType, setNewNodeType] = useState('VLESS');
@@ -275,6 +299,83 @@ export const BrowserAndBookmarksView = ({
             </button>
           </div>
         </div>
+      </div>
+
+      {/* 针对中国大陆网络环境：免配置直达 Google 与代理网站网关 */}
+      <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white rounded-3xl p-5 sm:p-6 border border-emerald-800 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center space-x-2.5">
+            <Sparkles className="w-5 h-5 text-emerald-400" />
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="font-bold text-sm tracking-wide text-white">中国大陆网络专线直通 (Google 与外部代理网站直达)</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono border border-emerald-400/30">
+                  免翻墙直连
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                通过白狐边缘反向代理通道（/api/proxy），无需本地客户端即可在大陆直接查询 Google 及访问外部网站。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleLaunchProxyAccess(searchQuery);
+          }}
+          className="flex flex-col sm:flex-row items-center gap-2"
+        >
+          <div className="relative flex-1 w-full">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="输入 Google 搜索关键词，或网址 (如 github.com, wikipedia.org)..."
+              className="w-full px-4 py-2.5 rounded-2xl bg-white/10 border border-white/20 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </div>
+          <div className="flex items-center space-x-2 w-full sm:w-auto">
+            <button
+              type="submit"
+              className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white text-xs font-bold shadow-lg flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>直连代理访问</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleLaunchProxyAccess('https://www.google.com')}
+              className="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-emerald-300 text-xs font-semibold border border-white/10 transition-colors cursor-pointer"
+            >
+              打开 Google
+            </button>
+          </div>
+        </form>
+
+        {proxyActiveUrl && (
+          <div className="mt-4 pt-4 border-t border-white/10 space-y-2">
+            <div className="flex items-center justify-between text-xs text-slate-300">
+              <span className="font-mono">代理视窗：{searchQuery || 'Google 专线'}</span>
+              <button
+                onClick={() => setProxyActiveUrl('')}
+                className="text-slate-400 hover:text-white text-xs underline cursor-pointer"
+              >
+                关闭代理视窗
+              </button>
+            </div>
+            <div className="w-full h-[450px] rounded-2xl overflow-hidden bg-white shadow-inner border border-white/20">
+              <iframe
+                src={proxyActiveUrl}
+                title="Proxy Browser"
+                className="w-full h-full border-0"
+                sandbox="allow-same-origin allow-scripts allow-forms"
+                onLoad={() => setProxyLoading(false)}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* UUID Generator Tool Card */}

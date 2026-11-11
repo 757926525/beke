@@ -71,6 +71,49 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
+  // 0. 边缘/后端代理 /api/proxy (大陆环境下安全直连 Google 等外部网站)
+  if (pathname === '/api/proxy') {
+    const targetUrl = url.searchParams.get('url');
+    if (!targetUrl) {
+      res.statusCode = 400;
+      return res.end(JSON.stringify({ error: 'Missing target url parameter' }));
+    }
+
+    try {
+      const parsed = new URL(targetUrl);
+      const isHttps = parsed.protocol === 'https:';
+      const client = isHttps ? await import('https') : await import('http');
+
+      const proxyReq = client.request(parsed, {
+        method: req.method,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': req.headers['accept'] || '*/*',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+        }
+      }, (proxyRes) => {
+        const headers = { ...proxyRes.headers };
+        delete headers['x-frame-options'];
+        delete headers['content-security-policy'];
+        headers['access-control-allow-origin'] = '*';
+
+        res.writeHead(proxyRes.statusCode || 200, headers);
+        proxyRes.pipe(res);
+      });
+
+      proxyReq.on('error', (err) => {
+        res.statusCode = 502;
+        res.end(JSON.stringify({ error: 'Proxy request failed: ' + err.message }));
+      });
+
+      req.pipe(proxyReq);
+      return;
+    } catch (e) {
+      res.statusCode = 500;
+      return res.end(JSON.stringify({ error: 'Internal proxy error: ' + e.message }));
+    }
+  }
+
   // 1. 健康检测 /api/health
   if (pathname === '/api/health') {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
