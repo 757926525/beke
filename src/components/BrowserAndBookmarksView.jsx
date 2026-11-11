@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import {
   Server, Shield, Copy, Check, QrCode, RefreshCw, Key,
   ExternalLink, Sparkles, Wifi, Activity, Terminal, Lock,
-  Plus, Trash2, Eye, Compass, BookmarkPlus, X, HelpCircle
+  Plus, Trash2, Eye, Compass, BookmarkPlus, X, HelpCircle, Download
 } from 'lucide-react';
+import { CF_CLEAN_IPS, buildVlessLink, buildShadowsocksLink, buildTrojanLink, buildWireguardConfig } from '../services/nodeBuilder';
 
 // 标准 UUID v4 生成算法
 export function generateUUIDv4() {
@@ -266,6 +267,13 @@ export const BrowserAndBookmarksView = ({
     }
   };
 
+  // 批量导出 Base64 订阅链接 (兼容 v2rayN / Shadowrocket / Clash 等)
+  const handleCopySubscription = () => {
+    const rawLinks = nodes.map((n) => n.link).filter(Boolean).join('\n');
+    const base64Sub = typeof btoa !== 'undefined' ? btoa(unescape(encodeURIComponent(rawLinks))) : rawLinks;
+    handleCopyText(base64Sub, 'sub-copy');
+  };
+
   // 筛选节点
   const filteredNodes = selectedType === 'ALL'
     ? nodes
@@ -290,6 +298,14 @@ export const BrowserAndBookmarksView = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleCopySubscription}
+              className="px-4 py-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
+              title="复制全部节点为标准 Base64 订阅文本，可直接粘贴导入 Shadowrocket / v2rayN / Clash"
+            >
+              {copiedId === 'sub-copy' ? <Check className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
+              <span>{copiedId === 'sub-copy' ? '已复制全节点订阅' : '一键复制全节点订阅 (Base64)'}</span>
+            </button>
             <button
               onClick={() => setShowAddModal(true)}
               className="px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
