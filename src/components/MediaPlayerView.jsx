@@ -17,7 +17,7 @@ export const MediaPlayerView = ({
   t
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [aspectRatio, setAspectRatio] = useState('16:9'); // '16:9', '9:16', '4:3', '21:9', '1:1'
+  const [aspectRatio, setAspectRatio] = useState('auto'); // 'auto', '16:9', '9:16', '21:9', '4:3', '1:1'
   const videoRef = useRef(null);
   const audioRef = useRef(null);
   const [toastMessage, setToastMessage] = useState('');
@@ -245,13 +245,24 @@ export const MediaPlayerView = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Top Download Button */}
+            <button
+              onClick={(e) => handleDownloadMedia(activeMedia, e)}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors flex items-center space-x-1.5 shadow-xs cursor-pointer"
+              title={`一键下载${activeMedia.type === 'video' ? '视频' : '音频'}`}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>下载当前{activeMedia.type === 'video' ? '视频' : '音频'}</span>
+            </button>
+
             {/* Aspect Ratio Switcher Pills */}
             <div className="flex flex-wrap items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/80">
               <span className="text-[10px] font-bold text-slate-400 px-2 uppercase">画幅调节:</span>
               {[
+                { id: 'auto', label: '自适应 Auto', icon: Maximize },
                 { id: '16:9', label: '16:9 宽屏', icon: Monitor },
-                { id: '9:16', label: '9:16 竖屏短视频', icon: Smartphone },
-                { id: '21:9', label: '21:9 影院超宽', icon: Film },
+                { id: '9:16', label: '9:16 竖屏', icon: Smartphone },
+                { id: '21:9', label: '21:9 影院', icon: Film },
                 { id: '4:3', label: '4:3 经典', icon: Layers },
               ].map((ratio) => {
                 const Icon = ratio.icon;
@@ -260,7 +271,7 @@ export const MediaPlayerView = ({
                   <button
                     key={ratio.id}
                     onClick={() => setAspectRatio(ratio.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 cursor-pointer ${
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1 cursor-pointer ${
                       isActive
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
@@ -278,13 +289,15 @@ export const MediaPlayerView = ({
         {/* Video Canvas Container */}
         <div className="w-full flex justify-center py-2">
           <div
-            className={`relative rounded-3xl overflow-hidden bg-slate-950 shadow-2xl transition-all duration-500 border border-slate-800 flex items-center justify-center ${
+            className={`relative rounded-3xl overflow-hidden bg-slate-950 shadow-2xl transition-all duration-300 border border-slate-800 flex items-center justify-center ${
               aspectRatio === '9:16'
                 ? 'w-full max-w-[360px] aspect-[9/16]'
                 : aspectRatio === '21:9'
                 ? 'w-full max-w-[960px] aspect-[21/9]'
                 : aspectRatio === '4:3'
                 ? 'w-full max-w-[680px] aspect-[4/3]'
+                : aspectRatio === 'auto'
+                ? 'w-full max-w-[900px] min-h-[320px] max-h-[580px]'
                 : 'w-full max-w-[860px] aspect-[16/9]'
             }`}
           >
@@ -296,7 +309,7 @@ export const MediaPlayerView = ({
                 poster={activeMedia.poster}
                 controls
                 playsInline
-                className="w-full h-full object-cover"
+                className={`w-full ${aspectRatio === 'auto' ? 'max-h-[580px] object-contain' : 'h-full object-cover'}`}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
               />

@@ -23,19 +23,19 @@ export const Navbar = ({
   onSync,
   t
 }) => {
-  // Navigation tabs: 去掉「网盘与多云」与「站长文件」
+  // Navigation tabs: 基础访客导航标签
   const baseTabs = [
     { id: 'home', label: t('blog'), icon: BookOpen },
     { id: 'books', label: t('bookshelf'), icon: Library },
     { id: 'download', label: t('downloader'), icon: Download },
     { id: 'gallery', label: t('gallery'), icon: ImageIcon },
     { id: 'media', label: t('player'), icon: Music },
-    { id: 'bookmarks', label: t('bookmarks'), icon: Compass },
     { id: 'guide', label: t('deploymentGuide'), icon: Rocket }
   ];
 
-  // 全能数据库后台与系统设置仅管理员可见
+  // 节点专区与后台系统设置：严格仅管理员（站长）可见
   if (currentUser?.role === 'admin') {
+    baseTabs.push({ id: 'bookmarks', label: t('bookmarks'), icon: Compass });
     baseTabs.push({ id: 'admin', label: t('admin'), icon: Shield });
   }
 

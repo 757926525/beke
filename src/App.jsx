@@ -992,7 +992,7 @@ export function App() {
             />
           )}
 
-          {activeTab === 'bookmarks' && (
+          {activeTab === 'bookmarks' && currentUser?.role === 'admin' && (
             <BrowserAndBookmarksView
               bookmarks={bookmarks.filter((b) => !b.deleted)}
               setBookmarks={(newBookmarksOrFn) => {

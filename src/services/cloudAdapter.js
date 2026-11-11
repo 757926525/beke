@@ -143,31 +143,28 @@ export async function testRealDatabaseConnection(backendConfig) {
       // Continue to API check
     }
 
-    // 尝试 Pages Functions /api/sync
-    const endpoints = ['/api/sync?key=healthcheck'];
+    // 若原生探测未通过，检查是否配置了外部自定义 host
     if (host && host.startsWith('http')) {
-      endpoints.unshift(`${host.replace(/\/+$/, '')}/api/sync?key=healthcheck`);
-    }
-
-    for (const ep of endpoints) {
       try {
+        const testEp = `${host.replace(/\/+$/, '')}/api/sync?key=healthcheck`;
         const headers = { 'Accept': 'application/json' };
         if (token) headers['Authorization'] = `Bearer ${token}`;
-        const res = await fetch(ep, { method: 'GET', headers });
-        if (res.status === 200 || res.status === 404 || res.status === 400) {
+        const res = await fetch(testEp, { method: 'GET', headers });
+        if (res.status === 200) {
           return {
             success: true,
-            platform: 'Cloudflare D1 边缘同步通道',
-            message: 'Cloudflare D1 数据库同步通道握手成功，通信畅通！'
+            platform: 'Cloudflare D1 外部同步通道',
+            message: 'Cloudflare D1 数据库外部网关握手成功，通信畅通！'
           };
         }
       } catch (e) {
-        // try next
+        // failed
       }
     }
+
     return {
       success: false,
-      message: '未能连接到 Cloudflare D1。请在 Cloudflare Pages 设置中绑定名为 "DB" 的 D1 数据库，或配置有效的同步 Endpoint！'
+      message: '未能连接到 Cloudflare D1。请在 Cloudflare Pages 设置中绑定名为 "DB" 的 D1 数据库，或配置有效的外部同步 Endpoint！'
     };
   }
 

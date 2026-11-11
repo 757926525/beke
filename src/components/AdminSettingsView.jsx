@@ -91,45 +91,77 @@ export const AdminSettingsView = ({
     setTimeout(() => setToast(''), 3000);
   };
 
-  // Database Connection states
-  const [dbStatus, setDbStatus] = useState(backendConfig?.dbConnected ? 'connected' : 'idle');
+  // 严格真实连接状态管理：初始默认为 idle（未连接），必须经由实际探测通过方可亮绿灯
+  const [dbStatus, setDbStatus] = useState('idle');
   const [dbErrorMsg, setDbErrorMsg] = useState('');
   const [isTestingDb, setIsTestingDb] = useState(false);
 
   // Storage connection states
-  const [storageStatus, setStorageStatus] = useState(backendConfig?.storageConnected ? 'connected' : 'idle');
+  const [storageStatus, setStorageStatus] = useState('idle');
   const [storageErrorMsg, setStorageErrorMsg] = useState('');
   const [isTestingStorage, setIsTestingStorage] = useState(false);
 
-  // 页面加载时自动探测 Cloudflare Pages 原生 D1 和 R2 绑定与真实连接状态
+  // 页面加载时自动探测真实连接状态（Cloudflare Pages 原生 D1 和 R2 绑定 / 自定义真实连通性）
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        const { probePlatformNativeBindings } = await import('../services/cloudAdapter');
+        const { probePlatformNativeBindings, testRealDatabaseConnection, testRealObjectStorageConnection } = await import('../services/cloudAdapter');
         const health = await probePlatformNativeBindings();
         if (!active) return;
-        if (health && health.success) {
-          if (health.d1?.healthy) {
-            setDbStatus('connected');
-            setDbErrorMsg('');
-            setBackendConfig((prev) => ({ ...prev, dbConnected: true }));
-          } else if (health.d1?.bound === false && !backendConfig?.dbHost) {
-            setDbStatus('idle');
-            setBackendConfig((prev) => ({ ...prev, dbConnected: false }));
-          }
 
-          if (health.r2?.healthy) {
-            setStorageStatus('connected');
-            setStorageErrorMsg('');
-            setBackendConfig((prev) => ({ ...prev, storageConnected: true }));
-          } else if (health.r2?.bound === false && !backendConfig?.storageBucket) {
-            setStorageStatus('idle');
-            setBackendConfig((prev) => ({ ...prev, storageConnected: false }));
+        // 1. 真实数据库校验
+        if (health && health.success && health.d1?.healthy) {
+          setDbStatus('connected');
+          setDbErrorMsg('');
+          setBackendConfig((prev) => ({ ...prev, dbConnected: true }));
+        } else if (backendConfig?.dbHost) {
+          // 自定义外部数据库探测
+          const realDbRes = await testRealDatabaseConnection(backendConfig);
+          if (active) {
+            if (realDbRes.success) {
+              setDbStatus('connected');
+              setDbErrorMsg('');
+              setBackendConfig((prev) => ({ ...prev, dbConnected: true }));
+            } else {
+              setDbStatus('failed');
+              setDbErrorMsg(realDbRes.message);
+              setBackendConfig((prev) => ({ ...prev, dbConnected: false }));
+            }
           }
+        } else {
+          // 未配置或原生无绑定，坚决保持 idle 未连接，绝不误报已连接
+          setDbStatus('idle');
+          setBackendConfig((prev) => ({ ...prev, dbConnected: false }));
+        }
+
+        // 2. 真实对象存储校验
+        if (health && health.success && health.r2?.healthy) {
+          setStorageStatus('connected');
+          setStorageErrorMsg('');
+          setBackendConfig((prev) => ({ ...prev, storageConnected: true }));
+        } else if (backendConfig?.storageBucket) {
+          const realStorageRes = await testRealObjectStorageConnection(backendConfig);
+          if (active) {
+            if (realStorageRes.success) {
+              setStorageStatus('connected');
+              setStorageErrorMsg('');
+              setBackendConfig((prev) => ({ ...prev, storageConnected: true }));
+            } else {
+              setStorageStatus('failed');
+              setStorageErrorMsg(realStorageRes.message);
+              setBackendConfig((prev) => ({ ...prev, storageConnected: false }));
+            }
+          }
+        } else {
+          setStorageStatus('idle');
+          setBackendConfig((prev) => ({ ...prev, storageConnected: false }));
         }
       } catch (e) {
-        // ignore
+        if (active) {
+          setDbStatus('idle');
+          setStorageStatus('idle');
+        }
       }
     })();
     return () => { active = false; };

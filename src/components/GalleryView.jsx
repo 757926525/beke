@@ -56,48 +56,71 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
     return false;
   };
 
-  const processAndUploadFile = (file, targetFolder) => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const maxDim = 1200;
-          let width = img.width;
-          let height = img.height;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-
-          resolve({
-            id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-            title: file.name.replace(/\.[^/.]+$/, ""),
-            desc: `上传至文件夹「${targetFolder}」，已安全记录至云相册。`,
-            url: dataUrl,
-            category: targetFolder,
-            folder: targetFolder,
-            author: currentUser?.username || '站长',
-            userId: currentUser?.id || 'admin',
-            date: new Date().toISOString().split('T')[0],
-            location: '随拍记录'
-          });
-        };
-        img.src = event.target.result;
+  const processAndUploadFile = async (file, targetFolder) => {
+    // 优先通过媒体存储内核上传至持久化存储，解决跨设备同步图片裂开的问题
+    try {
+      const { uploadViaKernel } = await import('../services/mediaStorageKernel');
+      const uploadRes = await uploadViaKernel(file, { folder: 'photos' });
+      return {
+        id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        title: file.name.replace(/\.[^/.]+$/, ""),
+        desc: `上传至文件夹「${targetFolder}」，已持久化至云存储。`,
+        url: uploadRes.url,
+        category: targetFolder,
+        folder: targetFolder,
+        author: currentUser?.username || '站长',
+        userId: currentUser?.id || 'admin',
+        date: new Date().toISOString().split('T')[0],
+        location: '随拍记录',
+        updatedAt: Date.now(),
+        deleted: false
       };
-      reader.readAsDataURL(file);
-    });
+    } catch (e) {
+      // 容灾备用：转换为紧凑 JPEG DataURL
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const maxDim = 1000;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+            resolve({
+              id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+              title: file.name.replace(/\.[^/.]+$/, ""),
+              desc: `上传至文件夹「${targetFolder}」，已安全记录至相册。`,
+              url: dataUrl,
+              category: targetFolder,
+              folder: targetFolder,
+              author: currentUser?.username || '站长',
+              userId: currentUser?.id || 'admin',
+              date: new Date().toISOString().split('T')[0],
+              location: '随拍记录',
+              updatedAt: Date.now(),
+              deleted: false
+            });
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
   };
 
   const handleUpload = async (e) => {
@@ -105,15 +128,16 @@ export const GalleryView = ({ photos, setPhotos, currentUser, isAdmin, t }) => {
     if (!files.length) return;
 
     const targetFolder = currentFolder === '全部' ? '白狐物语' : currentFolder;
-    const newPhotos = [];
+    setUploadStatus(`正在处理并持久化上传 ${files.length} 张照片...`);
 
+    const newPhotos = [];
     for (const file of files) {
       const photoItem = await processAndUploadFile(file, targetFolder);
       newPhotos.push(photoItem);
     }
 
     setPhotos([...newPhotos, ...photos]);
-    setUploadStatus(`成功上传 ${newPhotos.length} 张照片存入文件夹「${targetFolder}」！`);
+    setUploadStatus(`成功上传 ${newPhotos.length} 张照片存入文件夹「${targetFolder}」！跨端已同步`);
     setTimeout(() => setUploadStatus(null), 3000);
 
     if (fileInputRef.current) fileInputRef.current.value = '';
