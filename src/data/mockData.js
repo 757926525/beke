@@ -18,7 +18,7 @@ const STORAGE_KEYS = {
 export const defaultSystemSettings = {
   allowRegistration: true,
   adminUsername: (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_ADMIN_USERNAME || import.meta.env?.VITE_INITIAL_ADMIN_USERNAME)) || 'fox',
-  adminPassword: (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_ADMIN_PASSWORD || import.meta.env?.VITE_INITIAL_ADMIN_PASSWORD)) || 'whitefox2025',
+  adminPassword: (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_PASSWORD || import.meta.env?.PASSWORD || import.meta.env?.VITE_ADMIN_PASSWORD || import.meta.env?.VITE_INITIAL_ADMIN_PASSWORD)) || '123456',
   emailRegistrationEnabled: true,
   emailVerifyCode: '668822',
   smtpServer: 'smtp.qcloudmail.com',

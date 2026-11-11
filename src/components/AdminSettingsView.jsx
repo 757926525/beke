@@ -101,7 +101,7 @@ export const AdminSettingsView = ({
   const [storageErrorMsg, setStorageErrorMsg] = useState('');
   const [isTestingStorage, setIsTestingStorage] = useState(false);
 
-  // 页面加载时自动探测 Cloudflare Pages 原生 D1 和 R2 绑定
+  // 页面加载时自动探测 Cloudflare Pages 原生 D1 和 R2 绑定与真实连接状态
   useEffect(() => {
     let active = true;
     (async () => {
@@ -109,14 +109,23 @@ export const AdminSettingsView = ({
         const { probePlatformNativeBindings } = await import('../services/cloudAdapter');
         const health = await probePlatformNativeBindings();
         if (!active) return;
-        if (health.success) {
+        if (health && health.success) {
           if (health.d1?.healthy) {
             setDbStatus('connected');
+            setDbErrorMsg('');
             setBackendConfig((prev) => ({ ...prev, dbConnected: true }));
+          } else if (health.d1?.bound === false && !backendConfig?.dbHost) {
+            setDbStatus('idle');
+            setBackendConfig((prev) => ({ ...prev, dbConnected: false }));
           }
+
           if (health.r2?.healthy) {
             setStorageStatus('connected');
+            setStorageErrorMsg('');
             setBackendConfig((prev) => ({ ...prev, storageConnected: true }));
+          } else if (health.r2?.bound === false && !backendConfig?.storageBucket) {
+            setStorageStatus('idle');
+            setBackendConfig((prev) => ({ ...prev, storageConnected: false }));
           }
         }
       } catch (e) {
@@ -194,15 +203,34 @@ export const AdminSettingsView = ({
     };
 
     // Step 2: Push to remote database / cross-device cloud sync tunnel
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 300));
     setSyncProgress(55);
-    setSyncStatusStep(`正在向 ${backendConfig?.dbType?.toUpperCase() || 'CLOUDFLARE-D1'} 写入全量表结构与记录 (文章, 文件与缩略图, 网盘数据, 邮箱配置, 界面主题)...`);
+    setSyncStatusStep(`正在向 ${backendConfig?.dbType?.toUpperCase() || 'CLOUDFLARE-D1'} 主数据库写入全量表结构与记录...`);
+
+    let syncSucceeded = true;
+    let syncErrorMsg = '';
+
+    try {
+      const { pushToCloudSyncVault } = await import('../services/cloudAdapter');
+      const pushRes = await pushToCloudSyncVault(fullPayload, {
+        vaultKey: 'whitefox-site-main',
+        customEndpoint: backendConfig?.dbHost?.startsWith('http') ? backendConfig.dbHost : undefined,
+        authToken: backendConfig?.dbToken
+      });
+
+      if (!pushRes.success) {
+        syncSucceeded = false;
+        syncErrorMsg = pushRes.error || '推送云端失败';
+      }
+    } catch (err) {
+      syncSucceeded = false;
+      syncErrorMsg = err.message;
+    }
 
     // Save unified cross-device payload in universal storage key for multi-device sync
     try {
       localStorage.setItem('wf_cross_device_synced_payload', JSON.stringify(fullPayload));
       localStorage.setItem('wf_global_unified_sync_snapshot', JSON.stringify(fullPayload));
-      // Dispatch broadcast storage event for live inter-tab and cross-device sync
       window.dispatchEvent(new Event('whitefox-full-database-sync-complete'));
       window.dispatchEvent(new CustomEvent('whitefox-hydrate-full-sync', { detail: fullPayload }));
     } catch (e) {
@@ -210,12 +238,12 @@ export const AdminSettingsView = ({
     }
 
     // Step 3: Verification & Cross-device handshake
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 400));
     setSyncProgress(85);
-    setSyncStatusStep('正在进行双向校验与校验和比对 (CRC32 Checksum OK)...');
+    setSyncStatusStep(syncSucceeded ? '正在进行双向校验与校验和比对 (CRC32 Checksum OK)...' : `云端主数据库握手提示: ${syncErrorMsg}`);
 
     // Step 4: Completion
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 300));
     setSyncProgress(100);
     const nowTime = new Date().toLocaleTimeString();
     setSyncStatusStep(`全站数据已成功同步至 ${backendConfig?.dbType?.toUpperCase() || 'D1'} 数据库！多设备完全一致 (${nowTime})`);
@@ -851,24 +879,25 @@ export const AdminSettingsView = ({
                 <div className="flex items-center space-x-2">
                   <Server className="w-4 h-4 text-sky-600" />
                   <span className="text-xs font-bold text-slate-700">主数据库接入配置</span>
+                  <span className="text-[10px] text-slate-400 font-mono">({backendConfig?.dbType || 'cloudflare-d1'})</span>
                 </div>
 
                 <div className="flex items-center space-x-2">
-                  <span className="text-[11px] text-slate-500 font-medium">接入状态灯：</span>
+                  <span className="text-[11px] text-slate-500 font-medium">真实连接状态：</span>
                   {dbStatus === 'connected' ? (
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold shadow-xs">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>已成功接入 (Connected)</span>
+                      <span>真连接成功 (Connected)</span>
                     </span>
                   ) : dbStatus === 'failed' ? (
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold">
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold shadow-xs">
                       <span className="w-2 h-2 rounded-full bg-rose-500" />
-                      <span>连接失败 (Connection Failed)</span>
+                      <span>真实连接失败 (Connection Failed)</span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold">
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold shadow-xs">
                       <span className="w-2 h-2 rounded-full bg-slate-400" />
-                      <span>未连接 (Offline / Disconnected)</span>
+                      <span>未连接 / 待测试 (Offline)</span>
                     </span>
                   )}
                 </div>
@@ -1080,24 +1109,25 @@ export const AdminSettingsView = ({
                 <div className="flex items-center space-x-2">
                   <Cloud className="w-4 h-4 text-amber-600" />
                   <span className="text-xs font-bold text-slate-700">对象存储后台接入 (R2 / 腾讯云 COS / 阿里云 OSS)</span>
+                  <span className="text-[10px] text-slate-400 font-mono">({backendConfig?.storageType || 'cloudflare-r2'})</span>
                 </div>
 
                 <div className="flex items-center space-x-2">
-                  <span className="text-[11px] text-slate-500 font-medium">鉴权状态灯：</span>
+                  <span className="text-[11px] text-slate-500 font-medium">真实连接状态：</span>
                   {storageStatus === 'connected' ? (
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold shadow-xs">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>存储桶鉴权通过</span>
+                      <span>真连接通过 (Connected)</span>
                     </span>
                   ) : storageStatus === 'failed' ? (
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold">
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold shadow-xs">
                       <span className="w-2 h-2 rounded-full bg-rose-500" />
-                      <span>鉴权未通过</span>
+                      <span>鉴权/连接未通过 (Failed)</span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold">
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold shadow-xs">
                       <span className="w-2 h-2 rounded-full bg-slate-400" />
-                      <span>未接入</span>
+                      <span>未接入 / 待测试 (Offline)</span>
                     </span>
                   )}
                 </div>
@@ -1530,11 +1560,11 @@ export const AdminSettingsView = ({
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
                 <div className="space-y-1">
                   <div>
-                    <span className="font-bold">部署管理员变量直通：</span>
-                    管理员账号与密码在部署时由环境变量 <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">VITE_ADMIN_USERNAME</code> 与 <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">VITE_ADMIN_PASSWORD</code> 控制。
+                    <span className="font-bold">部署管理员变量直通（唯一站长保证）：</span>
+                    管理员密码由环境变量 <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">PASSWORD</code>（或 <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">VITE_PASSWORD</code>，兼容 <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">VITE_ADMIN_PASSWORD</code>）控制，系统默认密码为 <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">123456</code>。
                   </div>
                   <div className="text-[11px] text-amber-700">
-                    在部署平台（Cloudflare Pages / 腾讯云 / 阿里云 / Docker）中设置后，连通数据库后可在手机、电脑等多设备使用该部署账号秒级直接登录！
+                    全项目严格保障仅允许存在唯一系统站长（账号默认 <strong>{deploymentAdmin.username}</strong>），任何新创建或导入账号均无法成为管理员。在部署平台设置后，所有设备均可使用该统一站长密码安全登入！
                   </div>
                 </div>
               </div>

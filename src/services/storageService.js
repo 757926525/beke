@@ -320,11 +320,15 @@ export const getDeploymentAdminCredentials = () => {
     (typeof localStorage !== 'undefined' && localStorage.getItem('wf_cf_admin_username')) ||
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_USERNAME) ||
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_INITIAL_ADMIN_USERNAME) ||
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_USERNAME) ||
     'fox';
+  // 环境变量变量名为 PASSWORD / VITE_PASSWORD，兼容 VITE_ADMIN_PASSWORD，默认密码为 123456
   const password =
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PASSWORD) ||
+    (typeof import.meta !== 'undefined' && import.meta.env?.PASSWORD) ||
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_PASSWORD) ||
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_INITIAL_ADMIN_PASSWORD) ||
-    'whitefox2025';
+    '123456';
   return { username, password };
 };
 

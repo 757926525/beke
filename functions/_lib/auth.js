@@ -9,9 +9,16 @@
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 天
 
 export function getAdminConfig(env) {
-  const username = (env?.ADMIN_USERNAME || env?.VITE_ADMIN_USERNAME || '').trim();
-  const password = (env?.ADMIN_PASSWORD || env?.VITE_ADMIN_PASSWORD || '').trim();
-  return { username, password, configured: Boolean(password) };
+  const username = (env?.ADMIN_USERNAME || env?.VITE_ADMIN_USERNAME || env?.USERNAME || env?.VITE_USERNAME || '').trim();
+  // 优先支持 PASSWORD / VITE_PASSWORD，兼容 ADMIN_PASSWORD / VITE_ADMIN_PASSWORD，默认密码为 123456
+  const password = (
+    env?.PASSWORD ||
+    env?.VITE_PASSWORD ||
+    env?.ADMIN_PASSWORD ||
+    env?.VITE_ADMIN_PASSWORD ||
+    '123456'
+  ).trim();
+  return { username: username || 'fox', password, configured: true };
 }
 
 const encoder = new TextEncoder();

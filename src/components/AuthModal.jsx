@@ -14,7 +14,7 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
   const defaultAdminUsername =
     (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_ADMIN_USERNAME || import.meta.env?.VITE_INITIAL_ADMIN_USERNAME)) || 'fox';
   const defaultAdminPassword =
-    (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_ADMIN_PASSWORD || import.meta.env?.VITE_INITIAL_ADMIN_PASSWORD)) || '';
+    (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_PASSWORD || import.meta.env?.PASSWORD || import.meta.env?.VITE_ADMIN_PASSWORD || import.meta.env?.VITE_INITIAL_ADMIN_PASSWORD)) || '';
 
   if (!isOpen) return null;
 
@@ -133,7 +133,7 @@ export const AuthModal = ({ isOpen, onClose, onLogin, onRegister, systemSettings
               <span>唯一系统站长专享登录通道</span>
             </div>
             <p className="text-purple-700 leading-relaxed">
-              部署环境变量：<code className="font-mono bg-purple-100 px-1 py-0.5 rounded text-[10px]">VITE_ADMIN_USERNAME</code> / <code className="font-mono bg-purple-100 px-1 py-0.5 rounded text-[10px]">VITE_ADMIN_PASSWORD</code>。可在 Cloudflare Pages 项目后台随时修改！
+              部署环境变量：<code className="font-mono bg-purple-100 px-1 py-0.5 rounded text-[10px]">PASSWORD</code> / <code className="font-mono bg-purple-100 px-1 py-0.5 rounded text-[10px]">VITE_PASSWORD</code>（默认密码：123456）。全站仅支持唯一站长登录！
             </p>
           </div>
         )}
